@@ -1,0 +1,346 @@
+package com.github.jkrishna289.orcax.ui.discover
+
+import android.content.Context
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.api.seerr.infrastructure.ClientException
+import com.github.jkrishna289.orcax.data.model.DiscoverItem
+import com.github.jkrishna289.orcax.data.model.DiscoverRating
+import com.github.jkrishna289.orcax.data.model.SeerrItemType
+import com.github.jkrishna289.orcax.preferences.UserPreferences
+import com.github.jkrishna289.orcax.services.BackdropService
+import com.github.jkrishna289.orcax.services.NavigationManager
+import com.github.jkrishna289.orcax.services.SeerrService
+import com.github.jkrishna289.orcax.ui.data.RowColumn
+import com.github.jkrishna289.orcax.ui.launchIO
+import com.github.jkrishna289.orcax.ui.listToDotString
+import com.github.jkrishna289.orcax.ui.main.HomePageHeader
+import com.github.jkrishna289.orcax.ui.nav.Destination
+import com.github.jkrishna289.orcax.ui.rememberPosition
+import com.github.jkrishna289.orcax.ui.tryRequestFocus
+import com.github.jkrishna289.orcax.ui.util.ScrollToTopBringIntoViewSpec
+import com.github.jkrishna289.orcax.util.DataLoadingState
+import com.github.jkrishna289.orcax.util.DiscoverRequestType
+import com.google.common.cache.CacheBuilder
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import timber.log.Timber
+import javax.inject.Inject
+
+@HiltViewModel
+class SeerrDiscoverViewModel
+    @Inject
+    constructor(
+        @param:ApplicationContext private val context: Context,
+        private val seerrService: SeerrService,
+        val navigationManager: NavigationManager,
+        private val backdropService: BackdropService,
+    ) : ViewModel() {
+        val state = MutableStateFlow<DiscoverState>(DiscoverState())
+        val rating = MutableStateFlow<Map<Int, DiscoverRating>>(mapOf())
+
+        init {
+            viewModelScope.launchIO {
+                backdropService.clearBackdrop()
+            }
+            fetchAndUpdateState(seerrService::discoverMovies) {
+                this.copy(
+                    movies =
+                        DiscoverRowData(
+                            context.getString(R.string.movies),
+                            it,
+                            DiscoverRequestType.DISCOVER_MOVIES,
+                        ),
+                )
+            }
+            fetchAndUpdateState(seerrService::discoverTv) {
+                this.copy(
+                    tv =
+                        DiscoverRowData(
+                            context.getString(R.string.tv_shows),
+                            it,
+                            DiscoverRequestType.DISCOVER_TV,
+                        ),
+                )
+            }
+            fetchAndUpdateState(seerrService::trending) {
+                this.copy(
+                    trending =
+                        DiscoverRowData(
+                            context.getString(R.string.trending),
+                            it,
+                            DiscoverRequestType.TRENDING,
+                        ),
+                )
+            }
+            fetchAndUpdateState(seerrService::upcomingMovies) {
+                this.copy(
+                    upcomingMovies =
+                        DiscoverRowData(
+                            context.getString(R.string.upcoming_movies),
+                            it,
+                            DiscoverRequestType.UPCOMING_MOVIES,
+                        ),
+                )
+            }
+            fetchAndUpdateState(seerrService::upcomingTv) {
+                this.copy(
+                    upcomingTv =
+                        DiscoverRowData(
+                            context.getString(R.string.upcoming_tv),
+                            it,
+                            DiscoverRequestType.UPCOMING_TV,
+                        ),
+                )
+            }
+        }
+
+        private fun fetchAndUpdateState(
+            getData: suspend () -> List<DiscoverItem>,
+            copyFunc: DiscoverState.(DataLoadingState<List<DiscoverItem>>) -> DiscoverState,
+        ) {
+            viewModelScope.launchIO {
+                state.update {
+                    copyFunc.invoke(it, DataLoadingState.Loading)
+                }
+                try {
+                    val results = getData.invoke()
+                    state.update {
+                        copyFunc.invoke(it, DataLoadingState.Success(results))
+                    }
+                } catch (ex: Exception) {
+                    state.update {
+                        copyFunc.invoke(it, DataLoadingState.Error(ex))
+                    }
+                }
+            }
+        }
+
+        fun updateBackdrop(item: DiscoverItem?) {
+            viewModelScope.launchIO {
+                if (item != null) {
+                    backdropService.submit("discover_${item.id}", item.backDropUrl)
+                    fetchRating(item)
+                } else {
+                    backdropService.clearBackdrop()
+                }
+            }
+        }
+
+        private val ratingCache =
+            CacheBuilder
+                .newBuilder()
+                .maximumSize(100)
+                .build<Int, DiscoverRating>()
+
+        // TODO this is not very efficient
+        fun fetchRating(item: DiscoverItem) {
+            viewModelScope.launchIO {
+                val cachedResult = ratingCache.getIfPresent(item.id)
+                if (cachedResult != null) {
+                    return@launchIO
+                }
+                val result =
+                    try {
+                        when (item.type) {
+                            SeerrItemType.MOVIE -> {
+                                DiscoverRating(
+                                    seerrService.api.moviesApi.movieMovieIdRatingsGet(
+                                        movieId = item.id,
+                                    ),
+                                )
+                            }
+
+                            SeerrItemType.TV -> {
+                                DiscoverRating(seerrService.api.tvApi.tvTvIdRatingsGet(tvId = item.id))
+                            }
+
+                            SeerrItemType.PERSON -> {
+                                DiscoverRating(null, null)
+                            }
+
+                            SeerrItemType.UNKNOWN -> {
+                                DiscoverRating(null, null)
+                            }
+                        }
+                    } catch (ex: ClientException) {
+                        if (ex.statusCode == 404) {
+                            Timber.w("No rating found for %s", item.id)
+                            DiscoverRating(null, null)
+                        } else {
+                            Timber.e(ex, "Error getting rating for %s", item.id)
+                            return@launchIO
+                        }
+                    } catch (ex: Exception) {
+                        Timber.e(ex, "Error getting rating for %s", item.id)
+                        return@launchIO
+                    }
+                ratingCache.put(item.id, result)
+                rating.update {
+                    ratingCache.asMap().toMap()
+                }
+            }
+        }
+    }
+
+data class DiscoverRowData(
+    val title: String,
+    val items: DataLoadingState<List<DiscoverItem>>,
+    val type: DiscoverRequestType,
+) {
+    companion object {
+        val EMPTY = DiscoverRowData("", DataLoadingState.Pending, DiscoverRequestType.UNKNOWN)
+    }
+}
+
+data class DiscoverState(
+    val movies: DiscoverRowData = DiscoverRowData.EMPTY,
+    val tv: DiscoverRowData = DiscoverRowData.EMPTY,
+    val trending: DiscoverRowData = DiscoverRowData.EMPTY,
+    val upcomingMovies: DiscoverRowData = DiscoverRowData.EMPTY,
+    val upcomingTv: DiscoverRowData = DiscoverRowData.EMPTY,
+)
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SeerrDiscoverPage(
+    preferences: UserPreferences,
+    modifier: Modifier = Modifier,
+    viewModel: SeerrDiscoverViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsState()
+    val rows =
+        listOf(state.trending, state.movies, state.tv, state.upcomingMovies, state.upcomingTv)
+    val ratingMap by viewModel.rating.collectAsState()
+
+    val focusRequesters = remember(rows) { List(rows.size) { FocusRequester() } }
+    var position by rememberPosition(0, -1)
+    val focusedItem =
+        remember(position) {
+            position.let {
+                (rows.getOrNull(it.row)?.items as? DataLoadingState.Success)?.data?.getOrNull(it.column)
+            }
+        }
+    LaunchedEffect(focusedItem) {
+        viewModel.updateBackdrop(focusedItem)
+    }
+    var firstFocused by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.trending) {
+        if (!firstFocused && state.trending.items is DataLoadingState.Success<*>) {
+            firstFocused = focusRequesters.getOrNull(0)?.tryRequestFocus("discover") == true
+        } else if (firstFocused) {
+            focusRequesters.getOrNull(position.row)?.tryRequestFocus()
+        }
+    }
+
+    Column(
+        modifier = modifier,
+    ) {
+        val details =
+            remember(focusedItem, ratingMap) {
+                buildList {
+                    focusedItem
+                        ?.releaseDate
+                        ?.year
+                        ?.toString()
+                        ?.let(::add)
+                }.let {
+                    val rating = focusedItem?.id?.let { ratingMap[it] }
+                    listToDotString(
+                        it,
+                        rating?.audienceRating,
+                        rating?.criticRating?.toFloat(),
+                    )
+                }
+            }
+        HomePageHeader(
+            title = focusedItem?.title,
+            subtitle = focusedItem?.subtitle,
+            overview = focusedItem?.overview,
+            overviewTwoLines = true,
+            quickDetails = details,
+            timeRemaining = null,
+            showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+            logoImageUrl = null, // TODO
+            modifier =
+                Modifier
+                    .padding(top = 24.dp, bottom = 16.dp, start = 32.dp)
+                    .fillMaxHeight(.25f),
+        )
+        val density = LocalDensity.current
+        val spaceAbovePx =
+            with(density) {
+                // The size of the row titles & spacing
+                50.dp.toPx()
+            }
+        val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
+        CompositionLocalProvider(
+            LocalBringIntoViewSpec provides ScrollToTopBringIntoViewSpec(spaceAbovePx),
+        ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp),
+                modifier =
+                    Modifier
+                        .focusRestorer()
+                        .fillMaxSize(),
+            ) {
+                itemsIndexed(rows) { rowIndex, row ->
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                        DiscoverRow(
+                            row = row,
+                            onClickItem = { index, item ->
+                                position = RowColumn(rowIndex, index)
+                                viewModel.navigationManager.navigateTo(item.destination)
+                            },
+                            onLongClickItem = { index, item -> },
+                            onCardFocus = { index -> position = RowColumn(rowIndex, index) },
+                            focusRequester = focusRequesters[rowIndex],
+                            enableViewMore = row.type != DiscoverRequestType.UNKNOWN,
+                            onClickViewMore = {
+                                (row.items as? DataLoadingState.Success<List<DiscoverItem>>)?.data?.size?.let {
+                                    position = RowColumn(rowIndex, it)
+                                }
+                                viewModel.navigationManager.navigateTo(
+                                    Destination.DiscoverMoreResult(row.type),
+                                )
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,6 @@
+<resources>
+
+    <style name="Theme.OrcaX" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:colorBackground">@android:color/background_dark</item>
+    </style>
+</resources>

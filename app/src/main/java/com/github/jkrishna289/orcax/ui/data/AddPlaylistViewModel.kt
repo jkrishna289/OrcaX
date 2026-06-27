@@ -1,0 +1,75 @@
+package com.github.jkrishna289.orcax.ui.data
+
+import android.content.Context
+import android.widget.Toast
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.services.PlaylistCreator
+import com.github.jkrishna289.orcax.ui.detail.PlaylistLoadingState
+import com.github.jkrishna289.orcax.ui.launchIO
+import com.github.jkrishna289.orcax.ui.setValueOnMain
+import com.github.jkrishna289.orcax.ui.showToast
+import com.github.jkrishna289.orcax.util.ExceptionHandler
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import org.jellyfin.sdk.model.api.MediaType
+import timber.log.Timber
+import java.util.UUID
+import javax.inject.Inject
+
+/**
+ * A supplementary [ViewModel] for adding items to a server playlist
+ * @see com.github.jkrishna289.orcax.ui.detail.PlaylistDialog
+ */
+@HiltViewModel
+class AddPlaylistViewModel
+    @Inject
+    constructor(
+        @param:ApplicationContext private val context: Context,
+        private val playlistCreator: PlaylistCreator,
+    ) : ViewModel() {
+        val playlistState = MutableLiveData<PlaylistLoadingState>(PlaylistLoadingState.Pending)
+
+        fun loadPlaylists(mediaType: MediaType?) {
+            viewModelScope.launchIO {
+                this@AddPlaylistViewModel.playlistState.setValueOnMain(PlaylistLoadingState.Loading)
+                try {
+                    val playlists = playlistCreator.getServerPlaylists(mediaType, viewModelScope)
+                    this@AddPlaylistViewModel.playlistState.setValueOnMain(PlaylistLoadingState.Success(playlists))
+                } catch (ex: Exception) {
+                    playlistState.setValueOnMain(PlaylistLoadingState.Error(ex))
+                }
+            }
+        }
+
+        fun addToPlaylist(
+            playlistId: UUID,
+            itemId: UUID,
+        ) {
+            viewModelScope.launchIO(ExceptionHandler(autoToast = true)) {
+                try {
+                    playlistCreator.addToServerPlaylist(playlistId, itemId)
+                    showToast(context, context.getString(R.string.success), Toast.LENGTH_SHORT)
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Error adding %s to playlist %s", itemId, playlistId)
+                    showToast(context, "Error: ${ex.localizedMessage}", Toast.LENGTH_SHORT)
+                }
+            }
+        }
+
+        fun createPlaylistAndAddItem(
+            playlistName: String,
+            itemId: UUID,
+        ) {
+            viewModelScope.launchIO(ExceptionHandler(autoToast = true)) {
+                val playlistId = playlistCreator.createServerPlaylist(playlistName, listOf(itemId))
+                if (playlistId == null) {
+                    showToast(context, "Error creating playlist", Toast.LENGTH_LONG)
+                } else {
+                    showToast(context, context.getString(R.string.success), Toast.LENGTH_SHORT)
+                }
+            }
+        }
+    }

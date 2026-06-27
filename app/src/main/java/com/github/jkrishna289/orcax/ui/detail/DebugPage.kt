@@ -1,0 +1,455 @@
+package com.github.jkrishna289.orcax.ui.detail
+
+import android.content.Context
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.util.Log
+import android.view.Display
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import com.github.jkrishna289.orcax.BuildConfig
+import com.github.jkrishna289.orcax.MainActivity
+import com.github.jkrishna289.orcax.data.ItemPlaybackDao
+import com.github.jkrishna289.orcax.data.ServerRepository
+import com.github.jkrishna289.orcax.data.model.ItemPlayback
+import com.github.jkrishna289.orcax.services.NavigationManager
+import com.github.jkrishna289.orcax.ui.nav.Destination
+import com.github.jkrishna289.orcax.preferences.UserPreferences
+import com.github.jkrishna289.orcax.ui.launchIO
+import com.github.jkrishna289.orcax.ui.showToast
+import com.github.jkrishna289.orcax.util.ExceptionHandler
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.acra.util.versionCodeLong
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.clientLogApi
+import org.jellyfin.sdk.model.ClientInfo
+import org.jellyfin.sdk.model.DeviceInfo
+import timber.log.Timber
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.util.Date
+import javax.inject.Inject
+
+@HiltViewModel
+class DebugViewModel
+    @Inject
+    constructor(
+        val serverRepository: ServerRepository,
+        val itemPlaybackDao: ItemPlaybackDao,
+        val clientInfo: ClientInfo,
+        val deviceInfo: DeviceInfo,
+        val navigationManager: NavigationManager,
+    ) : ViewModel() {
+        val itemPlaybacks = MutableLiveData<List<ItemPlayback>>(listOf())
+        val logcat = MutableLiveData<List<LogcatLine>>(listOf())
+
+        val supportedModes by lazy {
+            val displayManager =
+                MainActivity.instance.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
+            display.supportedModes.orEmpty()
+        }
+
+        val av1Included by lazy {
+            try {
+                Class.forName("androidx.media3.decoder.av1.Libdav1dVideoRenderer")
+                true
+            } catch (_: ClassNotFoundException) {
+                false
+            }
+        }
+
+        val ffmpegIncluded by lazy {
+            try {
+                Class.forName("androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer")
+                true
+            } catch (_: ClassNotFoundException) {
+                false
+            }
+        }
+
+        val libMpvLoaded by lazy {
+            try {
+                System.loadLibrary("player")
+                System.loadLibrary("mpv")
+                true
+            } catch (_: Throwable) {
+                // UnsatisfiedLinkError (an Error, not Exception) when the MPV native lib is absent.
+                false
+            }
+        }
+
+        init {
+            viewModelScope.launchIO {
+                serverRepository.currentUser.value?.rowId?.let {
+                    val results = itemPlaybackDao.getItems(it)
+                    withContext(Dispatchers.Main) {
+                        itemPlaybacks.value = results
+                    }
+                }
+                val logcat = getLogCatLines()
+                withContext(Dispatchers.Main) {
+                    this@DebugViewModel.logcat.value = logcat
+                }
+            }
+        }
+
+        companion object {
+            fun getLogCatLines(): List<LogcatLine> {
+                val lineCount = 500
+                val args =
+                    buildList {
+                        add("logcat")
+                        add("-d")
+                        add("-t")
+                        add(lineCount.toString())
+                        addAll(THIRD_PARTY_TAGS)
+                        add("*:V")
+                    }
+                val process = ProcessBuilder().command(args).redirectErrorStream(true).start()
+                val logLines = mutableListOf<LogcatLine>()
+                try {
+                    val reader = BufferedReader(InputStreamReader(process.inputStream))
+                    var count = 0
+
+                    while (count < lineCount) {
+                        val line = reader.readLine()
+                        if (line != null) {
+                            val level = line.split(Regex("\\s+")).getOrNull(4)
+                            val logLevel =
+                                when (level?.uppercase()) {
+                                    "V" -> Log.VERBOSE
+                                    "D" -> Log.DEBUG
+                                    "I" -> Log.INFO
+                                    "W" -> Log.WARN
+                                    "E" -> Log.ERROR
+                                    else -> Log.VERBOSE
+                                }
+                            logLines.add(LogcatLine(logLevel, line))
+                        } else {
+                            break
+                        }
+                        count++
+                    }
+                } finally {
+                    process.destroy()
+                }
+                return logLines
+            }
+
+            fun ViewModel.sendAppLogs(
+                context: Context,
+                api: ApiClient,
+                clientInfo: ClientInfo?,
+                deviceInfo: DeviceInfo?,
+            ) {
+                viewModelScope.launchIO(ExceptionHandler(true)) {
+                    val logcat = getLogCatLines().joinToString("\n") { it.text }
+                    val body =
+                        """
+                        Send App Logs
+                        clientInfo=$clientInfo
+                        deviceInfo=$deviceInfo
+                        manufacturer=${Build.MANUFACTURER}
+                        model=${Build.MODEL}
+                        apiLevel=${Build.VERSION.SDK_INT}
+
+                        """.trimIndent()
+                    Timber.w(body)
+                    val response by api.clientLogApi.logFile(body + logcat)
+                    showToast(context, "Sent! Filename=${response.fileName}")
+                }
+            }
+        }
+    }
+
+data class LogcatLine(
+    val level: Int,
+    val text: String,
+)
+
+@Composable
+fun DebugPage(
+    preferences: UserPreferences,
+    modifier: Modifier = Modifier,
+    viewModel: DebugViewModel = hiltViewModel(),
+) {
+    val context = LocalContext.current
+    val scrollAmount = 100f
+    val columnState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    fun scroll(reverse: Boolean = false) {
+        scope.launch(ExceptionHandler()) {
+            columnState.scrollBy(if (reverse) -scrollAmount else scrollAmount)
+        }
+    }
+
+    val itemPlaybacks by viewModel.itemPlaybacks.observeAsState(listOf())
+    val logcat by viewModel.logcat.observeAsState(listOf())
+
+    LazyColumn(
+        state = columnState,
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(32.dp),
+        modifier =
+            modifier
+                .focusable()
+                .background(
+                    MaterialTheme.colorScheme.surface,
+                ).onKeyEvent {
+                    if (it.type == KeyEventType.KeyUp) {
+                        return@onKeyEvent false
+                    }
+                    if (it.key == Key.DirectionDown) {
+                        scroll(false)
+                        return@onKeyEvent true
+                    }
+                    if (it.key == Key.DirectionUp) {
+                        scroll(true)
+                        return@onKeyEvent true
+                    }
+                    return@onKeyEvent false
+                },
+    ) {
+        item {
+            androidx.tv.material3.Button(
+                onClick = {
+                    viewModel.navigationManager.navigateTo(Destination.EngineCards)
+                },
+            ) {
+                Text(text = "Open Orca Engine Cards")
+            }
+        }
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "App Information",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                val buildTime = Date(BuildConfig.BUILD_TIME)
+                val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                val installInfo =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val installSource =
+                            context.packageManager.getInstallSourceInfo(context.packageName)
+                        buildList {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                add("Install source: ${installSource.packageSource}")
+                            }
+                            add("Installer: ${installSource.installingPackageName}")
+                            add("Initiator: ${installSource.initiatingPackageName}")
+                        }
+                    } else {
+                        listOf(context.packageManager.getInstallerPackageName(context.packageName))
+                    }
+                (
+                    listOf(
+                        "Version Name: ${pkgInfo.versionName}",
+                        "Version Code: ${pkgInfo.versionCodeLong}",
+                        "ClientInfo:  ${viewModel.clientInfo}",
+                        "Build type: ${BuildConfig.BUILD_TYPE}",
+                        "Build flavor: ${BuildConfig.FLAVOR}",
+                        "Build time: $buildTime",
+                        "FFMPEG included: ${viewModel.ffmpegIncluded}",
+                        "AV1 included: ${viewModel.av1Included}",
+                        "libmpv loaded: ${viewModel.libMpvLoaded}",
+                        "Debug enabled: ${BuildConfig.DEBUG}",
+                        "ABIs: ${Build.SUPPORTED_ABIS.toList()}",
+                    ) + installInfo
+                ).forEach {
+                    Text(
+                        text = it.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Device Information",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+
+                listOf(
+                    "DeviceInfo:  ${viewModel.deviceInfo}",
+                    "Manufacturer: ${Build.MANUFACTURER}",
+                    "Model: ${Build.MODEL}",
+                    "API Level: ${Build.VERSION.SDK_INT}",
+                    "Display Modes:",
+                    *viewModel.supportedModes,
+                ).forEach {
+                    Text(
+                        text = it.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "AppPreferences",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = preferences.appPreferences.toString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "User Information",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Current server: ${viewModel.serverRepository.currentServer.value}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Current user: ${viewModel.serverRepository.currentUser.value}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "User server settings: ${viewModel.serverRepository.currentUserDto.value?.configuration}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Database",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "ItemPlayback",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                itemPlaybacks.forEach {
+                    Text(
+                        text = it.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Logcat",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                logcat.forEach { (level, line) ->
+                    val color =
+                        when (level) {
+                            Log.VERBOSE -> MaterialTheme.colorScheme.onSurface
+                            Log.DEBUG -> Color(0xff2bc4cf)
+                            Log.INFO -> Color(0xff2bcf8b)
+                            Log.WARN -> Color(0xffdde663)
+                            Log.ERROR -> Color(0xffe67063)
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = color,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val THIRD_PARTY_TAGS =
+    listOf(
+        "libc:F",
+        "ExoPlayerImpl:W",
+        // FireTV
+        "Codec2Client:E",
+        "CCodecBuffers:E",
+        "CCodecConfig:E",
+        "okhttp.Http2:W",
+        "okhttp.TaskRunner:W",
+        "LruBitmapPool:W",
+        "FragmentManager:W",
+        "ConfigStore:W",
+        "GlideRequest:W",
+        "FactoryPools:W",
+        "ViewTarget:W",
+        "Engine:W",
+        "Downsampler:W",
+        "TransformationUtils:W",
+        "DecodeJob:W",
+        "BufferPoolAccessor2.0:W",
+        "ExifInterface:W",
+        "MediaCodec:W",
+        "SurfaceUtils:W",
+        "ByteArrayPool:W",
+        "HardwareConfig:W",
+        "DfltImageHeaderParser:W",
+    )

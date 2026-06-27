@@ -1,0 +1,272 @@
+package com.github.jkrishna289.orcax.ui.main.settings
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.data.model.HomeRowViewOptions
+import com.github.jkrishna289.orcax.preferences.PrefContentScale
+import com.github.jkrishna289.orcax.ui.AspectRatio
+import com.github.jkrishna289.orcax.ui.components.ViewOptionImageType
+import com.github.jkrishna289.orcax.ui.tryRequestFocus
+import org.jellyfin.sdk.model.api.CollectionType
+
+data class HomeRowPresets(
+    val continueWatching: HomeRowViewOptions,
+    val movieLibrary: HomeRowViewOptions,
+    val tvLibrary: HomeRowViewOptions,
+    val videoLibrary: HomeRowViewOptions,
+    val photoLibrary: HomeRowViewOptions,
+    val musicLibrary: HomeRowViewOptions,
+    val playlist: HomeRowViewOptions,
+    val liveTv: HomeRowViewOptions,
+    val genreSize: Int,
+) {
+    fun getByCollectionType(collectionType: CollectionType): HomeRowViewOptions =
+        when (collectionType) {
+            CollectionType.MOVIES -> movieLibrary
+
+            CollectionType.TVSHOWS -> tvLibrary
+
+            CollectionType.MUSICVIDEOS -> videoLibrary
+
+            CollectionType.TRAILERS -> videoLibrary
+
+            CollectionType.HOMEVIDEOS -> videoLibrary
+
+            CollectionType.BOXSETS -> movieLibrary
+
+            CollectionType.PHOTOS -> photoLibrary
+
+            CollectionType.LIVETV -> liveTv
+
+            CollectionType.MUSIC -> musicLibrary
+
+            CollectionType.UNKNOWN,
+            CollectionType.BOOKS,
+            CollectionType.PLAYLISTS,
+            CollectionType.FOLDERS,
+            -> HomeRowViewOptions()
+        }
+
+    companion object {
+        val OrcaDefault by lazy {
+            HomeRowPresets(
+                continueWatching = HomeRowViewOptions(),
+                movieLibrary = HomeRowViewOptions(),
+                tvLibrary = HomeRowViewOptions(),
+                videoLibrary =
+                    HomeRowViewOptions(
+                        aspectRatio = AspectRatio.WIDE,
+                    ),
+                photoLibrary =
+                    HomeRowViewOptions(
+                        aspectRatio = AspectRatio.WIDE,
+                        contentScale = PrefContentScale.CROP,
+                    ),
+                musicLibrary =
+                    HomeRowViewOptions(
+                        aspectRatio = AspectRatio.SQUARE,
+                    ),
+                playlist =
+                    HomeRowViewOptions(
+                        aspectRatio = AspectRatio.SQUARE,
+                        contentScale = PrefContentScale.FIT,
+                    ),
+                liveTv = HomeRowViewOptions.liveTvDefault,
+                genreSize = HomeRowViewOptions.genreDefault.heightDp,
+            )
+        }
+
+        val OrcaCompact by lazy {
+            val height = 148
+            val epHeight = 100
+            HomeRowPresets(
+                continueWatching =
+                    HomeRowViewOptions(
+                        heightDp = height,
+                    ),
+                movieLibrary =
+                    HomeRowViewOptions(
+                        heightDp = height,
+                    ),
+                tvLibrary =
+                    HomeRowViewOptions(
+                        heightDp = height,
+                    ),
+                videoLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.WIDE,
+                    ),
+                photoLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.WIDE,
+                        contentScale = PrefContentScale.CROP,
+                    ),
+                musicLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.SQUARE,
+                    ),
+                playlist =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.SQUARE,
+                        contentScale = PrefContentScale.FIT,
+                    ),
+                liveTv = HomeRowViewOptions.liveTvDefault,
+                genreSize = epHeight,
+            )
+        }
+
+        val SeriesThumbs by lazy {
+            val height = 148
+            val epHeight = 100
+            HomeRowPresets(
+                continueWatching =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        imageType = ViewOptionImageType.THUMB,
+                        aspectRatio = AspectRatio.WIDE,
+                        useSeries = true,
+                        episodeImageType = ViewOptionImageType.THUMB,
+                        episodeAspectRatio = AspectRatio.WIDE,
+                    ),
+                movieLibrary =
+                    HomeRowViewOptions(
+                        heightDp = height,
+                    ),
+                tvLibrary =
+                    HomeRowViewOptions(
+                        heightDp = height,
+                    ),
+                videoLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.WIDE,
+                    ),
+                photoLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.WIDE,
+                        contentScale = PrefContentScale.CROP,
+                    ),
+                musicLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.SQUARE,
+                    ),
+                playlist =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.SQUARE,
+                        contentScale = PrefContentScale.FIT,
+                    ),
+                liveTv = HomeRowViewOptions.liveTvDefault,
+                genreSize = epHeight,
+            )
+        }
+
+        val EpisodeThumbnails by lazy {
+            val height = 148
+            val epHeight = 100
+            HomeRowPresets(
+                continueWatching =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        imageType = ViewOptionImageType.THUMB,
+                        aspectRatio = AspectRatio.WIDE,
+                        showTitles = true,
+                        useSeries = false,
+                        episodeImageType = ViewOptionImageType.PRIMARY,
+                        episodeAspectRatio = AspectRatio.WIDE,
+                    ),
+                movieLibrary =
+                    HomeRowViewOptions(
+                        heightDp = height,
+                    ),
+                tvLibrary =
+                    HomeRowViewOptions(
+                        heightDp = height,
+                    ),
+                videoLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.WIDE,
+                    ),
+                photoLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.WIDE,
+                        contentScale = PrefContentScale.CROP,
+                    ),
+                musicLibrary =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.SQUARE,
+                    ),
+                playlist =
+                    HomeRowViewOptions(
+                        heightDp = epHeight,
+                        aspectRatio = AspectRatio.SQUARE,
+                        contentScale = PrefContentScale.FIT,
+                    ),
+                liveTv = HomeRowViewOptions.liveTvDefault,
+                genreSize = epHeight,
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeRowPresetsContent(
+    onApply: (HomeRowPresets) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val presets =
+        listOf(
+            stringResource(R.string.display_preset_default) to HomeRowPresets.OrcaDefault,
+            stringResource(R.string.display_preset_compact) to HomeRowPresets.OrcaCompact,
+            stringResource(R.string.display_preset_series_thumb) to HomeRowPresets.SeriesThumbs,
+            stringResource(R.string.display_preset_episode_thumbnails) to HomeRowPresets.EpisodeThumbnails,
+        )
+
+    val focusRequesters = remember { List(presets.size) { FocusRequester() } }
+    LaunchedEffect(Unit) { focusRequesters[0].tryRequestFocus() }
+    Column(modifier = modifier) {
+        TitleText(stringResource(R.string.display_presets))
+        LazyColumn(
+            contentPadding = PaddingValues(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier =
+                modifier
+                    .fillMaxHeight()
+                    .focusRestorer(focusRequesters[0]),
+        ) {
+            itemsIndexed(presets) { index, (title, preset) ->
+                HomeSettingsListItem(
+                    selected = false,
+                    headlineText = title,
+                    onClick = {
+                        onApply.invoke(preset)
+                    },
+                    modifier = Modifier.focusRequester(focusRequesters[index]),
+                )
+            }
+        }
+    }
+}

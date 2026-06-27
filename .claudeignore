@@ -1,0 +1,15 @@
+.gradle/
+build/
+.idea/
+captures/
+externalNativeBuild/
+
+*.apk
+*.aab
+*.mp4
+*.mkv
+*.png
+*.jpg
+*.zip
+
+node_modules/
