@@ -161,12 +161,14 @@ private fun EngineCardBody(
     val focusedAfterDelay by rememberFocusedAfterDelay(interactionSource)
     val cardShape = RoundedCornerShape(8.dp)
 
-    // 16:9 cards expand HORIZONTALLY on focus (a real layout width change, so the LazyRow slides the
-    // neighboring cards aside instead of overdrawing them) and, after a short dwell, crossfade their
-    // art to a quiet inline trailer (replacing the old pop-up). Only these landscape cards play
-    // trailers; poster cards are untouched. One card is focused at a time → at most one player.
+    // 16:9 trailer flow: hold focus for the dwell (3.5s) → the trailer starts loading → ONLY once
+    // playback is confirmed (player READY) does the card expand HORIZONTALLY — a real layout width
+    // change, so the LazyRow slides the neighboring cards aside instead of overdrawing them — and the
+    // trailer plays (once, no loop; the card collapses back when it ends). Cards without a trailer
+    // (no URL, cache miss, unplayable) never enlarge. Poster cards are untouched.
     val focused by interactionSource.collectIsFocusedAsState()
     var playTrailer by remember { mutableStateOf(false) }
+    var trailerReady by remember { mutableStateOf(false) }
     val trailerUrl = remember(item) { if (isWide) trailerUrlFor(item) else null }
     val backdropUrl = remember(item) { if (isWide) backdropUrlFor(item) else null }
     LaunchedEffect(focused) {
@@ -175,10 +177,11 @@ private fun EngineCardBody(
             playTrailer = true
         } else {
             playTrailer = false
+            trailerReady = false
         }
     }
     val animatedWidth by animateDpAsState(
-        targetValue = if (isWide && focused) width * WIDE_FOCUS_EXPAND else width,
+        targetValue = if (isWide && focused && trailerReady) width * WIDE_FOCUS_EXPAND else width,
         animationSpec = tween(durationMillis = 260),
         label = "wide-card-expand",
     )
@@ -212,14 +215,16 @@ private fun EngineCardBody(
                 )
 
                 if (isWide) {
-                    // While the card is dwelled, its trailer plays in place over the art (quiet audio).
-                    // No encircled play-icon overlay — the enlarge + trailer is the affordance now.
+                    // Mounted after the dwell; stays on the art until READY (which also triggers the
+                    // expansion), plays once with quiet audio, and reports ended/error so the card
+                    // collapses back. No encircled play-icon overlay — enlarge + trailer is the cue.
                     if (playTrailer && trailerUrl != null) {
                         InlineCardTrailer(
                             trailerUrl = trailerUrl,
                             backdropUrl = backdropUrl,
                             play = true,
                             volume = TRAILER_VOLUME,
+                            onReadyChange = { trailerReady = it },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -574,8 +579,8 @@ private const val LARGE_CARD_SCALE = 1.35f
  */
 private const val WIDE_FOCUS_EXPAND = 1.45f
 
-/** Sustained focus on a 16:9 card before its inline trailer starts (avoids firing while scrolling). */
-private const val TRAILER_DWELL_MS = 1_200L
+/** Sustained focus on a 16:9 card before its trailer starts loading (avoids firing while scrolling). */
+private const val TRAILER_DWELL_MS = 3_500L
 
 /** Inline-card trailer audio: quiet, not muted (per the user) and not intrusive on a 10-ft UI. */
 private const val TRAILER_VOLUME = 0.2f

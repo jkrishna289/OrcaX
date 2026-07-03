@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -128,8 +129,22 @@ fun Billboard(
             val player =
                 ExoPlayer.Builder(context).build().apply {
                     volume = 0f
-                    repeatMode = Player.REPEAT_MODE_ALL
+                    // Play once — trailers must not loop; the backdrop returns when it ends.
+                    repeatMode = Player.REPEAT_MODE_OFF
                 }
+            // Crossfade back to the backdrop when the trailer finishes or can't play (e.g. the
+            // engine hasn't cached it yet) instead of looping or holding a dead player frame.
+            player.addListener(
+                object : Player.Listener {
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == Player.STATE_ENDED) showTrailer = false
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        showTrailer = false
+                    }
+                },
+            )
             exoPlayer = player
             player.setMediaItem(MediaItem.fromUri(trailerUrl))
             player.prepare()

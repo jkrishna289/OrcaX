@@ -186,8 +186,10 @@ class EngineHomeViewModel
 
         /**
          * Called by the billboard pager when a spotlight item becomes active (rotation or first
-         * load). Resolves that item's inline trailer (local Jellyfin trailers only, cached), seeds
-         * the watchlist toggle, and drives the focus-following ambient backdrop.
+         * load). Resolves that item's inline trailer — a local Jellyfin trailer when one exists,
+         * else the engine's server-cached TMDB trailer (so the billboard plays for nearly every
+         * title, under its scrims with the buttons still visible) — seeds the watchlist toggle,
+         * and drives the focus-following ambient backdrop.
          */
         fun onHeroActive(index: Int) {
             val hero = heroes.getOrNull(index) ?: return
@@ -198,12 +200,15 @@ class EngineHomeViewModel
             onCardFocused(hero)
             if (heroId != null) refreshHeroFavorite(heroId) else _heroFavorite.value = false
 
-            if (hero.card.wantsTrailer != true || heroId == null) {
-                _activeTrailerUrl.value = null
+            // The engine's TMDB trailer is the universal fallback (works for library AND
+            // requestable spotlight items); a local Jellyfin trailer extra still wins when present.
+            val engineUrl = client.trailerUrl(hero.media.tmdbId, hero.media.mediaType)
+            if (heroId == null) {
+                _activeTrailerUrl.value = engineUrl
                 return
             }
             if (trailerCache.containsKey(heroId)) {
-                _activeTrailerUrl.value = trailerCache[heroId]
+                _activeTrailerUrl.value = trailerCache[heroId] ?: engineUrl
                 return
             }
             _activeTrailerUrl.value = null
@@ -211,7 +216,7 @@ class EngineHomeViewModel
                 val url = runCatching { trailerService.getLocalTrailerStreamUrl(heroId) }.getOrNull()
                 trailerCache[heroId] = url
                 // Only apply if this item is still the active one (guard against fast rotation).
-                if (activeHeroIndex == index) _activeTrailerUrl.value = url
+                if (activeHeroIndex == index) _activeTrailerUrl.value = url ?: engineUrl
             }
         }
 

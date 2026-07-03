@@ -37,11 +37,12 @@ private const val MAX_TRAILER_RETRIES = 3
 private const val TRAILER_RETRY_DELAY_MS = 6_000L
 
 /**
- * A 16:9 preview that shows the backdrop and crossfades to a looping trailer once [play] + ready.
- * Extracted from the old InstantDetails pop-up so a focused card can play its own trailer in place:
- * mount it while a card is dwelled, unmount on focus loss (the [DisposableEffect] releases the
- * player). [volume] is 0f..1f — the home's 16:9 cards play quiet audio, other callers pass 0f.
- * On a cache miss / unplayable trailer it simply stays on the backdrop.
+ * A 16:9 preview that shows the backdrop and crossfades to the trailer once [play] + ready. The
+ * trailer plays ONCE (no loop) and hands back to the backdrop when it ends. Mount it while a card is
+ * dwelled, unmount on focus loss (the [DisposableEffect] releases the player). [volume] is 0f..1f —
+ * the home's 16:9 cards play quiet audio. On a cache miss / unplayable trailer it stays on the
+ * backdrop. [onReadyChange] reports confirmed playability — true only while the trailer is actually
+ * playable — so the caller can gate its expansion on "the trailer is sure to play".
  */
 @Composable
 fun InlineCardTrailer(
@@ -50,9 +51,13 @@ fun InlineCardTrailer(
     play: Boolean,
     modifier: Modifier = Modifier,
     volume: Float = 0f,
+    onReadyChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     var ready by remember(trailerUrl) { mutableStateOf(false) }
+    // Report readiness transitions (READY → true; ended/error/unmount → false) to the caller.
+    LaunchedEffect(ready) { onReadyChange(ready) }
+    var ended by remember(trailerUrl) { mutableStateOf(false) }
     // The engine 404s a trailer that isn't cached yet — but that same request kicks off a background
     // warm on the server. Retrying a few times while the card stays dwelled lets the trailer start
     // as soon as the cache fills, instead of silently giving up on the first miss.
@@ -64,7 +69,8 @@ fun InlineCardTrailer(
             if (trailerUrl != null) {
                 ExoPlayer.Builder(context).build().apply {
                     this.volume = volume
-                    repeatMode = Player.REPEAT_MODE_ALL
+                    // Play once — trailers must not loop; the backdrop returns when it ends.
+                    repeatMode = Player.REPEAT_MODE_OFF
                 }
             } else {
                 null
@@ -75,9 +81,9 @@ fun InlineCardTrailer(
     LaunchedEffect(exo, volume) { exo?.volume = volume }
 
     // Only prepare/play once the dwell says so (play == true); pause otherwise. Re-runs on each
-    // retry bump after a cache-miss error.
+    // retry bump after a cache-miss error. Never restarts a trailer that finished (ended).
     LaunchedEffect(trailerUrl, play, retryNonce) {
-        if (play && trailerUrl != null && exo != null) {
+        if (play && trailerUrl != null && exo != null && !ended) {
             exo.setMediaItem(MediaItem.fromUri(trailerUrl))
             exo.prepare()
             exo.seekTo(TRAILER_SKIP_MS)
@@ -100,7 +106,15 @@ fun InlineCardTrailer(
         val listener =
             object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY) ready = true
+                    when (state) {
+                        Player.STATE_READY -> ready = true
+                        Player.STATE_ENDED -> {
+                            // Finished — hand back to the backdrop (and the caller collapses).
+                            ended = true
+                            ready = false
+                        }
+                        else -> Unit
+                    }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
