@@ -12,7 +12,9 @@ import com.github.jkrishna289.orcax.engine.TelemetryEvent
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.HomeBundleCache
 import com.github.jkrishna289.orcax.services.ImageUrlService
+import com.github.jkrishna289.orcax.services.LocalHomeBundleBuilder
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.TrailerService
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
@@ -46,6 +48,8 @@ class EngineHomeViewModel
     @Inject
     constructor(
         private val client: OrcaEngineClient,
+        private val localHomeBundleBuilder: LocalHomeBundleBuilder,
+        private val homeBundleCache: HomeBundleCache,
         private val preferences: DataStore<AppPreferences>,
         private val trailerService: TrailerService,
         private val navigationManager: NavigationManager,
@@ -97,26 +101,51 @@ class EngineHomeViewModel
 
         fun load() {
             viewModelScope.launch {
-                _state.value = EngineHomeState.Loading
-
                 val userId =
                     runCatching {
                         preferences.data.firstOrNull()?.currentUserId?.toUUIDOrNull()
                     }.getOrNull()
                 currentUserId = userId
 
+                // Paint instantly from the last-good bundle, then revalidate in the background
+                // (stale-while-revalidate). The skeleton only shows when there's nothing cached.
+                val cached =
+                    runCatching { homeBundleCache.read(userId) }.getOrNull()
+                        ?.takeIf { it.rows.isNotEmpty() }
+                val hadCache = cached != null
+                if (cached != null) applyBundle(cached) else _state.value = EngineHomeState.Loading
+
                 val bootstrap = client.getBootstrap(userId = userId, inlineVideo = true)
-                val bundle = bootstrap?.home
+                val serverBundle = bootstrap?.home?.takeIf { it.rows.isNotEmpty() }
+                // The server-side Orca Engine drives the home when reachable. If it can't be
+                // reached (offline / older server), build the bundle from the user's real Jellyfin
+                // library client-side instead. Only if THAT is also empty do we degrade to the legacy home.
+                val localBundle =
+                    if (serverBundle == null) {
+                        runCatching { localHomeBundleBuilder.build() }
+                            .onFailure { Timber.w(it, "Local home bundle build failed") }
+                            .getOrNull()
+                    } else {
+                        null
+                    }
+                val bundle = serverBundle ?: localBundle
                 // Fallback breadcrumb (§3): make "why is the legacy/sample home showing?" diagnosable.
                 when {
-                    bundle == null ->
-                        useFallback("bootstrap returned no bundle (engine unreachable/not installed)")
-                    bootstrap?.settings?.enabled == false ->
+                    bootstrap?.settings?.enabled == false -> {
+                        // Engine turned off server-side → drop the stale cache and show the fallback.
+                        runCatching { homeBundleCache.clear(userId) }
                         useFallback("disabled via settings (Enabled=false)")
+                    }
+                    // A transient fetch failure must NOT blank a home we already painted from cache.
+                    bundle == null ->
+                        if (!hadCache) useFallback("no engine bundle and no local library rows")
                     bundle.rows.isEmpty() ->
-                        useFallback("bundle had zero rows")
-                    else ->
+                        if (!hadCache) useFallback("bundle had zero rows")
+                    // Re-render + persist only when the fresh bundle differs from what we showed.
+                    !hadCache || bundle != cached -> {
                         applyBundle(bundle)
+                        runCatching { homeBundleCache.write(userId, bundle) }
+                    }
                 }
             }
         }
@@ -213,6 +242,37 @@ class EngineHomeViewModel
 
         /** The server-cached trailer URL for a card (#11), or null when there's no TMDB id. */
         fun trailerUrlFor(item: RenderItem): String? = client.trailerUrl(item.media.tmdbId, item.media.mediaType)
+
+        /**
+         * "Did You Know?" facts for the instant-details overlay (Feature 4). Resolved lazily from the
+         * engine's permanent trivia cache; empty when there's no engine, no id, or no facts.
+         */
+        suspend fun triviaFor(item: RenderItem): List<String> {
+            val jellyfinId = item.media.jellyfinId?.toUUIDOrNull()
+            val tmdbId = item.media.tmdbId
+            if (jellyfinId == null && tmdbId == null) return emptyList()
+            return runCatching { client.getTrivia(jellyfinId = jellyfinId, tmdbId = tmdbId)?.facts }
+                .getOrNull()
+                .orEmpty()
+        }
+
+        /**
+         * Records an explicit thumbs up/down for a title (a high-weight personalization signal). Only
+         * surfaces a confirmation when the engine actually accepted it (it's absent until redeployed).
+         */
+        fun recordFeedback(
+            item: RenderItem,
+            thumbsUp: Boolean,
+        ) {
+            val userId = currentUserId ?: return
+            val itemId = item.media.jellyfinId?.toUUIDOrNull() ?: return
+            viewModelScope.launch {
+                val ok = runCatching { client.sendFeedback(userId, itemId, thumbsUp) }.getOrDefault(false)
+                if (ok) {
+                    _message.emit(if (thumbsUp) "Added to your taste profile" else "We'll show less like this")
+                }
+            }
+        }
 
         /** A 16:9 backdrop URL for the instant-details / trailer preview (#10/#11). */
         fun backdropUrlFor(item: RenderItem): String? {
@@ -373,12 +433,13 @@ class EngineHomeViewModel
             private const val SPOTLIGHT_ROW_ID = "spotlight"
 
             /**
-             * When the engine can't serve a bundle, render the built-in [SampleEngineBundle] instead
-             * of degrading to the legacy on-device home. Lets the cinematic layout ship and be seen
-             * before the server-side `/OrcaEngine` plugin exists. Flip to `false` to restore the
-             * silent legacy fallback.
+             * Final fallback when neither the server engine NOR the client-side
+             * [LocalHomeBundleBuilder] can produce a bundle (e.g. no signed-in user / empty library):
+             * show the legacy on-device home — which loads the user's real library with real posters —
+             * rather than the decorative gradient [SampleEngineBundle]. Flip to `true` to showcase the
+             * cinematic demo layout with no server instead.
              */
-            private const val SAMPLE_HOME_WHEN_UNAVAILABLE = true
+            private const val SAMPLE_HOME_WHEN_UNAVAILABLE = false
 
             /** Jellyfin uses 100-ns ticks; 10,000 ticks per millisecond. */
             private const val TICKS_PER_MS = 10_000L

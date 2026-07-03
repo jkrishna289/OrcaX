@@ -182,6 +182,7 @@ fun PlaybackPageContent(
         ),
     )
     val currentSegment by viewModel.currentSegment.collectAsState()
+    val contentWarning by viewModel.contentWarning.collectAsState()
 
     val cues by viewModel.subtitleCues.observeAsState(listOf())
     var showDebugInfo by remember { mutableStateOf(prefs.showDebugInfo) }
@@ -656,6 +657,15 @@ fun PlaybackPageContent(
                             .align(Alignment.Center),
                 )
             }
+
+            // Passive content advisory (engine/Groq): fades in briefly at playback start, never takes focus.
+            ContentWarningOverlay(
+                warnings = contentWarning,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .zIndex(2f),
+            )
 
             val subtitleSettings =
                 remember(mediaInfo) {

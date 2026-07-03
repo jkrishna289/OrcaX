@@ -92,9 +92,7 @@ sealed class Destination(
         val shuffle: Boolean = false,
         val recursive: Boolean = false,
         val sortAndDirection: SortAndDirection? = null,
-    ) : Destination(true) {
-        override fun toString(): String = "PlaybackList(itemId=$itemId)"
-    }
+    ) : Destination(true)
 
     @Serializable
     data class FilteredCollection(
@@ -135,6 +133,7 @@ sealed class Destination(
         val item: DiscoverItem,
     ) : Destination(false)
 
+    @Serializable
     data class DiscoverMoreResult(
         val type: DiscoverRequestType,
         val startIndex: Int = SEERR_PAGE_SIZE,

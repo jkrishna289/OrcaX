@@ -16,9 +16,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import android.widget.Toast
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -37,7 +41,7 @@ import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.ui.Cards
 import com.github.jkrishna289.orcax.ui.cards.DynamicCardRow
-import com.github.jkrishna289.orcax.ui.cards.InstantDetails
+import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -90,24 +94,35 @@ fun EngineHomePage(
             // instead of a details page; null while the landing is closed (#5).
             var requestLandingItem by remember { mutableStateOf<RenderItem?>(null) }
 
-            // Instant details (#10) + two-stage trailer (#11): a staged dwell timer, reset on every
-            // focus change so nothing fires while scrolling. ~0.9s → metadata overlay (no trailer);
-            // 5s → small trailer plays; 10s → it enlarges into the pop-up.
-            var focusedRowItem by remember { mutableStateOf<RenderItem?>(null) }
-            var instantDetailsItem by remember { mutableStateOf<RenderItem?>(null) }
-            var playTrailer by remember { mutableStateOf(false) }
-            var trailerEnlarged by remember { mutableStateOf(false) }
-            LaunchedEffect(focusedRowItem) {
-                instantDetailsItem = null
-                playTrailer = false
-                trailerEnlarged = false
-                focusedRowItem?.let {
-                    delay(INFO_DELAY_MS)
-                    instantDetailsItem = it
-                    delay(TRAILER_DELAY_MS - INFO_DELAY_MS)
-                    playTrailer = true
-                    delay(TRAILER_ENLARGE_DELAY_MS - TRAILER_DELAY_MS)
-                    trailerEnlarged = true
+            // Long-press feedback menu (thumbs up/down → engine personalization); null when closed.
+            var feedbackItem by remember { mutableStateOf<RenderItem?>(null) }
+
+            // Per-row focus handles + the last row the user focused (saved across navigation).
+            // Entry recreation on pop drops the focus system's own memory, so returning from a
+            // details page pushes focus back into this row; its saved position then restores the
+            // exact card (#F2). Also the hand-back target when a popup overlay dismisses (#F3).
+            val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+            fun rowFocus(id: String): FocusRequester = rowFocusRequesters.getOrPut(id) { FocusRequester() }
+            var lastFocusedRowId by rememberSaveable { mutableStateOf<String?>(null) }
+
+            // Single owner of initial focus. On return from a details page the nav entry is recreated,
+            // so the focus system's own memory is gone AND the saved row often isn't composed/attached
+            // for a few frames after the restored scroll settles — a one-shot requestFocus() then
+            // silently no-ops (swallowed) and Compose's default focus falls to the top nav (#1). Retry
+            // until the saved row's FocusRequester attaches; ItemRow's saved position then restores the
+            // exact card the user left. Fall back to the billboard if it never attaches.
+            LaunchedEffect(Unit) {
+                delay(FOCUS_RESTORE_SETTLE_MS) // let the restored scroll position / composition settle
+                val rowId = lastFocusedRowId
+                if (rowId != null) {
+                    repeat(FOCUS_RESTORE_ATTEMPTS) {
+                        if (rowFocus(rowId).tryRequestFocus()) return@LaunchedEffect
+                        delay(FOCUS_RESTORE_RETRY_MS)
+                    }
+                    // Never attached within budget → don't strand focus on the top nav.
+                    runCatching { billboardPlayFocus.requestFocus() }
+                } else {
+                    runCatching { billboardPlayFocus.requestFocus() }
                 }
             }
 
@@ -148,7 +163,10 @@ fun EngineHomePage(
             // The default spec is restored inside the billboard + each row so their own (horizontal /
             // full-bleed) scrolling is unaffected.
             val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
-            val topNavOffsetPx = with(LocalDensity.current) { TopNavBarHeight.toPx() }
+            // Measured (not assumed) bar height: TopNavBarHeight is only the first-frame estimate;
+            // the real height follows font scale/density, keeping focused cards below the bar (#8).
+            val estimatedTopNavPx = with(LocalDensity.current) { TopNavBarHeight.toPx() }
+            var topNavOffsetPx by remember { mutableFloatStateOf(estimatedTopNavPx) }
 
             Box(modifier = modifier.fillMaxSize()) {
                 CompositionLocalProvider(
@@ -187,7 +205,19 @@ fun EngineHomePage(
                                     modifier =
                                         Modifier
                                             .height(billboardHeight)
-                                            .padding(top = 8.dp, start = 14.dp, end = 14.dp),
+                                            .padding(top = 8.dp, start = 14.dp, end = 14.dp)
+                                            // When focus returns to the billboard from a row below,
+                                            // the default bring-into-view only reveals the focused
+                                            // button (near the card's bottom), leaving the top of the
+                                            // billboard scrolled off so it appears "half" (#2). Snap
+                                            // the list fully back to the top so the whole spotlight
+                                            // shows again — the 80%-tall card keeps the focused button
+                                            // on screen, so this doesn't fight the focus.
+                                            .onFocusChanged {
+                                                if (it.hasFocus) {
+                                                    scope.launch { listState.animateScrollToItem(0) }
+                                                }
+                                            },
                                 )
                             }
                         }
@@ -198,6 +228,7 @@ fun EngineHomePage(
                         CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
                             DynamicCardRow(
                                 row = row,
+                                focusRequester = rowFocus(row.id),
                                 onClickItem = { item ->
                                     // Not-yet-available items have no details page — open the request
                                     // landing instead of routing to a dead end (#5).
@@ -208,37 +239,28 @@ fun EngineHomePage(
                                     }
                                 },
                                 onFocusItem = {
-                                    focusedRowItem = it
+                                    lastFocusedRowId = row.id
                                     viewModel.onCardFocused(it)
                                 },
+                                // Long-press a card to open the thumbs up/down feedback menu (F7 signal).
+                                onLongClickItem = { feedbackItem = it },
+                                // 16:9 cards enlarge + play their trailer in place (replaces the pop-up).
+                                trailerUrlFor = { viewModel.trailerUrlFor(it) },
+                                backdropUrlFor = { viewModel.backdropUrlFor(it) },
                             )
                         }
                     }
                     }
                 }
 
-                // Instant details + trailer preview — only while scrolled into the rows (the billboard
-                // shows its own info). Trailer/backdrop URLs are resolved from the focused card.
-                val detailsShown = if (isScrolledDown) instantDetailsItem else null
-                val detailsTrailerUrl = remember(detailsShown) { detailsShown?.let { viewModel.trailerUrlFor(it) } }
-                val detailsBackdropUrl = remember(detailsShown) { detailsShown?.let { viewModel.backdropUrlFor(it) } }
-                InstantDetails(
-                    item = detailsShown,
-                    trailerUrl = detailsTrailerUrl,
-                    backdropUrl = detailsBackdropUrl,
-                    play = playTrailer,
-                    enlarged = trailerEnlarged,
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = 48.dp, bottom = 24.dp, end = 48.dp),
-                )
-
                 TopNavBar(
                     isAtTop = isAtTop,
                     contentFocusRequester = billboardPlayFocus,
                     navFocusRequester = navFocus,
-                    modifier = Modifier.align(Alignment.TopStart),
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .onSizeChanged { topNavOffsetPx = it.height.toFloat() },
                 )
 
                 requestLandingItem?.let { landing ->
@@ -249,6 +271,19 @@ fun EngineHomePage(
                             requestLandingItem = null
                         },
                         onDismiss = { requestLandingItem = null },
+                        restoreFocusTo = lastFocusedRowId?.let { rowFocus(it) },
+                    )
+                }
+
+                feedbackItem?.let { fb ->
+                    CardFeedbackMenu(
+                        item = fb,
+                        onFeedback = { thumbsUp ->
+                            viewModel.recordFeedback(fb, thumbsUp)
+                            feedbackItem = null
+                        },
+                        onDismiss = { feedbackItem = null },
+                        restoreFocusTo = lastFocusedRowId?.let { rowFocus(it) },
                     )
                 }
             }
@@ -259,11 +294,11 @@ fun EngineHomePage(
 /** How long each spotlight item stays on screen before the billboard rotates to the next. */
 private const val SPOTLIGHT_ROTATE_MS = 8_000L
 
-/** How long a row card must hold focus before the instant-details overlay appears (#10). */
-private const val INFO_DELAY_MS = 900L
+/** Let the restored scroll position + composition settle before restoring row focus (#1). */
+private const val FOCUS_RESTORE_SETTLE_MS = 48L
 
-/** Sustained focus before the (small) trailer starts playing (#11). */
-private const val TRAILER_DELAY_MS = 5_000L
+/** Retry restoring row focus this many times (the row may not be attached for a few frames). */
+private const val FOCUS_RESTORE_ATTEMPTS = 15
 
-/** Sustained focus before the small trailer enlarges into the pop-up (#11). */
-private const val TRAILER_ENLARGE_DELAY_MS = 10_000L
+/** Delay between focus-restore attempts (~15 × 60ms ≈ 0.9s budget before the billboard fallback). */
+private const val FOCUS_RESTORE_RETRY_MS = 60L

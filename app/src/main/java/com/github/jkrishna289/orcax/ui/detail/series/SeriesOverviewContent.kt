@@ -229,9 +229,6 @@ fun SeriesOverviewContent(
                         ) {
                             itemsIndexed(eps.episodes) { episodeIndex, episode ->
                                 val interactionSource = remember { MutableInteractionSource() }
-                                if (interactionSource.collectIsFocusedAsState().value) {
-                                    onFocusEpisode.invoke(episodeIndex)
-                                }
                                 BannerCard(
                                     name = episode?.name,
                                     item = episode,
@@ -278,6 +275,9 @@ fun SeriesOverviewContent(
                                                     }
                                             }.onFocusChanged {
                                                 if (it.isFocused) {
+                                                    // Moved out of composition: this used to fire on
+                                                    // every recomposition via collectIsFocusedAsState.
+                                                    onFocusEpisode.invoke(episodeIndex)
                                                     scope.launch {
                                                         bringIntoViewRequester.bringIntoView()
                                                     }

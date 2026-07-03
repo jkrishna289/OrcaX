@@ -1,8 +1,14 @@
 package com.github.jkrishna289.orcax.ui.nav
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -16,6 +22,7 @@ import com.github.jkrishna289.orcax.data.model.JellyfinUser
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.NavigationManager
+import com.github.jkrishna289.orcax.ui.components.ExitConfirmDialog
 import com.github.jkrishna289.orcax.ui.launchIO
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -63,6 +70,12 @@ fun ApplicationContent(
             enableTopScrim = enableTopScrim,
             viewModel = viewModel,
         )
+        // Back at the root of the stack (Home, at the top) → confirm before quitting. Screens
+        // deeper in the composition (e.g. the home's scrolled-rows Back intercept) register their
+        // handlers later and therefore take precedence while enabled.
+        val activity = LocalActivity.current
+        var showExitDialog by remember { mutableStateOf(false) }
+        BackHandler(enabled = navigationManager.backStack.size <= 1) { showExitDialog = true }
         NavDisplay(
             backStack = navigationManager.backStack,
             onBack = { navigationManager.goBack() },
@@ -84,5 +97,11 @@ fun ApplicationContent(
                 }
             },
         )
+        if (showExitDialog) {
+            ExitConfirmDialog(
+                onExit = { activity?.finish() },
+                onDismiss = { showExitDialog = false },
+            )
+        }
     }
 }

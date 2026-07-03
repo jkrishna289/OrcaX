@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -102,6 +103,9 @@ fun <T : CardGridItem> CardGrid(
     modifier: Modifier = Modifier,
     initialPosition: Int = 0,
     positionCallback: ((columns: Int, position: Int) -> Unit)? = null,
+    useBackToJump: Boolean = true,
+    showFooter: Boolean = true,
+    useJumpRemoteButtons: Boolean = true,
     cardContent: @Composable (
         item: T?,
         onClick: () -> Unit,
@@ -152,9 +156,6 @@ fun <T : CardGridItem> CardGrid(
         alphabetFocus = false
     }
 
-    val useBackToJump = true // uiConfig.preferences.interfacePreferences.scrollTopOnBack
-    val showFooter = true // uiConfig.preferences.interfacePreferences.showPositionFooter
-    val useJumpRemoteButtons = true // uiConfig.preferences.interfacePreferences.pageWithRemoteButtons
     val jump2 =
         remember {
             if (pager.size >= 25_000) {
@@ -198,6 +199,9 @@ fun <T : CardGridItem> CardGrid(
                 gridState.scrollToItem(0, 0)
             }
             focusOn(0)
+            // Item 0 may only compose on the frame after the scroll settles; requesting
+            // focus before then fails silently and drops focus.
+            withFrameNanos { }
             zeroFocus.tryRequestFocus()
         }
     }
@@ -500,8 +504,8 @@ fun AlphabetButtons(
     var alphabetPickerFocused by remember { mutableStateOf(false) }
 
     LazyColumn(
-        contentPadding = PaddingValues(vertical = 1.1.dp, horizontal = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(1.1.dp),
+        contentPadding = PaddingValues(vertical = 2.dp, horizontal = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
         state = listState,
         modifier =
             modifier
@@ -534,14 +538,16 @@ fun AlphabetButtons(
             Box(
                 modifier =
                     Modifier
-                        .size(14.dp)
+                        // 24dp floor: 14dp targets were nearly invisible at 10 feet and the
+                        // focus ring clipped away entirely.
+                        .size(24.dp)
                         .clip(CircleShape)
                         .alpha(itemAlpha),
             ) {
                 Button(
                     modifier =
                         Modifier
-                            .size(14.dp)
+                            .size(24.dp)
                             .focusRequester(focusRequesters[index]),
                     contentPadding = PaddingValues(0.dp), // No padding to maximize text space
                     interactionSource = interactionSource,
@@ -575,7 +581,7 @@ fun AlphabetButtons(
                         color = color,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }

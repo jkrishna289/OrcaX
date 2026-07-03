@@ -24,17 +24,13 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
-import androidx.tv.material3.surfaceColorAtElevation
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.preferences.AppPreference
 import com.github.jkrishna289.orcax.preferences.AppThemeColors
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.cards.SeasonCard
 import com.github.jkrishna289.orcax.ui.cards.WatchedIcon
-import com.github.jkrishna289.orcax.ui.nav.NavDrawerItem
-import com.github.jkrishna289.orcax.ui.nav.NavItem
 import com.github.jkrishna289.orcax.ui.playback.PlaybackButton
 import com.github.jkrishna289.orcax.ui.preferences.SliderPreference
 import com.github.jkrishna289.orcax.ui.preferences.SwitchPreference
@@ -191,55 +187,6 @@ private fun ThemeExample(theme: AppThemeColors) {
                             interactionSource = source,
                         )
                     }
-                    val navScope = NavScope(true)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)),
-                    ) {
-                        navScope.apply {
-                            NavItem(
-                                library = NavDrawerItem.Favorites,
-                                onClick = { },
-                                selected = false,
-                                moreExpanded = false,
-                                drawerOpen = true,
-                                modifier = Modifier,
-                            )
-                            NavItem(
-                                library = NavDrawerItem.Favorites,
-                                onClick = { },
-                                selected = false,
-                                moreExpanded = false,
-                                drawerOpen = true,
-                                modifier = Modifier,
-                                interactionSource = source,
-                            )
-                        }
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)),
-                    ) {
-                        navScope.apply {
-                            NavItem(
-                                library = NavDrawerItem.Favorites,
-                                onClick = { },
-                                selected = true,
-                                moreExpanded = false,
-                                drawerOpen = true,
-                                modifier = Modifier,
-                            )
-                            NavItem(
-                                library = NavDrawerItem.Favorites,
-                                onClick = { },
-                                selected = true,
-                                moreExpanded = false,
-                                drawerOpen = true,
-                                modifier = Modifier,
-                                interactionSource = source,
-                            )
-                        }
-                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant),
@@ -305,6 +252,3 @@ class PreviewInteractionSource : MutableInteractionSource {
     override fun tryEmit(interaction: Interaction): Boolean = false
 }
 
-class NavScope(
-    override val hasFocus: Boolean,
-) : NavigationDrawerScope

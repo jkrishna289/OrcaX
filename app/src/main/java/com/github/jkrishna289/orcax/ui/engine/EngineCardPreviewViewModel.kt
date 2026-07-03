@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jkrishna289.orcax.engine.RenderBundle
 import com.github.jkrishna289.orcax.preferences.AppPreferences
+import com.github.jkrishna289.orcax.services.LocalHomeBundleBuilder
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
+import com.github.jkrishna289.orcax.ui.main.SampleEngineBundle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,7 @@ class EngineCardPreviewViewModel
     @Inject
     constructor(
         private val client: OrcaEngineClient,
+        private val localHomeBundleBuilder: LocalHomeBundleBuilder,
         private val preferences: DataStore<AppPreferences>,
     ) : ViewModel() {
         private val _state = MutableStateFlow<EngineCardPreviewState>(EngineCardPreviewState.Loading)
@@ -48,13 +51,14 @@ class EngineCardPreviewViewModel
                     Timber.d("Orca Engine: no active user id; requesting non-personalized home.")
                 }
 
-                val bundle = client.getHome(userId = userId)
-                _state.value =
-                    if (bundle != null) {
-                        EngineCardPreviewState.Success(bundle)
-                    } else {
-                        EngineCardPreviewState.Error
-                    }
+                // Server engine first; when it's not installed, fall back to the same client-side
+                // bundle the home uses (real Jellyfin library), and finally the sample demo — so this
+                // preview shows cards instead of a dead "Engine unavailable" screen.
+                val bundle =
+                    client.getHome(userId = userId)
+                        ?: runCatching { localHomeBundleBuilder.build() }.getOrNull()
+                        ?: SampleEngineBundle.bundle
+                _state.value = EngineCardPreviewState.Success(bundle)
             }
         }
     }

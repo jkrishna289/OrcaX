@@ -18,9 +18,13 @@ import coil3.request.crossfade
 import coil3.util.DebugLogger
 import com.github.jkrishna289.orcax.preferences.AppPreference
 import com.github.jkrishna289.orcax.preferences.AppPreferences
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import timber.log.Timber
 import kotlin.time.ExperimentalTime
+
+/** Concurrent image requests allowed per host — raised from OkHttp's default of 5 for poster grids (#1). */
+private const val IMAGE_MAX_REQUESTS_PER_HOST = 12
 
 @Composable
 fun CoilConfig(
@@ -55,20 +59,25 @@ fun CoilConfig(
 ) {
     val client =
         remember(okHttpClient, debugLogging) {
-            if (debugLogging) {
-                okHttpClient
-                    .newBuilder()
-                    .addInterceptor {
-                        val start = System.currentTimeMillis()
-                        val req = it.request()
-                        val res = it.proceed(req)
-                        val time = System.currentTimeMillis() - start
-                        Timber.v("${time}ms - ${req.url}")
-                        res
-                    }.build()
-            } else {
-                okHttpClient
-            }
+            okHttpClient
+                .newBuilder()
+                // A home row shows a dozen-plus posters at once, all from the same host. OkHttp's
+                // default cap of 5 requests/host serializes them, so the grid fills in slow waves
+                // (#1). A dedicated dispatcher (sharing the connection pool) lets more load at once.
+                .dispatcher(
+                    Dispatcher().apply { maxRequestsPerHost = IMAGE_MAX_REQUESTS_PER_HOST },
+                ).apply {
+                    if (debugLogging) {
+                        addInterceptor {
+                            val start = System.currentTimeMillis()
+                            val req = it.request()
+                            val res = it.proceed(req)
+                            val time = System.currentTimeMillis() - start
+                            Timber.v("${time}ms - ${req.url}")
+                            res
+                        }
+                    }
+                }.build()
         }
     setSingletonImageLoaderFactory { ctx ->
         Timber.i("Image diskCacheSizeBytes=$diskCacheSizeBytes")

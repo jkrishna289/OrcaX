@@ -178,6 +178,11 @@ message InterfacePreferences {
   ScreensaverPreferences screensaver_preference = 11;
   bool enable_media_management = 12;
   bool show_logos = 13;
+  // Grid behavior toggles - stored inverted so proto3's false default preserves the
+  // long-standing enabled-by-default behavior without a migration.
+  bool disable_scroll_top_on_back = 14;
+  bool hide_position_footer = 15;
+  bool disable_page_with_remote_buttons = 16;
 }
 
 message AdvancedPreferences {

@@ -106,7 +106,8 @@ fun CollectionFolderLiveTv(
     val tabFocusRequesters = remember(tabs.size) { List(tabs.size) { FocusRequester() } }
 
     val firstTabFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstTabFocusRequester.tryRequestFocus() }
+    // Initial focus has a single owner: the grab below (L~122) targeting the content requester
+    // always ran after (and overrode) a tab grab here, so the tab grab was dead-and-racing.
 
     LaunchedEffect(selectedTabIndex) {
         logTab("livetv", selectedTabIndex)
