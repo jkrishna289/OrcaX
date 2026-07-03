@@ -560,7 +560,7 @@ sealed interface AppPreference<Pref, T> {
         val UpdateUrl =
             AppStringPreference<AppPreferences>(
                 title = R.string.update_url,
-                defaultValue = "https://api.github.com/repos/damontecres/Wholphin/releases/latest",
+                defaultValue = com.github.jkrishna289.orcax.services.UpdateChecker.DEFAULT_UPDATE_URL,
                 getter = { it.updateUrl },
                 setter = { prefs, value ->
                     prefs.update { updateUrl = value }

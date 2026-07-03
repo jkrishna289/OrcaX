@@ -232,6 +232,19 @@ class OrcaEngineClient
         /** Returns true if the engine plugin responds on this server (for graceful degradation). */
         suspend fun isEngineAvailable(): Boolean = get("/Health") { true } ?: false
 
+        /**
+         * The engine's LAN app-update endpoint (GitHub-release-shaped JSON whose asset URLs point at
+         * the server's disk-cached APKs), or null when no server is connected / the engine doesn't
+         * respond. Probing /Health first also resolves the controller root, so the returned URL
+         * matches whichever plugin deployment is live.
+         */
+        suspend fun updateLatestUrl(): String? {
+            if (!isEngineAvailable()) return null
+            val base = baseUrl() ?: return null
+            val path = resolvedPath ?: ENGINE_PATHS.first()
+            return "$base$path/Update/Latest"
+        }
+
         // ── Request plumbing ────────────────────────────────────────────────────
         // get/post take a path suffix (e.g. "/Home?…") and resolve the engine root across the
         // candidate paths, caching the winner. A 404 means "wrong root, try the next candidate";
