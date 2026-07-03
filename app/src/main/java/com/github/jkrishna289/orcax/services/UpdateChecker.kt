@@ -54,10 +54,20 @@ class UpdateChecker
     constructor(
         @param:ApplicationContext private val context: Context,
         @param:StandardOkHttpClient private val okHttpClient: OkHttpClient,
+        private val engineClient: OrcaEngineClient,
     ) {
         companion object {
             const val ASSET_NAME = "OrcaX"
             const val APK_NAME = "$ASSET_NAME.apk"
+
+            /** This app's release repo. */
+            private const val REPO = "jkrishna289/OrcaX"
+
+            /**
+             * GitHub fallback when the Orca Engine isn't reachable. The list endpoint (unlike
+             * releases/latest) includes prereleases, which is how alphas are published.
+             */
+            const val DEFAULT_UPDATE_URL = "https://api.github.com/repos/$REPO/releases?per_page=1"
 
             private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
 
@@ -130,7 +140,7 @@ class UpdateChecker
 
         suspend fun getRelease(version: Version): Release? {
             val url =
-                "https://api.github.com/repos/damontecres/Wholphin/releases/tags/v${version.major}.${version.minor}.${version.patch}"
+                "https://api.github.com/repos/$REPO/releases/tags/v${version.major}.${version.minor}.${version.patch}"
             return withContext(Dispatchers.IO) {
                 val request =
                     Request
@@ -143,14 +153,33 @@ class UpdateChecker
         }
 
         /**
-         * Get the latest released version
+         * Get the latest released version.
+         *
+         * Engine-first: when the connected server runs the Orca Engine, its `/Update/Latest`
+         * endpoint mirrors the newest GitHub (pre)release with asset URLs rewritten to the server's
+         * LAN APK cache — so the download is fast and GitHub is only hit once per release, by the
+         * server. Falls back to GitHub directly when the engine is absent or answers nothing
+         * (e.g. an older plugin without the endpoint).
          */
         suspend fun getLatestRelease(updateUrl: String): Release? =
             withContext(Dispatchers.IO) {
+                engineClient.updateLatestUrl()?.let { engineUrl ->
+                    val fromEngine =
+                        runCatching { getRelease(Request.Builder().url(engineUrl).get().build()) }
+                            .onFailure { Timber.w(it, "Engine update check failed; falling back to GitHub") }
+                            .getOrNull()
+                    if (fromEngine != null) {
+                        Timber.v("Update source: engine ($engineUrl)")
+                        return@withContext fromEngine
+                    }
+                }
+
+                // A stale pref pointing at the upstream fork would never see this app's releases.
+                val url = if (updateUrl.contains("damontecres/Wholphin")) DEFAULT_UPDATE_URL else updateUrl
                 val request =
                     Request
                         .Builder()
-                        .url(updateUrl)
+                        .url(url)
                         .get()
                         .build()
                 getRelease(request)
@@ -159,9 +188,15 @@ class UpdateChecker
         private fun getRelease(request: Request): Release? {
             return okHttpClient.newCall(request).execute().use {
                 if (it.isSuccessful && it.body != null) {
-                    val result = Json.parseToJsonElement(it.body!!.string())
+                    val parsed = Json.parseToJsonElement(it.body!!.string())
+                    // The releases LIST endpoint (which, unlike releases/latest, includes
+                    // prereleases) returns an array — the newest release is first.
+                    val result =
+                        if (parsed is JsonArray) parsed.firstOrNull() ?: return@use null else parsed
                     val name = result.jsonObject["name"]?.jsonPrimitive?.contentOrNull
-                    val version = Version.tryFromString(name)
+                    // Release titles may be prose ("Orca X 0.1.0-alpha"); the tag is the version.
+                    val tagName = result.jsonObject["tag_name"]?.jsonPrimitive?.contentOrNull
+                    val version = Version.tryFromString(name) ?: Version.tryFromString(tagName)
                     val publishedAt =
                         result.jsonObject["published_at"]?.jsonPrimitive?.contentOrNull
                     val body = result.jsonObject["body"]?.jsonPrimitive?.contentOrNull
