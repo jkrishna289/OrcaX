@@ -1,7 +1,15 @@
 package com.github.jkrishna289.orcax.ui.main
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +47,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +66,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
@@ -102,42 +112,38 @@ fun Billboard(
     val backdropUrl =
         card.backdropImageUrl
             ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 720) }
-    val logoUrl =
-        card.logoImageUrl
-            ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.LOGO, fillHeight = 240) }
 
     val context = LocalContext.current
     var showTrailer by remember(trailerUrl) { mutableStateOf(false) }
-    var logoFailed by remember(logoUrl) { mutableStateOf(false) }
 
-    val exoPlayer =
-        remember(trailerUrl) {
-            if (trailerUrl != null) {
+    // The player is built lazily, only after the auto-play delay elapses with this trailer still
+    // active — the 8s spotlight rotation would otherwise churn a codec-holding ExoPlayer instance
+    // per hero even when its trailer never gets a chance to start.
+    var exoPlayer by remember(trailerUrl) { mutableStateOf<ExoPlayer?>(null) }
+
+    LaunchedEffect(trailerUrl) {
+        showTrailer = false
+        if (trailerUrl != null) {
+            delay(card.autoPlayDelayMs.coerceAtLeast(0).toLong())
+            val player =
                 ExoPlayer.Builder(context).build().apply {
                     volume = 0f
                     repeatMode = Player.REPEAT_MODE_ALL
                 }
-            } else {
-                null
-            }
-        }
-
-    LaunchedEffect(trailerUrl) {
-        showTrailer = false
-        if (trailerUrl != null && exoPlayer != null) {
-            delay(card.autoPlayDelayMs.coerceAtLeast(0).toLong())
-            exoPlayer.setMediaItem(MediaItem.fromUri(trailerUrl))
-            exoPlayer.prepare()
+            exoPlayer = player
+            player.setMediaItem(MediaItem.fromUri(trailerUrl))
+            player.prepare()
             if (card.trailerStartOffsetMs > 0) {
-                exoPlayer.seekTo(card.trailerStartOffsetMs.toLong())
+                player.seekTo(card.trailerStartOffsetMs.toLong())
             }
-            exoPlayer.playWhenReady = true
+            player.playWhenReady = true
             showTrailer = true
         }
     }
 
     DisposableEffect(exoPlayer) {
-        onDispose { exoPlayer?.release() }
+        val player = exoPlayer
+        onDispose { player?.release() }
     }
 
     // The floating card: inset (via the caller's padding), rounded, shadowed, hairline-bordered.
@@ -237,33 +243,24 @@ fun Billboard(
                     .fillMaxWidth(0.72f)
                     .padding(start = 44.dp, bottom = 44.dp, end = 16.dp),
         ) {
-            // Type label with an accent chip (e.g. "■ SERIES"), echoing the source design.
-            SeriesBadge(media.mediaType)
-
-            // Real Jellyfin logo art wins; when absent, fall back to the styled title.
-            if (logoUrl != null && !logoFailed) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context).data(logoUrl).crossfade(true).build(),
-                    contentDescription = card.title,
-                    contentScale = ContentScale.Fit,
-                    onError = { logoFailed = true },
-                    alignment = Alignment.BottomStart,
-                    modifier = Modifier.heightIn(max = 104.dp).widthIn(max = 380.dp),
-                )
-            } else {
-                HeroTitle(card.title.orEmpty())
-            }
-
-            BillboardMetadata(item)
-
-            card.subtitle?.takeIf { it.isNotBlank() }?.let { tagline ->
-                Text(
-                    text = tagline,
-                    color = Color.White.copy(alpha = 0.78f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            // The type label, title, metadata and tagline all belong to the active spotlight item, so
+            // they shift in together when the hero rotates (#3): a brief fade + horizontal slide. The
+            // action buttons are deliberately left outside the animation so they hold their place (and
+            // their focus). Size is snapped (not animated) so the buttons don't drift as text swaps.
+            AnimatedContent(
+                targetState = item,
+                transitionSpec = {
+                    (
+                        fadeIn(tween(durationMillis = 450)) +
+                            slideInHorizontally(tween(durationMillis = 450)) { it / 10 }
+                    ) togetherWith (
+                        fadeOut(tween(durationMillis = 200)) +
+                            slideOutHorizontally(tween(durationMillis = 200)) { -it / 10 }
+                    ) using SizeTransform(clip = false) { _, _ -> snap() }
+                },
+                label = "billboard-info",
+            ) { current ->
+                BillboardInfo(current)
             }
 
             BillboardActions(
@@ -325,6 +322,55 @@ fun Billboard(
     }
 }
 
+/**
+ * The per-item descriptive block (type badge, logo/title, metadata, tagline) that [Billboard] swaps
+ * with an [AnimatedContent] crossfade/slide each time the spotlight rotates (#3). Everything here is
+ * derived from [item] so the outgoing and incoming items animate against their own data.
+ */
+@Composable
+private fun BillboardInfo(item: RenderItem) {
+    val card = item.card
+    val media = item.media
+    val context = LocalContext.current
+    val imageUrlService = LocalImageUrlService.current
+    val jellyfinId = media.jellyfinId?.toUUIDOrNull()
+    val logoUrl =
+        card.logoImageUrl
+            ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.LOGO, fillHeight = 240) }
+    var logoFailed by remember(logoUrl) { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Type label with an accent chip (e.g. "■ SERIES"), echoing the source design.
+        SeriesBadge(media.mediaType)
+
+        // Real Jellyfin logo art wins; when absent, fall back to the styled title.
+        if (logoUrl != null && !logoFailed) {
+            AsyncImage(
+                model = ImageRequest.Builder(context).data(logoUrl).crossfade(true).build(),
+                contentDescription = card.title,
+                contentScale = ContentScale.Fit,
+                onError = { logoFailed = true },
+                alignment = Alignment.BottomStart,
+                modifier = Modifier.heightIn(max = 104.dp).widthIn(max = 380.dp),
+            )
+        } else {
+            HeroTitle(card.title.orEmpty())
+        }
+
+        BillboardMetadata(item)
+
+        card.subtitle?.takeIf { it.isNotBlank() }?.let { tagline ->
+            Text(
+                text = tagline,
+                color = Color.White.copy(alpha = 0.78f),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 /** Type label with a small accent square, e.g. "■ SERIES". */
 @Composable
 private fun SeriesBadge(type: MediaType) {
@@ -346,13 +392,14 @@ private fun SeriesBadge(type: MediaType) {
     }
 }
 
+@Composable
 private fun MediaType.heroLabel(): String =
     when (this) {
-        MediaType.SERIES -> "SERIES"
-        MediaType.MOVIE -> "FILM"
-        MediaType.EPISODE -> "EPISODE"
-        MediaType.SEASON -> "SEASON"
-        MediaType.COLLECTION -> "COLLECTION"
+        MediaType.SERIES -> stringResource(R.string.hero_type_series)
+        MediaType.MOVIE -> stringResource(R.string.hero_type_film)
+        MediaType.EPISODE -> stringResource(R.string.hero_type_episode)
+        MediaType.SEASON -> stringResource(R.string.hero_type_season)
+        MediaType.COLLECTION -> stringResource(R.string.hero_type_collection)
         else -> name.uppercase()
     }
 
@@ -489,15 +536,18 @@ private fun BillboardActions(
     playFocusRequester: FocusRequester? = null,
     navFocusRequester: FocusRequester? = null,
 ) {
+    // Initial focus is owned by the page (EngineHomePage): a self-grab here re-fired on every
+    // return from a details page, stealing focus from the row the user left and (via the
+    // billboard's scroll-to-top on focus) yanking the list back to the top (#F2).
     val playFocus = playFocusRequester ?: remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { playFocus.requestFocus() } }
 
     // Primary CTA driven by the hero's actions: Resume > Request (Discover) > Play.
     val (primaryLabel, primaryAction) =
         when {
-            CardAction.RESUME in actions -> "Resume" to onPlay
-            CardAction.REQUEST in actions && CardAction.PLAY !in actions -> "Request" to onRequest
-            else -> "Play" to onPlay
+            CardAction.RESUME in actions -> stringResource(R.string.resume) to onPlay
+            CardAction.REQUEST in actions && CardAction.PLAY !in actions ->
+                stringResource(R.string.request) to onRequest
+            else -> stringResource(R.string.play) to onPlay
         }
 
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -518,13 +568,18 @@ private fun BillboardActions(
                         },
                     ),
         )
-        BillboardButton(label = "Trailer", primary = false, onClick = onTrailer)
+        BillboardButton(label = stringResource(R.string.trailer), primary = false, onClick = onTrailer)
         BillboardButton(
-            label = if (isFavorite) "Watchlisted" else "+ Watchlist",
+            label =
+                if (isFavorite) {
+                    stringResource(R.string.billboard_watchlisted)
+                } else {
+                    stringResource(R.string.billboard_watchlist)
+                },
             primary = false,
             onClick = onWatchlist,
         )
-        BillboardButton(label = "Info", primary = false, onClick = onInfo)
+        BillboardButton(label = stringResource(R.string.info), primary = false, onClick = onInfo)
     }
 }
 

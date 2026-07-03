@@ -74,6 +74,49 @@ data class SimilarResponse(
     @SerialName("Row") val row: RenderRow = RenderRow(),
 )
 
+/** Response of `GET /Metadata/Trivia` — "Did You Know?" facts for an item (lazy, cached server-side). */
+@Serializable
+data class TriviaResponse(
+    @SerialName("CatalogId") val catalogId: Long = 0,
+    @SerialName("Title") val title: String = "",
+    @SerialName("Facts") val facts: List<String> = emptyList(),
+)
+
+/** Response of `GET /Metadata/Warnings` — content advisories for a title (per movie/series, Groq-generated, cached). */
+@Serializable
+data class ContentWarningsResponse(
+    @SerialName("CatalogId") val catalogId: Long = 0,
+    @SerialName("Title") val title: String = "",
+    @SerialName("HasWarnings") val hasWarnings: Boolean = false,
+    @SerialName("Summary") val summary: String = "",
+    @SerialName("Warnings") val warnings: List<ContentWarning> = emptyList(),
+)
+
+/** A single content advisory (category + severity + spoiler-free note), in fixed safety-first order. */
+@Serializable
+data class ContentWarning(
+    @SerialName("Category") val category: String = "",
+    @SerialName("Severity") val severity: String = "moderate",
+    @SerialName("Note") val note: String = "",
+)
+
+/** Body for `POST /Behavior/Feedback` — an explicit thumbs up/down (a strong personalization signal). */
+@Serializable
+data class FeedbackBody(
+    @SerialName("UserId") val userId: String,
+    @SerialName("ItemId") val itemId: String,
+    @SerialName("ThumbsUp") val thumbsUp: Boolean,
+)
+
+/** Response of `GET /Requests/Status` — current availability for a requested TMDB title. */
+@Serializable
+data class AvailabilityStatusResponse(
+    @SerialName("TmdbId") val tmdbId: Int = 0,
+    @SerialName("MediaType") val mediaType: MediaType = MediaType.UNKNOWN,
+    @SerialName("Configured") val configured: Boolean = false,
+    @SerialName("Availability") val availability: AvailabilityState? = null,
+)
+
 /** A single home-telemetry event (Feature A) sent to `POST /Behavior/Events`. */
 @Serializable
 data class TelemetryEvent(
@@ -143,6 +186,8 @@ data class CardDescriptor(
 data class CardBadge(
     @SerialName("Kind") val kind: String = "",
     @SerialName("Text") val text: String? = null,
+    /** Optional icon (e.g. cached studio/provider logo). Server-relative (`/OrcaEngine/Images/…`) — resolve against the server base URL. Null → render [text] as a pill. */
+    @SerialName("IconUrl") val iconUrl: String? = null,
 )
 
 @Serializable

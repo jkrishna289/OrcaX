@@ -173,7 +173,11 @@ class PlaybackPhaseViewModel : ViewModel() {
     }
 
     fun onUpFromPhase1() {
-        if (_uiState.value.phase == PlaybackPhase.ACTIVE) transitionToPhase2()
+        // Phase 2 is the *paused* cinematic overlay — it must never appear over
+        // playing video. While playing, UP is a no-op so the Phase 1 toolbar stays
+        // put; only a genuinely paused player reveals the overlay.
+        val s = _uiState.value
+        if (s.phase == PlaybackPhase.ACTIVE && !s.isPlaying) transitionToPhase2()
     }
 
     fun dismissPhase2() {
@@ -190,6 +194,10 @@ class PlaybackPhaseViewModel : ViewModel() {
     }
 
     private fun transitionToPhase2() {
+        // Hard invariant: the paused overlay (and its idle → COMPACT ambient view)
+        // only exists while paused. Every caller already checks this, but enforce it
+        // here so no future path can leak Phase 2 over playing video.
+        if (_uiState.value.isPlaying) return
         toolbarHideJob?.cancel()
         pauseIdleJob?.cancel()
         _uiState.update {

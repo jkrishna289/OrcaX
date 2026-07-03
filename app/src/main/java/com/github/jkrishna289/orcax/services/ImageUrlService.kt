@@ -242,6 +242,20 @@ class ImageUrlService
         fun getUserImageUrl(userId: UUID) = api.imageApi.getUserImageUrl(userId)
 
         /**
+         * Resolves an engine-served image path (e.g. a cached provider logo at
+         * `/OrcaEngine/Images/Provider/8`) to an absolute URL against the connected server. Absolute
+         * URLs are returned unchanged; null/blank input and a missing base URL return null.
+         */
+        fun engineImageUrl(path: String?): String? {
+            val p = path?.takeIf { it.isNotBlank() } ?: return null
+            if (p.startsWith("http://", ignoreCase = true) || p.startsWith("https://", ignoreCase = true)) {
+                return p
+            }
+            val base = api.baseUrl?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: return null
+            return base + if (p.startsWith('/')) p else "/$p"
+        }
+
+        /**
          * Just a convenient way to get the image URL and remember it
          */
         @Composable

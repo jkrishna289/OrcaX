@@ -114,29 +114,44 @@ sealed interface AppPreference<Pref, T> {
                 },
             )
 
-//        val GridJumpButtons =
-//            AppSwitchPreference<AppPreferences>(
-//                title = R.string.show_grid_jump_buttons,
-//                defaultValue = true,
-//                getter = { it.interfacePreferences.showGridJumpButtons },
-//                setter = { prefs, value ->
-//                    prefs.updateInterfacePreferences { showGridJumpButtons = value }
-//                },
-//                summaryOn = R.string.enabled,
-//                summaryOff = R.string.disabled,
-//            )
+        // Grid behavior toggles. The proto fields are stored inverted (disable_*/hide_*) so
+        // proto3's false default keeps the historical enabled-by-default behavior; the
+        // getters/setters invert so the UI keeps positive "enabled" semantics.
+        val GridScrollTopOnBack =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.scroll_top_on_back,
+                defaultValue = true,
+                getter = { !it.interfacePreferences.disableScrollTopOnBack },
+                setter = { prefs, value ->
+                    prefs.updateInterfacePreferences { disableScrollTopOnBack = !value }
+                },
+                summaryOn = R.string.enabled,
+                summaryOff = R.string.disabled,
+            )
 
-//        val ShowGridFooter =
-//            AppSwitchPreference<AppPreferences>(
-//                title = R.string.grid_position_footer,
-//                defaultValue = true,
-//                getter = { it.interfacePreferences.showPositionFooter },
-//                setter = { prefs, value ->
-//                    prefs.updateInterfacePreferences { showPositionFooter = value }
-//                },
-//                summaryOn = R.string.show,
-//                summaryOff = R.string.hide,
-//            )
+        val GridPositionFooter =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.grid_position_footer,
+                defaultValue = true,
+                getter = { !it.interfacePreferences.hidePositionFooter },
+                setter = { prefs, value ->
+                    prefs.updateInterfacePreferences { hidePositionFooter = !value }
+                },
+                summaryOn = R.string.show,
+                summaryOff = R.string.hide,
+            )
+
+        val GridPageWithRemoteButtons =
+            AppSwitchPreference<AppPreferences>(
+                title = R.string.page_with_remote_buttons,
+                defaultValue = true,
+                getter = { !it.interfacePreferences.disablePageWithRemoteButtons },
+                setter = { prefs, value ->
+                    prefs.updateInterfacePreferences { disablePageWithRemoteButtons = !value }
+                },
+                summaryOn = R.string.enabled,
+                summaryOff = R.string.disabled,
+            )
 
         val ControllerTimeout =
             AppSliderPreference<AppPreferences>(
@@ -1055,6 +1070,9 @@ val basicPreferences =
                     AppPreference.RememberSelectedTab,
                     AppPreference.SubtitleStyle,
                     AppPreference.ThemeColors,
+                    AppPreference.GridScrollTopOnBack,
+                    AppPreference.GridPositionFooter,
+                    AppPreference.GridPageWithRemoteButtons,
                     AppPreference.ScreensaverSettings,
                 ),
         ),

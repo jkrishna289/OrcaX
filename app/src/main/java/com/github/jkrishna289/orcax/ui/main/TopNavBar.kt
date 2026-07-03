@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -52,6 +53,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Text
+import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.data.model.JellyfinServer
 import com.github.jkrishna289.orcax.data.model.JellyfinUser
@@ -59,7 +61,9 @@ import com.github.jkrishna289.orcax.services.MusicService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.SetupDestination
 import com.github.jkrishna289.orcax.services.SetupNavigationManager
+import com.github.jkrishna289.orcax.ui.components.RestoreFocusOnDispose
 import com.github.jkrishna289.orcax.ui.components.TextButton
+import com.github.jkrishna289.orcax.ui.components.focusTrap
 import com.github.jkrishna289.orcax.ui.launchDefault
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.ui.preferences.PreferenceScreenOption
@@ -126,6 +130,8 @@ fun TopNavBar(
     val server by viewModel.currentServer.collectAsStateWithLifecycle(initialValue = null)
     val timeString by LocalClock.current.timeString
     var menuOpen by remember { mutableStateOf(false) }
+    // So the avatar regains focus when its menu closes (instead of focus being dropped).
+    val avatarFocus = remember { FocusRequester() }
 
     // Rigid, linear frost transition (no spring/bounce, per the design language).
     val scrimColor by animateColorAsState(
@@ -168,14 +174,14 @@ fun TopNavBar(
             ) {
                 NavIcon(
                     icon = Icons.Default.Search,
-                    contentDescription = "Search",
+                    contentDescription = stringResource(R.string.search),
                     onClick = viewModel::openSearch,
                     downTarget = contentFocusRequester,
                     focusRequester = navFocusRequester,
                 )
                 NavIcon(
                     icon = Icons.Default.Menu,
-                    contentDescription = "Categories",
+                    contentDescription = stringResource(R.string.categories),
                     onClick = viewModel::openCategories,
                     downTarget = contentFocusRequester,
                 )
@@ -197,7 +203,10 @@ fun TopNavBar(
                 val imageUrl = remember(u) { viewModel.getUserImage(u) }
                 Surface(
                     onClick = { menuOpen = true },
-                    modifier = Modifier.focusProperties { down = contentFocusRequester },
+                    modifier =
+                        Modifier
+                            .focusRequester(avatarFocus)
+                            .focusProperties { down = contentFocusRequester },
                     shape = ClickableSurfaceDefaults.shape(CircleShape),
                     colors =
                         ClickableSurfaceDefaults.colors(
@@ -220,6 +229,7 @@ fun TopNavBar(
 
         AvatarMenu(
             visible = menuOpen,
+            restoreFocusTo = avatarFocus,
             onDismiss = { menuOpen = false },
             onSettings = {
                 menuOpen = false
@@ -282,7 +292,10 @@ private fun NavIcon(
     }
 }
 
-/** Small contextual menu anchored under the avatar with Settings + Switch Profile. */
+/**
+ * Small contextual menu anchored under the avatar with Settings + Switch Profile. Focus is trapped
+ * while open (D-pad cannot wander into the page behind it) and returns to [restoreFocusTo] on close.
+ */
 @Composable
 private fun AvatarMenu(
     visible: Boolean,
@@ -290,9 +303,11 @@ private fun AvatarMenu(
     onSettings: () -> Unit,
     onSwitchProfile: () -> Unit,
     modifier: Modifier = Modifier,
+    restoreFocusTo: FocusRequester? = null,
 ) {
     AnimatedVisibility(visible = visible, modifier = modifier) {
         BackHandler(enabled = true, onBack = onDismiss)
+        RestoreFocusOnDispose(restoreFocusTo)
         val firstItem = remember { FocusRequester() }
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -303,19 +318,19 @@ private fun AvatarMenu(
                     .background(Color.Black.copy(alpha = 0.85f))
                     .padding(8.dp)
                     .width(180.dp)
-                    .focusGroup(),
+                    .focusTrap(),
         ) {
             TextButton(
                 onClick = onSettings,
                 modifier = Modifier.fillMaxWidth().focusRequester(firstItem),
             ) {
-                Text("Settings")
+                Text(stringResource(R.string.settings))
             }
             TextButton(
                 onClick = onSwitchProfile,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Switch Profile")
+                Text(stringResource(R.string.switch_profile))
             }
         }
         androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { firstItem.requestFocus() } }

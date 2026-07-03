@@ -15,6 +15,61 @@
     <string name="cancel_recording">Cancel Recording</string>
     <string name="cancel_series_recording">Cancel Series Recording</string>
     <string name="cancel">Cancel</string>
+    <string name="exit_confirm_title">Leave %1$s?</string>
+    <string name="exit_confirm_button">Exit</string>
+
+    <!-- Engine home / billboard -->
+    <string name="billboard_watchlist">+ Watchlist</string>
+    <string name="billboard_watchlisted">Watchlisted</string>
+    <string name="info">Info</string>
+    <string name="categories">Categories</string>
+    <string name="switch_profile">Switch Profile</string>
+    <string name="close">Close</string>
+    <string name="feedback_more_like_this">More like this</string>
+    <string name="feedback_not_interested">Not interested</string>
+    <string name="feedback_tune_recommendations">Tune your recommendations</string>
+    <string name="request_not_yet_available">NOT YET AVAILABLE</string>
+    <string name="hero_type_series">SERIES</string>
+    <string name="hero_type_film">FILM</string>
+    <string name="hero_type_episode">EPISODE</string>
+    <string name="hero_type_season">SEASON</string>
+    <string name="hero_type_collection">COLLECTION</string>
+
+    <!-- Playback overlay (Phase 1 toolbar / Phase 2 paused overlay) -->
+    <string name="p2_up_next">UP NEXT</string>
+    <string name="p2_more_count">+%1$d MORE</string>
+    <string name="p2_watching">WATCHING</string>
+    <string name="p2_episode_number">Episode %1$d</string>
+    <string name="p2_ep_short">EP %1$d</string>
+    <string name="p2_header_audio">AUDIO</string>
+    <string name="p2_header_subtitles">SUBTITLES</string>
+    <string name="p2_current_on">ON</string>
+    <string name="track_off">Off</string>
+    <string name="p2_hint_compact">OK resumes   ·   ▲ for controls</string>
+    <string name="p2_hint_compact_held">OK resumes   ·   ▲ for controls   ·   slideshow paused</string>
+    <string name="p2_kicker_synopsis">SYNOPSIS</string>
+    <string name="p2_kicker_details">DETAILS</string>
+    <string name="p2_kicker_crew">CREW</string>
+    <string name="p2_kicker_cast">CAST</string>
+    <string name="p2_directed_by">DIRECTED BY</string>
+    <string name="p2_written_by">WRITTEN BY</string>
+    <string name="p1_dropdown_audio">AUDIO TRACK</string>
+    <string name="p1_dropdown_subtitle">SUBTITLE TRACK</string>
+    <string name="p1_pause">PAUSE</string>
+    <string name="p1_play">PLAY</string>
+    <string name="p1_aud">AUD</string>
+    <string name="p1_sub">SUB</string>
+    <string name="p1_cc">CC</string>
+    <string name="p1_season_episode">S%1$d  ·  E%2$d</string>
+    <string name="minutes_left_under_one">&lt;1m left</string>
+    <string name="minutes_left">%1$dm left</string>
+    <string name="hours_minutes_left">%1$dh %2$dm left</string>
+    <string name="content_advisory">Content advisory</string>
+
+    <!-- Grid behavior settings -->
+    <string name="scroll_top_on_back">Back returns to top of grids</string>
+    <string name="grid_position_footer">Grid position footer</string>
+    <string name="page_with_remote_buttons">Page grids with fast-forward/rewind</string>
     <string name="chapters">Chapters</string>
     <string name="choose_stream">Choose %1$s</string>
     <string name="clear_image_cache">Clear image cache</string>

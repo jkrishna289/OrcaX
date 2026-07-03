@@ -2,8 +2,8 @@ package com.github.jkrishna289.orcax.ui.cards
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,14 +14,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -38,6 +42,7 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil3.compose.SubcomposeAsyncImage
 import com.github.jkrishna289.orcax.engine.CardAspectRatio
 import com.github.jkrishna289.orcax.engine.CardBadge
 import com.github.jkrishna289.orcax.engine.CardSize
@@ -51,6 +56,7 @@ import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.enableMarquee
 import com.github.jkrishna289.orcax.ui.main.EngineHomeArt
 import com.github.jkrishna289.orcax.ui.main.engineCardArt
+import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 
@@ -68,6 +74,10 @@ fun DynamicCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // Resolvers for a 16:9 card's inline trailer + backdrop (engine-cached URLs). Default to no
+    // trailer so non-home callers (debug preview, detail "similar" row) render unchanged.
+    trailerUrlFor: (RenderItem) -> String? = { null },
+    backdropUrlFor: (RenderItem) -> String? = { null },
 ) {
     val card = item.card
     val resolvedImageUrl = rememberEngineImageUrl(item)
@@ -111,16 +121,19 @@ fun DynamicCard(
                 resolvedImageUrl = resolvedImageUrl,
                 onClick = onClick,
                 onLongClick = onLongClick,
+                trailerUrlFor = trailerUrlFor,
+                backdropUrlFor = backdropUrlFor,
                 modifier = modifier,
             )
     }
 }
 
 /**
- * The shared descriptor-driven card body. Wide cards (Continue Watching) show a center play
- * affordance + accent progress with the title beneath; everything else is a poster with the title
- * overlaid on a bottom scrim (and a Top-10 rank numeral when ranked), matching the source design.
- * Items without resolvable art paint a procedural accent gradient instead of a blank box.
+ * The shared descriptor-driven card body. Wide (16:9) cards enlarge on focus and, after a short
+ * dwell, play their trailer in place ([InlineCardTrailer]) — with accent progress + title beneath
+ * for Continue Watching. Everything else is a poster with the title overlaid on a bottom scrim (and
+ * a Top-10 rank numeral when ranked). Items without resolvable art paint a procedural accent
+ * gradient instead of a blank box.
  */
 @Composable
 private fun EngineCardBody(
@@ -129,6 +142,8 @@ private fun EngineCardBody(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    trailerUrlFor: (RenderItem) -> String? = { null },
+    backdropUrlFor: (RenderItem) -> String? = { null },
 ) {
     val card = item.card
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
@@ -143,6 +158,22 @@ private fun EngineCardBody(
     val interactionSource = remember { MutableInteractionSource() }
     val focusedAfterDelay by rememberFocusedAfterDelay(interactionSource)
     val cardShape = RoundedCornerShape(8.dp)
+
+    // 16:9 cards enlarge in place on focus and, after a short dwell, crossfade their art to a muted-
+    // ish inline trailer (replacing the old pop-up). Only these landscape cards play trailers; poster
+    // cards are untouched. The player is only mounted while dwelled, so at most one exists at a time.
+    val focused by interactionSource.collectIsFocusedAsState()
+    var playTrailer by remember { mutableStateOf(false) }
+    val trailerUrl = remember(item) { if (isWide) trailerUrlFor(item) else null }
+    val backdropUrl = remember(item) { if (isWide) backdropUrlFor(item) else null }
+    LaunchedEffect(focused) {
+        if (focused && isWide && trailerUrl != null) {
+            delay(TRAILER_DWELL_MS)
+            playTrailer = true
+        } else {
+            playTrailer = false
+        }
+    }
 
     Column(
         horizontalAlignment = Alignment.Start,
@@ -159,6 +190,9 @@ private fun EngineCardBody(
                 CardDefaults.border(
                     focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = cardShape),
                 ),
+            // 16:9 cards enlarge noticeably on focus (the "card itself enlarges"); tv.material3 draws
+            // the scaled card above its neighbors. Poster cards keep the subtle default scale.
+            scale = CardDefaults.scale(focusedScale = if (isWide) WIDE_FOCUSED_SCALE else 1.1f),
             modifier = Modifier.size(width, height),
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -170,7 +204,19 @@ private fun EngineCardBody(
                 )
 
                 if (isWide) {
-                    // Continue Watching: dim, centered play affordance, accent progress track.
+                    // While the card is dwelled, its trailer plays in place over the art (quiet audio).
+                    // No encircled play-icon overlay — the enlarge + trailer is the affordance now.
+                    if (playTrailer && trailerUrl != null) {
+                        InlineCardTrailer(
+                            trailerUrl = trailerUrl,
+                            backdropUrl = backdropUrl,
+                            play = true,
+                            volume = TRAILER_VOLUME,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    // Dim base so the progress track / title read over the art.
                     Box(
                         modifier =
                             Modifier
@@ -182,18 +228,6 @@ private fun EngineCardBody(
                                     ),
                                 ),
                     )
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier =
-                            Modifier
-                                .align(Alignment.Center)
-                                .size(52.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.45f))
-                                .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape),
-                    ) {
-                        Text(text = "▶", color = Color.White, fontSize = 20.sp)
-                    }
                     val progress = card.progress
                     if (card.showProgress && progress != null) {
                         Box(
@@ -283,10 +317,18 @@ private fun EngineCardBody(
                     }
                 }
 
-                // Availability / NEW badges (skip RANK, drawn above).
-                val overlayBadges = card.badges.filterNot { it.kind.equals("RANK", ignoreCase = true) }
+                // Availability / NEW badges top-right (RANK is drawn above; STUDIO is drawn top-left).
+                val overlayBadges =
+                    card.badges.filterNot {
+                        it.kind.equals("RANK", ignoreCase = true) || it.kind.equals("STUDIO", ignoreCase = true)
+                    }
                 if (overlayBadges.isNotEmpty()) {
                     CardBadges(badges = overlayBadges, modifier = Modifier.align(Alignment.TopEnd))
+                }
+
+                // Studio / streaming-provider tag, top-left (provider logo when cached, else a text pill).
+                card.badges.firstOrNull { it.kind.equals("STUDIO", ignoreCase = true) }?.let { studio ->
+                    StudioBadge(badge = studio, modifier = Modifier.align(Alignment.TopStart))
                 }
             }
         }
@@ -324,20 +366,27 @@ private fun EngineCardArt(
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
-    ItemCardImage(
-        imageUrl = imageUrl,
-        name = name,
-        showOverlay = false,
-        favorite = false,
-        watched = false,
-        unwatchedCount = 0,
-        watchedPercent = null,
-        numberOfVersions = -1,
-        useFallbackText = false,
-        contentScale = ContentScale.Crop,
-        fallback = { Box(modifier = Modifier.fillMaxSize().engineCardArt(accent)) },
-        modifier = modifier,
-    )
+    Box(modifier = modifier) {
+        // The accent gradient is painted immediately as a placeholder so cards never flash blank
+        // while their poster downloads (problem #1); the real art then crossfades in over it, and
+        // the gradient also remains visible if the image is missing or fails.
+        Box(modifier = Modifier.fillMaxSize().engineCardArt(accent))
+        ItemCardImage(
+            imageUrl = imageUrl,
+            name = name,
+            showOverlay = false,
+            favorite = false,
+            watched = false,
+            unwatchedCount = 0,
+            watchedPercent = null,
+            numberOfVersions = -1,
+            useFallbackText = false,
+            contentScale = ContentScale.Crop,
+            crossfade = true,
+            fallback = {},
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 }
 
 /** Resolves the image URL: engine-provided, else built from the Jellyfin id (poster/thumb/etc.). */
@@ -384,23 +433,73 @@ private fun CardBadges(
         modifier = modifier.padding(8.dp),
     ) {
         badges.forEach { badge ->
-            val label = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind
-            Box(
+            BadgePill(text = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind)
+        }
+    }
+}
+
+/** The badge label text (bold, small, white) shared by [BadgePill] and the studio-tag fallback. */
+@Composable
+private fun BadgeText(text: String) {
+    Text(
+        text = text,
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        fontSize = 10.sp,
+        letterSpacing = 0.5.sp,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** A dark rounded pill wrapping [BadgeText] — the shared badge chip. */
+@Composable
+private fun BadgePill(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        BadgeText(text)
+    }
+}
+
+/**
+ * The studio / streaming-provider tag (top-left corner). Renders the engine's cached provider logo on a
+ * dark chip for contrast (most brand logos are light-on-transparent); falls back to the styled text pill
+ * when there's no logo URL or the image fails to load. The chip background is on the container so the
+ * loading/error text sits on it without a doubled background.
+ */
+@Composable
+private fun StudioBadge(
+    badge: CardBadge,
+    modifier: Modifier = Modifier,
+) {
+    val label = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind
+    val logoUrl = LocalImageUrlService.current.engineImageUrl(badge.iconUrl)
+    Box(modifier = modifier.padding(8.dp)) {
+        if (logoUrl == null) {
+            BadgePill(text = label)
+        } else {
+            SubcomposeAsyncImage(
+                model = logoUrl,
+                contentDescription = label,
+                contentScale = ContentScale.Fit,
+                loading = { BadgeText(label) },
+                error = { BadgeText(label) },
                 modifier =
                     Modifier
-                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-            ) {
-                Text(
-                    text = label,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
-                    letterSpacing = 0.5.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+                        .height(22.dp)
+                        .widthIn(max = 76.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+            )
         }
     }
 }
@@ -423,10 +522,15 @@ fun DynamicCardRow(
     modifier: Modifier = Modifier,
     onLongClickItem: (RenderItem) -> Unit = {},
     onFocusItem: (RenderItem) -> Unit = {},
+    focusRequester: FocusRequester? = null,
+    // Resolve a 16:9 card's inline trailer + backdrop URLs (engine-cached). Default = no trailer.
+    trailerUrlFor: (RenderItem) -> String? = { null },
+    backdropUrlFor: (RenderItem) -> String? = { null },
 ) {
     ItemRow(
         title = row.title,
         items = row.items,
+        focusRequester = focusRequester,
         onClickItem = { _, item -> onClickItem(item) },
         onLongClickItem = { _, item -> onLongClickItem(item) },
         cardContent = { _, item, cardModifier, onClick, onLongClick ->
@@ -435,6 +539,8 @@ fun DynamicCardRow(
                     item = item,
                     onClick = onClick,
                     onLongClick = onLongClick,
+                    trailerUrlFor = trailerUrlFor,
+                    backdropUrlFor = backdropUrlFor,
                     modifier =
                         cardModifier.onFocusChanged {
                             if (it.isFocused) onFocusItem(item)
@@ -453,6 +559,15 @@ private const val WIDE_CARD_SCALE = 0.75f
 
 /** Engine-tagged "Large" cards (the featured For You row) render this much bigger than standard. */
 private const val LARGE_CARD_SCALE = 1.35f
+
+/** How much a focused 16:9 card enlarges in place (the "card itself enlarges"). Tune on-device. */
+private const val WIDE_FOCUSED_SCALE = 1.3f
+
+/** Sustained focus on a 16:9 card before its inline trailer starts (avoids firing while scrolling). */
+private const val TRAILER_DWELL_MS = 1_200L
+
+/** Inline-card trailer audio: quiet, not muted (per the user) and not intrusive on a 10-ft UI. */
+private const val TRAILER_VOLUME = 0.2f
 
 /** Font size of the oversized Top-10 rank numeral drawn over the poster. */
 private val RANK_NUMERAL_SP = 88.sp

@@ -70,7 +70,6 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -136,6 +135,11 @@ class MainActivity : AppCompatActivity() {
 
     private var signInAuto = true
 
+    // Snapshot of the player backend for onSaveInstanceState — a DataStore read there would
+    // block the main thread during a lifecycle callback.
+    @Volatile
+    private var lastKnownPlayerBackend: PlayerBackend? = null
+
     private val json =
         Json {
             classDiscriminator = "_type"
@@ -162,6 +166,10 @@ class MainActivity : AppCompatActivity() {
                     backStack = backStack.toMutableList().apply { removeAt(lastIndex) }
                 }
             }
+            if (backStack.isEmpty()) {
+                // e.g. launched directly into playback via deep link — NavDisplay rejects an empty stack
+                backStack = listOf(Destination.Home())
+            }
             navigationManager.backStack = NavBackStack(*backStack.toTypedArray())
         } else {
             val startDestination = intent?.let(::extractDestination) ?: Destination.Home()
@@ -178,6 +186,10 @@ class MainActivity : AppCompatActivity() {
                 window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
         }
+        userPreferencesDataStore.data
+            .onEach { lastKnownPlayerBackend = it.playbackPreferences.playerBackend }
+            .catch { ex -> Timber.w(ex, "Error observing player backend") }
+            .launchIn(lifecycleScope)
         screensaverService.keepScreenOn
             .onEach { keepScreenOn ->
                 Timber.v("keepScreenOn: %s", keepScreenOn)
@@ -311,9 +323,7 @@ class MainActivity : AppCompatActivity() {
         Timber.d("onSaveInstanceState")
         val str = json.encodeToString(navigationManager.backStack.toList())
         outState.putString(KEY_BACK_STACK, str)
-        val playerBackend =
-            runBlocking { userPreferencesDataStore.data.firstOrNull() }?.playbackPreferences?.playerBackend
-        outState.putBoolean(KEY_EXTERNAL_PLAYER, playerBackend == PlayerBackend.EXTERNAL_PLAYER)
+        outState.putBoolean(KEY_EXTERNAL_PLAYER, lastKnownPlayerBackend == PlayerBackend.EXTERNAL_PLAYER)
     }
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {

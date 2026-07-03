@@ -85,6 +85,7 @@ import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import coil3.annotation.ExperimentalCoilApi
 import coil3.compose.AsyncImage
 import coil3.compose.useExistingImageAsPlaceholder
@@ -204,6 +205,10 @@ private fun handlePhase1Key(
                 if (confirmed != null) onConfirmRoulette(confirmed.first, confirmed.second)
                 true
             }
+            // Swallow horizontal nav so focus can't escape to the dimmed toolbar
+            // buttons behind the open dropdown (mirrors the Phase 2 picker's modal
+            // behaviour). BACK is handled by the dropdown BackHandler in PlaybackPage.
+            Key.DirectionLeft, Key.DirectionRight -> true
             else     -> false
         }
         state.toolbarVisibility == ToolbarVisibility.VISIBLE -> when (event.key) {
@@ -392,7 +397,7 @@ private fun Phase2OverlayLayer(
                 if (metaLine.isNotEmpty()) {
                     Text(
                         text     = metaLine,
-                        fontSize = 11.sp,
+                        fontSize = 14.sp,
                         color    = Color.White.copy(alpha = 0.72f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -401,9 +406,9 @@ private fun Phase2OverlayLayer(
                 Spacer(Modifier.height(10.dp))
                 Text(
                     text       = state.synopsis,
-                    fontSize   = 11.sp,
+                    fontSize   = 14.sp,
                     color      = Color.White.copy(alpha = 0.80f),
-                    lineHeight = (11 * 1.65f).sp,
+                    lineHeight = (14 * 1.55f).sp,
                     maxLines   = 3,
                     overflow   = TextOverflow.Ellipsis
                 )
@@ -469,7 +474,7 @@ private fun Phase2OverlayLayer(
                         verticalAlignment     = Alignment.CenterVertically,
                     ) {
                         P2TrackChip(
-                            prefix        = "AUD",
+                            prefix        = stringResource(R.string.p1_aud),
                             label         = state.audioItems.getOrNull(state.audioConfirmedIndex)?.title ?: "",
                             onClick       = { viewModel.openP2Picker(RouletteType.AUDIO) },
                             onInteraction = { viewModel.onPhase2Interaction() },
@@ -482,8 +487,9 @@ private fun Phase2OverlayLayer(
                             }
                         )
                         P2TrackChip(
-                            prefix        = "CC",
-                            label         = state.subtitleItems.getOrNull(state.subtitleConfirmedIndex)?.title ?: "Off",
+                            prefix        = stringResource(R.string.p1_cc),
+                            label         = state.subtitleItems.getOrNull(state.subtitleConfirmedIndex)?.title
+                                ?: stringResource(R.string.track_off),
                             onClick       = { viewModel.openP2Picker(RouletteType.SUBTITLE) },
                             onInteraction = { viewModel.onPhase2Interaction() },
                             focusRequester = ccChipFR,
@@ -578,10 +584,10 @@ private fun Phase2OverlayLayer(
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         Text(
-                            text          = "UP NEXT",
-                            fontSize      = 11.sp,
+                            text          = stringResource(R.string.p2_up_next),
+                            fontSize      = 12.sp,
                             fontWeight    = FontWeight.Bold,
-                            letterSpacing = (0.14f * 11).sp,
+                            letterSpacing = (0.14f * 12).sp,
                             color         = Color.White.copy(alpha = 0.68f)
                         )
                         Text(
@@ -604,8 +610,8 @@ private fun Phase2OverlayLayer(
                                         .padding(horizontal = 9.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text       = "+$hiddenCount MORE",
-                                        fontSize   = 9.sp,
+                                        text       = stringResource(R.string.p2_more_count, hiddenCount),
+                                        fontSize   = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color      = Color(0xFFCBBCFF)
                                     )
@@ -713,8 +719,8 @@ private fun Phase2OverlayLayer(
                     RouletteType.SUBTITLE -> state.subtitleConfirmedIndex
                 }
                 val headerLabel = when (pickerType) {
-                    RouletteType.AUDIO    -> "AUDIO"
-                    RouletteType.SUBTITLE -> "SUBTITLES"
+                    RouletteType.AUDIO    -> stringResource(R.string.p2_header_audio)
+                    RouletteType.SUBTITLE -> stringResource(R.string.p2_header_subtitles)
                 }
 
                 Box(
@@ -745,9 +751,9 @@ private fun Phase2OverlayLayer(
                     Column(horizontalAlignment = Alignment.Start) {
                         Text(
                             text          = headerLabel,
-                            fontSize      = 9.sp,
+                            fontSize      = 11.sp,
                             fontWeight    = FontWeight.Bold,
-                            letterSpacing = (0.16f * 9).sp,
+                            letterSpacing = (0.16f * 11).sp,
                             color         = Color.White.copy(alpha = 0.50f),
                             modifier      = Modifier.padding(bottom = 8.dp)
                         )
@@ -783,7 +789,7 @@ private fun Phase2OverlayLayer(
                                 )
                                 Text(
                                     text       = item.title,
-                                    fontSize   = 13.sp,
+                                    fontSize   = 16.sp,
                                     fontWeight = if (isSelected || isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                                     color      = Color.White.copy(alpha = when {
                                         isSelected -> 1f
@@ -796,8 +802,8 @@ private fun Phase2OverlayLayer(
                                 )
                                 if (isCurrent) {
                                     Text(
-                                        text       = "ON",
-                                        fontSize   = 9.sp,
+                                        text       = stringResource(R.string.p2_current_on),
+                                        fontSize   = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color      = Color.White.copy(alpha = 0.38f)
                                     )
@@ -1027,14 +1033,14 @@ private fun P2TrackChip(
         ) {
             Text(
                 text = prefix,
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = (0.14f * 9).sp,
+                letterSpacing = (0.14f * 11).sp,
                 color = Color.White.copy(alpha = if (isFocused) 0.70f else 0.45f)
             )
             Text(
                 text = label,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White.copy(alpha = if (isFocused) 1f else 0.85f),
                 maxLines = 1,
@@ -1045,12 +1051,13 @@ private fun P2TrackChip(
     }
 }
 
+@Composable
 private fun formatMinutesLeft(ms: Long): String {
     val totalMin = (ms / 60_000L).toInt()
     return when {
-        totalMin <= 0 -> "<1m left"
-        totalMin < 60 -> "${totalMin}m left"
-        else          -> "${totalMin / 60}h ${totalMin % 60}m left"
+        totalMin <= 0 -> stringResource(R.string.minutes_left_under_one)
+        totalMin < 60 -> stringResource(R.string.minutes_left, totalMin)
+        else          -> stringResource(R.string.hours_minutes_left, totalMin / 60, totalMin % 60)
     }
 }
 
@@ -1131,9 +1138,9 @@ private fun Phase2Card(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "EP ${item.episodeNumber}",
-                    fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                    letterSpacing = (0.10f * 11).sp,
+                    stringResource(R.string.p2_ep_short, item.episodeNumber),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    letterSpacing = (0.10f * 12).sp,
                     color = Color.White.copy(alpha = 0.30f)
                 )
             }
@@ -1166,8 +1173,8 @@ private fun Phase2Card(
         // Identical structure on every card (title + status line) → consistent alignment.
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                "Episode ${item.episodeNumber}",
-                fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                stringResource(R.string.p2_episode_number, item.episodeNumber),
+                fontSize = 14.sp, fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.90f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
@@ -1177,14 +1184,14 @@ private fun Phase2Card(
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Text(
-                        "WATCHING", fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                        letterSpacing = (0.06f * 10).sp, color = PlaybackColors.Purple,
+                        stringResource(R.string.p2_watching), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        letterSpacing = (0.06f * 12).sp, color = PlaybackColors.Purple,
                         maxLines = 1
                     )
                     if (item.durationLabel.isNotEmpty()) {
                         Text(
                             item.durationLabel,
-                            fontSize = 10.sp, color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f),
                             maxLines = 1
                         )
                     }
@@ -1192,7 +1199,7 @@ private fun Phase2Card(
             } else {
                 Text(
                     item.durationLabel,
-                    fontSize = 10.sp, color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f),
                     maxLines = 1
                 )
             }
@@ -1313,9 +1320,10 @@ private fun Phase2CompactAmbient(
 
         // Discoverability hint
         Text(
-            text = if (slideshowHold) "OK resumes   ·   ▲ for controls   ·   slideshow paused"
-                   else              "OK resumes   ·   ▲ for controls",
-            fontSize = 10.sp, fontWeight = FontWeight.Medium,
+            text = stringResource(
+                if (slideshowHold) R.string.p2_hint_compact_held else R.string.p2_hint_compact
+            ),
+            fontSize = 13.sp, fontWeight = FontWeight.Medium,
             color = Color.White.copy(alpha = 0.55f),
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -1378,10 +1386,10 @@ private fun AmbientSlideshow(
         modifier = modifier,
     ) { slide ->
         when (slide) {
-            is AmbientSlide.Synopsis -> AmbientBlock("SYNOPSIS") {
+            is AmbientSlide.Synopsis -> AmbientBlock(stringResource(R.string.p2_kicker_synopsis)) {
                 Text(
-                    slide.text, fontSize = 14.sp, color = Color.White.copy(alpha = 0.92f),
-                    lineHeight = (14 * 1.5f).sp, maxLines = 5, overflow = TextOverflow.Ellipsis
+                    slide.text, fontSize = 16.sp, color = Color.White.copy(alpha = 0.92f),
+                    lineHeight = (16 * 1.5f).sp, maxLines = 5, overflow = TextOverflow.Ellipsis
                 )
             }
             is AmbientSlide.Tagline -> AmbientBlock(null) {
@@ -1392,30 +1400,34 @@ private fun AmbientSlideshow(
                 )
             }
             is AmbientSlide.Cast -> AmbientPersonSlide(slide.person)
-            is AmbientSlide.Facts -> AmbientBlock("DETAILS") {
+            is AmbientSlide.Facts -> AmbientBlock(stringResource(R.string.p2_kicker_details)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (slide.meta.isNotBlank()) {
-                        Text(slide.meta, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        Text(slide.meta, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                             color = Color.White.copy(alpha = 0.85f))
                     }
                     if (slide.rating != null) {
-                        Text("★ ${"%.1f".format(slide.rating)}", fontSize = 13.sp,
+                        Text("★ ${"%.1f".format(slide.rating)}", fontSize = 14.sp,
                             fontWeight = FontWeight.Bold, color = Color(0xFFFFC700))
                     }
                     if (slide.genres.isNotEmpty()) {
-                        Text(slide.genres.take(5).joinToString("   ·   "), fontSize = 13.sp,
+                        Text(slide.genres.take(5).joinToString("   ·   "), fontSize = 14.sp,
                             color = Color.White.copy(alpha = 0.80f))
                     }
                     if (slide.studios.isNotEmpty()) {
-                        Text(slide.studios.take(3).joinToString("   ·   "), fontSize = 12.sp,
+                        Text(slide.studios.take(3).joinToString("   ·   "), fontSize = 13.sp,
                             color = Color.White.copy(alpha = 0.60f))
                     }
                 }
             }
-            is AmbientSlide.Crew -> AmbientBlock("CREW") {
+            is AmbientSlide.Crew -> AmbientBlock(stringResource(R.string.p2_kicker_crew)) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (slide.directors.isNotEmpty()) AmbientCredit("DIRECTED BY", slide.directors)
-                    if (slide.writers.isNotEmpty()) AmbientCredit("WRITTEN BY", slide.writers)
+                    if (slide.directors.isNotEmpty()) {
+                        AmbientCredit(stringResource(R.string.p2_directed_by), slide.directors)
+                    }
+                    if (slide.writers.isNotEmpty()) {
+                        AmbientCredit(stringResource(R.string.p2_written_by), slide.writers)
+                    }
                 }
             }
         }
@@ -1426,8 +1438,8 @@ private fun AmbientSlideshow(
 private fun AmbientBlock(label: String?, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (label != null) {
-            Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                letterSpacing = (0.18f * 9).sp, color = PlaybackColors.Blue)
+            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = (0.18f * 11).sp, color = PlaybackColors.Blue)
         }
         content()
     }
@@ -1436,9 +1448,9 @@ private fun AmbientBlock(label: String?, content: @Composable () -> Unit) {
 @Composable
 private fun AmbientCredit(label: String, names: List<String>) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = (0.14f * 9).sp,
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = (0.14f * 11).sp,
             color = Color.White.copy(alpha = 0.5f))
-        Text(names.take(3).joinToString(", "), fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+        Text(names.take(3).joinToString(", "), fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
             color = Color.White.copy(alpha = 0.9f), maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -1457,12 +1469,12 @@ private fun AmbientPersonSlide(person: AmbientPerson) {
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text("CAST", fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                letterSpacing = (0.18f * 9).sp, color = PlaybackColors.Blue)
+            Text(stringResource(R.string.p2_kicker_cast), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = (0.18f * 11).sp, color = PlaybackColors.Blue)
             Text(person.name, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 color = Color.White.copy(alpha = 0.95f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (person.role.isNotBlank()) {
-                Text(person.role, fontSize = 13.sp, color = Color.White.copy(alpha = 0.7f),
+                Text(person.role, fontSize = 14.sp, color = Color.White.copy(alpha = 0.7f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -1641,8 +1653,8 @@ private fun P1DropdownMenu(
     focusedIdx: Int
 ) {
     val header = when (type) {
-        RouletteType.AUDIO    -> "AUDIO TRACK"
-        RouletteType.SUBTITLE -> "SUBTITLE TRACK"
+        RouletteType.AUDIO    -> stringResource(R.string.p1_dropdown_audio)
+        RouletteType.SUBTITLE -> stringResource(R.string.p1_dropdown_subtitle)
     }
     Column(
         modifier = Modifier
@@ -1654,9 +1666,9 @@ private fun P1DropdownMenu(
         // Header
         Text(
             text          = header,
-            fontSize      = 9.sp,
+            fontSize      = 11.sp,
             fontWeight    = FontWeight.Bold,
-            letterSpacing = (0.16f * 9).sp,
+            letterSpacing = (0.16f * 11).sp,
             color         = Color.White.copy(alpha = 0.40f),
             modifier      = Modifier.padding(top = 10.dp, start = 16.dp, end = 16.dp, bottom = 6.dp)
         )
@@ -1695,7 +1707,7 @@ private fun P1DropdownMenu(
                 )
                 Text(
                     text       = item.title,
-                    fontSize   = 13.sp,
+                    fontSize   = 15.sp,
                     fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
                     color      = Color.White.copy(alpha = when {
                         isFocused -> 1f
@@ -1708,10 +1720,10 @@ private fun P1DropdownMenu(
                 )
                 if (isCurrent) {
                     Text(
-                        text       = "ON",
-                        fontSize   = 9.sp,
+                        text       = stringResource(R.string.p2_current_on),
+                        fontSize   = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = (0.08f * 9).sp,
+                        letterSpacing = (0.08f * 11).sp,
                         color      = Color.White.copy(alpha = 0.38f)
                     )
                 }
@@ -1780,10 +1792,10 @@ private fun P1TopBar(
                 )
             }
             Text(
-                text          = "S$season  ·  E$episode",
-                fontSize      = 11.sp,
+                text          = stringResource(R.string.p1_season_episode, season, episode),
+                fontSize      = 13.sp,
                 fontWeight    = FontWeight.SemiBold,
-                letterSpacing = (0.12f * 11).sp,
+                letterSpacing = (0.12f * 13).sp,
                 color         = Color.White.copy(alpha = 0.72f)
             )
         }
@@ -1861,7 +1873,7 @@ private fun P1BottomBar(
             )
             FrostPlaybackButton(
                 iconRes        = if (state.isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24,
-                label          = if (state.isPlaying) "PAUSE" else "PLAY",
+                label          = stringResource(if (state.isPlaying) R.string.p1_pause else R.string.p1_play),
                 isDimmed       = anyDropdownOpen,
                 focusRequester = playBtnFocusRequester,
                 onClick        = {
@@ -1881,15 +1893,16 @@ private fun P1BottomBar(
             )
             Spacer(Modifier.weight(1f))
             FrostSettingButton(
-                header   = "AUDIO",
+                header   = stringResource(R.string.p2_header_audio),
                 primary  = state.audioItems.getOrNull(state.audioConfirmedIndex)?.title ?: "",
                 isActive = state.dropdown?.type == RouletteType.AUDIO,
                 isDimmed = anyDropdownOpen && state.dropdown?.type != RouletteType.AUDIO,
                 onOpen   = { viewModel.openDropdown(RouletteType.AUDIO) },
             )
             FrostSettingButton(
-                header   = "SUB",
-                primary  = state.subtitleItems.getOrNull(state.subtitleConfirmedIndex)?.title ?: "Off",
+                header   = stringResource(R.string.p1_sub),
+                primary  = state.subtitleItems.getOrNull(state.subtitleConfirmedIndex)?.title
+                    ?: stringResource(R.string.track_off),
                 isActive = state.dropdown?.type == RouletteType.SUBTITLE,
                 isDimmed = anyDropdownOpen && state.dropdown?.type != RouletteType.SUBTITLE,
                 onOpen   = { viewModel.openDropdown(RouletteType.SUBTITLE) },

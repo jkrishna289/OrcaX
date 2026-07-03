@@ -42,10 +42,13 @@ fun <T> ItemRow(
     ) -> Unit,
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = 16.dp,
+    // Lets a caller push focus back into this row programmatically (e.g. when returning from a
+    // details page); the row then restores the last clicked card via its saved position.
+    focusRequester: FocusRequester? = null,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
-    val focusRequester = remember { FocusRequester() }
+    val enterFocus = remember { FocusRequester() }
     var position by rememberInt()
 
     val currentOnClickItem by rememberUpdatedState(onClickItem)
@@ -56,7 +59,7 @@ fun <T> ItemRow(
         modifier =
             modifier.focusProperties {
                 onEnter = {
-                    focusRequester.tryRequestFocus()
+                    enterFocus.tryRequestFocus()
                 }
             },
     ) {
@@ -71,7 +74,8 @@ fun <T> ItemRow(
                     .fillMaxWidth()
                     .focusGroup()
                     .focusRestorer(firstFocus)
-                    .focusRequester(focusRequester),
+                    .focusRequester(enterFocus)
+                    .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier),
         ) {
             itemsIndexed(items) { index, item ->
                 val cardModifier =

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -34,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.ui.AppColors
@@ -43,6 +46,9 @@ import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.isNotNullOrBlank
 import com.github.jkrishna289.orcax.ui.logCoilError
 import org.jellyfin.sdk.model.api.ImageType
+
+/** Fade-in duration for card art that opts into [ItemCardImage]'s crossfade (#1). */
+private const val CARD_CROSSFADE_MS = 220
 
 /**
  * Display an image for an item with optional overlay data
@@ -113,6 +119,7 @@ fun ItemCardImage(
     modifier: Modifier = Modifier,
     useFallbackText: Boolean = true,
     contentScale: ContentScale = ContentScale.Fit,
+    crossfade: Boolean = false,
     fallback: @Composable BoxScope.() -> Unit = {
         ItemCardImageFallback(
             name = name,
@@ -122,12 +129,23 @@ fun ItemCardImage(
     },
 ) {
     var imageError by remember(imageUrl) { mutableStateOf(false) }
+    val context = LocalContext.current
+    // A String model uses the loader's global (off) crossfade; opt callers into a fade-in by handing
+    // Coil an ImageRequest so the poster eases in over its placeholder instead of popping (#1).
+    val model =
+        remember(imageUrl, crossfade) {
+            if (crossfade) {
+                ImageRequest.Builder(context).data(imageUrl).crossfade(CARD_CROSSFADE_MS).build()
+            } else {
+                imageUrl
+            }
+        }
     Box(
         modifier = modifier,
     ) {
         if (!imageError && imageUrl.isNotNullOrBlank()) {
             AsyncImage(
-                model = imageUrl,
+                model = model,
                 contentDescription = name,
                 contentScale = contentScale,
                 alignment = Alignment.Center,

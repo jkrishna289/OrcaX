@@ -22,3 +22,9 @@
 
 # TODO investigate using smaller scope
 -keep class com.google.common.cache.** { *; }
+
+# Protobuf-lite (javalite) generates the proto-DataStore message classes (see
+# OrcaDataStore.proto). At runtime protobuf-lite resolves each field by its original
+# Java field name via reflection, so R8 must not rename or strip them. Without this the
+# app crashes on startup with e.g. "Field ac3Supported_ for <class> not found".
+-keep class * extends com.google.protobuf.GeneratedMessageLite { *; }

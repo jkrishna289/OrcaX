@@ -54,6 +54,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.surfaceColorAtElevation
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.ui.FontAwesome
+import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import kotlinx.coroutines.delay
 
 private const val ERROR_AUTO_DISMISS_DELAY_MS = 3000L
@@ -294,9 +295,6 @@ private fun VoiceSearchOverlay(
     val bubbleScale = basePulse + (animatedSoundLevel * SOUND_LEVEL_SCALE_FACTOR)
 
     val statusFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        statusFocusRequester.requestFocus()
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -317,6 +315,9 @@ private fun VoiceSearchOverlay(
                     .background(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)),
             contentAlignment = Alignment.Center,
         ) {
+            // Guarded, and requested from inside the dialog window so it runs after the
+            // dialog's content is attached (a raw requestFocus here raced composition).
+            LaunchedEffect(Unit) { statusFocusRequester.tryRequestFocus() }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(CONTENT_SPACING),
                 verticalAlignment = Alignment.CenterVertically,

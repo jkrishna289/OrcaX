@@ -78,3 +78,12 @@ PLAYER.md
 WholphinEnginePlugin_Feature_Plan.md
 instrnction.md
 New Text Document.md
+
+# Claude Code / knowledge-graph tooling & local settings (kept on disk, not tracked)
+.claude/
+CLAUDE.md
+graphify-out/
+.github/hooks/
+hs_err_pid*.log
+replay_pid*.log
+.claudeignore

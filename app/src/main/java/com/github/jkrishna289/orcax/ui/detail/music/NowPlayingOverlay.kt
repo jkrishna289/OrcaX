@@ -159,7 +159,7 @@ fun NowPlayingOverlay(
                             queueHasFocus = it.hasFocus
                         }.focusProperties {
                             onExit = {
-                                if (requestedFocusDirection == FocusDirection.Up) focusRequester.requestFocus()
+                                if (requestedFocusDirection == FocusDirection.Up) focusRequester.tryRequestFocus()
                             }
                         },
             ) {

@@ -2,7 +2,6 @@ package com.github.jkrishna289.orcax.ui.main
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,7 +32,10 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.RenderItem
+import com.github.jkrishna289.orcax.ui.components.RestoreFocusOnDispose
+import com.github.jkrishna289.orcax.ui.components.focusTrap
 
 /**
  * A full-screen landing surface for a **not-yet-available** title (a Discover/request item), shown
@@ -49,8 +52,10 @@ fun RequestLanding(
     onRequest: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    restoreFocusTo: FocusRequester? = null,
 ) {
     BackHandler(onBack = onDismiss)
+    RestoreFocusOnDispose(restoreFocusTo)
     val card = item.card
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
     val context = LocalContext.current
@@ -62,7 +67,7 @@ fun RequestLanding(
             .filter { it.kind.equals("GENRE", ignoreCase = true) }
             .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
 
-    Box(modifier = modifier.fillMaxSize().focusGroup()) {
+    Box(modifier = modifier.fillMaxSize().focusTrap()) {
         // Art (real backdrop or procedural gradient).
         val backdropUrl = card.backdropImageUrl
         if (backdropUrl != null) {
@@ -105,10 +110,10 @@ fun RequestLanding(
                         .padding(horizontal = 12.dp, vertical = 5.dp),
             ) {
                 Text(
-                    text = "NOT YET AVAILABLE",
+                    text = stringResource(R.string.request_not_yet_available),
                     color = accent,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     letterSpacing = 3.sp,
                 )
             }
@@ -144,13 +149,13 @@ fun RequestLanding(
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 BillboardButton(
-                    label = "Request",
+                    label = stringResource(R.string.request),
                     leading = "+",
                     primary = true,
                     onClick = onRequest,
                     modifier = Modifier.focusRequester(requestFocus),
                 )
-                BillboardButton(label = "Close", primary = false, onClick = onDismiss)
+                BillboardButton(label = stringResource(R.string.close), primary = false, onClick = onDismiss)
             }
         }
     }

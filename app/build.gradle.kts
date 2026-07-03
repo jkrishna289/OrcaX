@@ -43,15 +43,23 @@ val isBuildingBundle =
 
 val gitTags =
     providers
-        .exec { commandLine("git", "tag", "--list", "v*", "p*") }
+        .exec {
+            commandLine("git", "tag", "--list", "v*", "p*")
+            isIgnoreExitValue = true
+        }
         .standardOutput.asText
-        .get()
+        .getOrElse("")
 
 val gitDescribe =
     providers
-        .exec { commandLine("git", "describe", "--tags", "--long", "--match=v*") }
+        .exec {
+            // Don't fail the build when there is no matching tag in HEAD's history
+            // (e.g. a fresh/squashed clone); fall back to the default version below.
+            commandLine("git", "describe", "--tags", "--long", "--match=v*")
+            isIgnoreExitValue = true
+        }
         .standardOutput.asText
-        .getOrElse("v0.0.0")
+        .getOrElse("")
 
 android {
     namespace = "com.github.jkrishna289.orcax"

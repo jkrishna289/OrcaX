@@ -995,6 +995,10 @@ fun CollectionFolderGridContent(
                         gridFocusRequester = gridFocusRequester,
                         showJumpButtons = false, // TODO add preference
                         showLetterButtons = sortAndDirection.sort == ItemSortBy.SORT_NAME,
+                        useBackToJump = !preferences.appPreferences.interfacePreferences.disableScrollTopOnBack,
+                        showFooter = !preferences.appPreferences.interfacePreferences.hidePositionFooter,
+                        useJumpRemoteButtons =
+                            !preferences.appPreferences.interfacePreferences.disablePageWithRemoteButtons,
                         modifier = Modifier.fillMaxSize(),
                         initialPosition = initialPosition,
                         positionCallback = { columns, newPosition ->
