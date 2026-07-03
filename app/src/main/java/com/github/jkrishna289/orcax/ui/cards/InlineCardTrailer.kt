@@ -25,9 +25,16 @@ import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import kotlinx.coroutines.delay
 
 /** How far into a trailer to start, skipping studio idents / slates (#11). */
 private const val TRAILER_SKIP_MS = 3_000L
+
+/** How many times to re-try after a cache-miss failure while the card stays dwelled. */
+private const val MAX_TRAILER_RETRIES = 3
+
+/** Wait between retries — roughly how long the server needs to warm a missing trailer. */
+private const val TRAILER_RETRY_DELAY_MS = 6_000L
 
 /**
  * A 16:9 preview that shows the backdrop and crossfades to a looping trailer once [play] + ready.
@@ -46,6 +53,11 @@ fun InlineCardTrailer(
 ) {
     val context = LocalContext.current
     var ready by remember(trailerUrl) { mutableStateOf(false) }
+    // The engine 404s a trailer that isn't cached yet — but that same request kicks off a background
+    // warm on the server. Retrying a few times while the card stays dwelled lets the trailer start
+    // as soon as the cache fills, instead of silently giving up on the first miss.
+    var failedAttempts by remember(trailerUrl) { mutableStateOf(0) }
+    var retryNonce by remember(trailerUrl) { mutableStateOf(0) }
 
     val exo =
         remember(trailerUrl) {
@@ -62,8 +74,9 @@ fun InlineCardTrailer(
     // Keep the live volume in sync if it changes without recreating the player.
     LaunchedEffect(exo, volume) { exo?.volume = volume }
 
-    // Only prepare/play once the dwell says so (play == true); pause otherwise.
-    LaunchedEffect(trailerUrl, play) {
+    // Only prepare/play once the dwell says so (play == true); pause otherwise. Re-runs on each
+    // retry bump after a cache-miss error.
+    LaunchedEffect(trailerUrl, play, retryNonce) {
         if (play && trailerUrl != null && exo != null) {
             exo.setMediaItem(MediaItem.fromUri(trailerUrl))
             exo.prepare()
@@ -75,6 +88,14 @@ fun InlineCardTrailer(
         }
     }
 
+    // Schedule a bounded retry after each failure (server-side warm typically takes seconds).
+    LaunchedEffect(failedAttempts, play) {
+        if (play && failedAttempts in 1..MAX_TRAILER_RETRIES) {
+            delay(TRAILER_RETRY_DELAY_MS)
+            retryNonce++
+        }
+    }
+
     DisposableEffect(exo) {
         val listener =
             object : Player.Listener {
@@ -83,8 +104,9 @@ fun InlineCardTrailer(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    // Cache miss / unplayable → stay on the backdrop.
+                    // Cache miss / unplayable → stay on the backdrop and schedule a retry.
                     ready = false
+                    failedAttempts++
                 }
             }
         exo?.addListener(listener)
