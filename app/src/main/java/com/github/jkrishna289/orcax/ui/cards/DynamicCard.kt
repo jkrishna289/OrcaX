@@ -1,5 +1,7 @@
 package com.github.jkrishna289.orcax.ui.cards
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -159,9 +161,10 @@ private fun EngineCardBody(
     val focusedAfterDelay by rememberFocusedAfterDelay(interactionSource)
     val cardShape = RoundedCornerShape(8.dp)
 
-    // 16:9 cards enlarge in place on focus and, after a short dwell, crossfade their art to a muted-
-    // ish inline trailer (replacing the old pop-up). Only these landscape cards play trailers; poster
-    // cards are untouched. The player is only mounted while dwelled, so at most one exists at a time.
+    // 16:9 cards expand HORIZONTALLY on focus (a real layout width change, so the LazyRow slides the
+    // neighboring cards aside instead of overdrawing them) and, after a short dwell, crossfade their
+    // art to a quiet inline trailer (replacing the old pop-up). Only these landscape cards play
+    // trailers; poster cards are untouched. One card is focused at a time → at most one player.
     val focused by interactionSource.collectIsFocusedAsState()
     var playTrailer by remember { mutableStateOf(false) }
     val trailerUrl = remember(item) { if (isWide) trailerUrlFor(item) else null }
@@ -174,11 +177,16 @@ private fun EngineCardBody(
             playTrailer = false
         }
     }
+    val animatedWidth by animateDpAsState(
+        targetValue = if (isWide && focused) width * WIDE_FOCUS_EXPAND else width,
+        animationSpec = tween(durationMillis = 260),
+        label = "wide-card-expand",
+    )
 
     Column(
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.width(width),
+        modifier = modifier.width(animatedWidth),
     ) {
         Card(
             onClick = onClick,
@@ -190,10 +198,10 @@ private fun EngineCardBody(
                 CardDefaults.border(
                     focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = cardShape),
                 ),
-            // 16:9 cards enlarge noticeably on focus (the "card itself enlarges"); tv.material3 draws
-            // the scaled card above its neighbors. Poster cards keep the subtle default scale.
-            scale = CardDefaults.scale(focusedScale = if (isWide) WIDE_FOCUSED_SCALE else 1.1f),
-            modifier = Modifier.size(width, height),
+            // Wide cards must NOT scale-transform (that draws over neighbors) — their focus growth is
+            // the animated layout width above, which pushes the row's other cards aside instead.
+            scale = if (isWide) CardDefaults.scale(focusedScale = 1f) else CardDefaults.scale(),
+            modifier = Modifier.size(animatedWidth, height),
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 EngineCardArt(
@@ -560,8 +568,11 @@ private const val WIDE_CARD_SCALE = 0.75f
 /** Engine-tagged "Large" cards (the featured For You row) render this much bigger than standard. */
 private const val LARGE_CARD_SCALE = 1.35f
 
-/** How much a focused 16:9 card enlarges in place (the "card itself enlarges"). Tune on-device. */
-private const val WIDE_FOCUSED_SCALE = 1.3f
+/**
+ * How much wider a focused 16:9 card grows (horizontal-only, in layout — neighbors slide aside).
+ * The trailer fills the wider box via center-crop for a cinematic look.
+ */
+private const val WIDE_FOCUS_EXPAND = 1.45f
 
 /** Sustained focus on a 16:9 card before its inline trailer starts (avoids firing while scrolling). */
 private const val TRAILER_DWELL_MS = 1_200L
