@@ -18,16 +18,21 @@ import com.github.jkrishna289.orcax.services.LocalHomeBundleBuilder
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.TrailerService
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
+import com.github.jkrishna289.orcax.ui.DEFAULT_TRAILER_PREVIEW_VOLUME
 import com.github.jkrishna289.orcax.ui.nav.Destination
+import com.github.jkrishna289.orcax.ui.toTrailerVolume
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
@@ -57,6 +62,8 @@ class EngineHomeViewModel
         private val imageUrlService: ImageUrlService,
         private val api: ApiClient,
         private val favoriteWatchManager: FavoriteWatchManager,
+        // Shared, reusable inline-trailer players (Phase 10) — provided to the UI via LocalTrailerPlayerPool.
+        val trailerPlayerPool: com.github.jkrishna289.orcax.services.trailer.TrailerPlayerPool,
     ) : ViewModel() {
         private val _state = MutableStateFlow<EngineHomeState>(EngineHomeState.Loading)
         val state: StateFlow<EngineHomeState> = _state.asStateFlow()
@@ -69,6 +76,14 @@ class EngineHomeViewModel
         // Inline trailer for the active spotlight item; updated as the billboard rotates.
         private val _activeTrailerUrl = MutableStateFlow<String?>(null)
         val activeTrailerUrl: StateFlow<String?> = _activeTrailerUrl.asStateFlow()
+
+        // Single source of truth for inline-trailer preview volume (Phase 13): the user's
+        // preference mapped to a 0f..1f level. The billboard and 16:9 card players both read this
+        // (via LocalTrailerVolume), so changing it in Settings applies live to every trailer player.
+        val trailerVolume: StateFlow<Float> =
+            preferences.data
+                .map { it.interfacePreferences.trailerPreviewVolume.toTrailerVolume() }
+                .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_TRAILER_PREVIEW_VOLUME)
 
         // Resolved local-trailer URLs keyed by item id, so rotating back to an item doesn't refetch.
         // A present key with a null value means "resolved, no local trailer".
@@ -247,6 +262,34 @@ class EngineHomeViewModel
 
         /** The server-cached trailer URL for a card (#11), or null when there's no TMDB id. */
         fun trailerUrlFor(item: RenderItem): String? = client.trailerUrl(item.media.tmdbId, item.media.mediaType)
+
+        /**
+         * Queries the engine's trailer state machine for a card, so inline previews can start the
+         * instant the server reports Ready and stop retrying titles that will never resolve. Null when
+         * the engine is unreachable / too old to expose the status endpoint.
+         */
+        suspend fun trailerStatusFor(item: RenderItem): com.github.jkrishna289.orcax.engine.TrailerStatus? =
+            client.getTrailerStatus(item.media.tmdbId, item.media.mediaType)
+
+        /**
+         * Predictively prefetches trailers for likely-next items (Phase 3 client half): row neighbours,
+         * the next hero, or a detail page just opened. Fire-and-forget at a below-focus [priority]; the
+         * engine bounds concurrency and dedupes, so we can prefetch liberally as the user navigates.
+         */
+        fun prefetchTrailers(items: List<RenderItem>, priority: String) {
+            val payload =
+                items.mapNotNull { item ->
+                    val tmdb = item.media.tmdbId
+                    if (tmdb == null || tmdb <= 0) {
+                        null
+                    } else {
+                        val type = if (item.media.mediaType == MediaType.SERIES) "tv" else "movie"
+                        com.github.jkrishna289.orcax.engine.TrailerPrefetchItem(tmdb, type)
+                    }
+                }
+            if (payload.isEmpty()) return
+            viewModelScope.launch { runCatching { client.prefetchTrailers(payload, priority) } }
+        }
 
         /**
          * "Did You Know?" facts for the instant-details overlay (Feature 4). Resolved lazily from the

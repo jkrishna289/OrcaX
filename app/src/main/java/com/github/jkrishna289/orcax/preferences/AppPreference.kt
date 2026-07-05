@@ -278,6 +278,31 @@ sealed interface AppPreference<Pref, T> {
                 valueToIndex = { if (it != ThemeSongVolume.UNRECOGNIZED) it.number else 0 },
             )
 
+        // Volume for inline trailer previews (home billboard + 16:9 card trailers). The array lists
+        // the six concrete levels = enum values 1..6 (Mute..Max), so array index i <-> enum (i + 1).
+        // The enum's 0 value (UNSPECIFIED, i.e. never set) maps to the Low default so the selector
+        // highlights the same level the players actually use for a fresh install.
+        val TrailerPreviewVolumePref =
+            AppChoicePreference<AppPreferences, TrailerPreviewVolume>(
+                title = R.string.trailer_preview_volume,
+                defaultValue = TrailerPreviewVolume.TRAILER_PREVIEW_VOLUME_LOW,
+                getter = { it.interfacePreferences.trailerPreviewVolume },
+                setter = { prefs, value ->
+                    prefs.updateInterfacePreferences { trailerPreviewVolume = value }
+                },
+                displayValues = R.array.trailer_preview_volume_levels,
+                indexToValue = {
+                    TrailerPreviewVolume.forNumber(it + 1)
+                        ?: TrailerPreviewVolume.TRAILER_PREVIEW_VOLUME_LOW
+                },
+                valueToIndex = { value ->
+                    // Low (enum 3) -> index 2 is the shown default for unset/unknown values.
+                    // Guard UNRECOGNIZED first: calling .number on it throws.
+                    val n = if (value == TrailerPreviewVolume.UNRECOGNIZED) 0 else value.number
+                    if (n in 1..6) n - 1 else 2
+                },
+            )
+
         val PlaybackDebugInfo =
             AppSwitchPreference<AppPreferences>(
                 title = R.string.playback_debug_info,
@@ -1067,6 +1092,7 @@ val basicPreferences =
                 listOf(
                     AppPreference.SignInAuto,
                     AppPreference.PlayThemeMusic,
+                    AppPreference.TrailerPreviewVolumePref,
                     AppPreference.RememberSelectedTab,
                     AppPreference.SubtitleStyle,
                     AppPreference.ThemeColors,
