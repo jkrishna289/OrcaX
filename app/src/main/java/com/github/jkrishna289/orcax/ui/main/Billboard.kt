@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +57,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Border
@@ -72,18 +72,33 @@ import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
+import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
+import com.github.jkrishna289.orcax.ui.rememberLeasedPlayer
 import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
+
+/**
+ * Playback state of the home billboard's inline trailer, reported up to the hero-rotation
+ * controller (Phase 19 of the trailer redesign):
+ *  - [NONE]: this hero has no trailer — normal timed rotation.
+ *  - [PREPARING]: resolving/buffering; still normal timed rotation (only a trailer that actually
+ *    starts playing earns a hold).
+ *  - [PLAYING]: playing — pause the rotation timer and let it finish (bounded by a safety max-hold).
+ *  - [FINISHED]: completed naturally — advance to the next hero immediately.
+ *  - [FAILED]: errored/unavailable — resume normal rotation without getting stuck.
+ */
+enum class HeroTrailerState { NONE, PREPARING, PLAYING, FINISHED, FAILED }
 
 /**
  * The cinematic spotlight at the top of the engine home — a **floating, rounded key-art card**
  * (inset from the screen edges, with a drop shadow and hairline border) carrying a backdrop +
  * logo (or styled title) + metadata + tagline + Play / Trailer / Watchlist / Info, a giant ghosted
  * title behind the art, a content-rating chip in the corner, and pagination dots. When [trailerUrl]
- * is non-null it crossfades to a muted, looping inline trailer after the engine's auto-play delay.
- * When an item has no real backdrop (the sample/demo bundle) the art is a procedural gradient built
- * from the item's accent hint.
+ * is non-null it crossfades to an inline trailer after the engine's auto-play delay — played once
+ * (no loop), at the user's configured preview volume ([LocalTrailerVolume]), returning to the
+ * artwork when it ends or fails. When an item has no real backdrop (the sample/demo bundle) the art
+ * is a procedural gradient built from the item's accent hint.
  *
  * When [heroCount] > 1 the home rotates through several spotlight items; [activeIndex] drives the
  * pagination dots. Rigid, linear motion only (per the design language): a single [tween] crossfade.
@@ -103,62 +118,86 @@ fun Billboard(
     navFocusRequester: FocusRequester? = null,
     heroCount: Int = 1,
     activeIndex: Int = 0,
+    // Reports inline-trailer playback state so the caller's hero-rotation timer can pause while a
+    // trailer plays and resume when it ends/fails (Phase 19). No-op by default.
+    onTrailerStateChanged: (HeroTrailerState) -> Unit = {},
 ) {
     val card = item.card
     val media = item.media
     val imageUrlService = LocalImageUrlService.current
     val jellyfinId = media.jellyfinId?.toUUIDOrNull()
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
+    // Centralised inline-trailer volume (Phase 13): one user preference drives every trailer player.
+    val trailerVolume = LocalTrailerVolume.current
 
     val backdropUrl =
         card.backdropImageUrl
             ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 720) }
 
     val context = LocalContext.current
-    var showTrailer by remember(trailerUrl) { mutableStateOf(false) }
 
-    // The player is built lazily, only after the auto-play delay elapses with this trailer still
-    // active — the 8s spotlight rotation would otherwise churn a codec-holding ExoPlayer instance
-    // per hero even when its trailer never gets a chance to start.
-    var exoPlayer by remember(trailerUrl) { mutableStateOf<ExoPlayer?>(null) }
+    // Lease a pooled player for the billboard's lifetime and swap media as the hero rotates, instead
+    // of building/tearing down a codec-holding ExoPlayer per hero (Phase 10). Stable holders (NOT
+    // keyed on trailerUrl) so the persistent listener never captures stale state.
+    val exo = rememberLeasedPlayer()
+    val showTrailer = remember { mutableStateOf(false) }
+    val onStateChanged = rememberUpdatedState(onTrailerStateChanged)
 
-    LaunchedEffect(trailerUrl) {
-        showTrailer = false
-        if (trailerUrl != null) {
-            delay(card.autoPlayDelayMs.coerceAtLeast(0).toLong())
-            val player =
-                ExoPlayer.Builder(context).build().apply {
-                    volume = 0f
-                    // Play once — trailers must not loop; the backdrop returns when it ends.
-                    repeatMode = Player.REPEAT_MODE_OFF
+    // Apply live volume changes without recreating the player (Phase 13).
+    LaunchedEffect(exo, trailerVolume) { exo.volume = trailerVolume }
+
+    // One listener for the leased player's lifetime. Reports transitions up to the rotation controller
+    // (Phase 19) and drives the crossfade. On unmount it's detached (not released — the pool owns it).
+    DisposableEffect(exo) {
+        val listener =
+            object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    when (state) {
+                        // Ready + playWhenReady -> actually playing: show the video + hold the rotation.
+                        Player.STATE_READY -> {
+                            showTrailer.value = true
+                            onStateChanged.value(HeroTrailerState.PLAYING)
+                        }
+                        Player.STATE_ENDED -> {
+                            showTrailer.value = false
+                            onStateChanged.value(HeroTrailerState.FINISHED)
+                        }
+                        else -> Unit
+                    }
                 }
-            // Crossfade back to the backdrop when the trailer finishes or can't play (e.g. the
-            // engine hasn't cached it yet) instead of looping or holding a dead player frame.
-            player.addListener(
-                object : Player.Listener {
-                    override fun onPlaybackStateChanged(state: Int) {
-                        if (state == Player.STATE_ENDED) showTrailer = false
-                    }
 
-                    override fun onPlayerError(error: PlaybackException) {
-                        showTrailer = false
-                    }
-                },
-            )
-            exoPlayer = player
-            player.setMediaItem(MediaItem.fromUri(trailerUrl))
-            player.prepare()
-            if (card.trailerStartOffsetMs > 0) {
-                player.seekTo(card.trailerStartOffsetMs.toLong())
+                override fun onPlayerError(error: PlaybackException) {
+                    showTrailer.value = false
+                    onStateChanged.value(HeroTrailerState.FAILED)
+                }
             }
-            player.playWhenReady = true
-            showTrailer = true
+        exo.addListener(listener)
+        onDispose {
+            exo.removeListener(listener)
+            exo.playWhenReady = false
         }
     }
 
-    DisposableEffect(exoPlayer) {
-        val player = exoPlayer
-        onDispose { player?.release() }
+    // Prepare + play the active hero's trailer after the engine's auto-play delay, swapping media on
+    // the leased player. Reports PREPARING immediately (rotation keeps counting until it actually
+    // plays) and NONE when there's no trailer; PLAYING/FINISHED/FAILED come from the listener above.
+    LaunchedEffect(trailerUrl) {
+        showTrailer.value = false
+        if (trailerUrl == null) {
+            exo.playWhenReady = false
+            exo.clearMediaItems()
+            onStateChanged.value(HeroTrailerState.NONE)
+            return@LaunchedEffect
+        }
+        onStateChanged.value(HeroTrailerState.PREPARING)
+        delay(card.autoPlayDelayMs.coerceAtLeast(0).toLong())
+        exo.volume = trailerVolume
+        exo.setMediaItem(MediaItem.fromUri(trailerUrl))
+        exo.prepare()
+        if (card.trailerStartOffsetMs > 0) {
+            exo.seekTo(card.trailerStartOffsetMs.toLong())
+        }
+        exo.playWhenReady = true
     }
 
     // The floating card: inset (via the caller's padding), rounded, shadowed, hairline-bordered.
@@ -172,17 +211,17 @@ fun Billboard(
                 .border(1.dp, Color.White.copy(alpha = 0.06f), cardShape),
     ) {
         Crossfade(
-            targetState = showTrailer && exoPlayer != null,
+            targetState = showTrailer.value,
             animationSpec = tween(durationMillis = 400),
             label = "billboard-media",
         ) { playing ->
-            if (playing && exoPlayer != null) {
+            if (playing) {
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
                             useController = false
                             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            player = exoPlayer
+                            player = exo
                         }
                     },
                     modifier = Modifier.fillMaxSize(),

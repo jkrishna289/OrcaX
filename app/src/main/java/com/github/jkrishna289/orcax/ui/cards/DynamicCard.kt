@@ -1,6 +1,7 @@
 package com.github.jkrishna289.orcax.ui.cards
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -31,6 +32,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
@@ -52,9 +55,12 @@ import com.github.jkrishna289.orcax.engine.CardImageType
 import com.github.jkrishna289.orcax.engine.CardType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RenderRow
+import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.Cards
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
+import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
+import com.github.jkrishna289.orcax.ui.TrailerPhase
 import com.github.jkrishna289.orcax.ui.enableMarquee
 import com.github.jkrishna289.orcax.ui.main.EngineHomeArt
 import com.github.jkrishna289.orcax.ui.main.engineCardArt
@@ -80,6 +86,8 @@ fun DynamicCard(
     // trailer so non-home callers (debug preview, detail "similar" row) render unchanged.
     trailerUrlFor: (RenderItem) -> String? = { null },
     backdropUrlFor: (RenderItem) -> String? = { null },
+    // Queries the engine trailer state machine for adaptive, state-driven playback. Null = best-effort.
+    trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
 ) {
     val card = item.card
     val resolvedImageUrl = rememberEngineImageUrl(item)
@@ -125,6 +133,7 @@ fun DynamicCard(
                 onLongClick = onLongClick,
                 trailerUrlFor = trailerUrlFor,
                 backdropUrlFor = backdropUrlFor,
+                trailerStatusProvider = trailerStatusProvider,
                 modifier = modifier,
             )
     }
@@ -146,6 +155,7 @@ private fun EngineCardBody(
     modifier: Modifier = Modifier,
     trailerUrlFor: (RenderItem) -> String? = { null },
     backdropUrlFor: (RenderItem) -> String? = { null },
+    trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
 ) {
     val card = item.card
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
@@ -161,29 +171,43 @@ private fun EngineCardBody(
     val focusedAfterDelay by rememberFocusedAfterDelay(interactionSource)
     val cardShape = RoundedCornerShape(8.dp)
 
-    // 16:9 trailer flow: hold focus for the dwell (3.5s) → the trailer starts loading → ONLY once
-    // playback is confirmed (player READY) does the card expand HORIZONTALLY — a real layout width
-    // change, so the LazyRow slides the neighboring cards aside instead of overdrawing them — and the
-    // trailer plays (once, no loop; the card collapses back when it ends). Cards without a trailer
-    // (no URL, cache miss, unplayable) never enlarge. Poster cards are untouched.
+    // 16:9 trailer flow (redesigned for perceived performance). Hold focus for the dwell (3.5s) → the
+    // card expands IMMEDIATELY and shows a loading shimmer while the trailer prepares (no waiting on
+    // the player to reach READY) → it crossfades to video once actually playing → it collapses back
+    // when the trailer ends or turns out unavailable. Expansion is horizontal layout width (the LazyRow
+    // slides neighbours aside) PLUS a subtle centred +15% height. Cards without a trailer URL never
+    // enlarge; poster cards are untouched.
     val focused by interactionSource.collectIsFocusedAsState()
     var playTrailer by remember { mutableStateOf(false) }
-    var trailerReady by remember { mutableStateOf(false) }
+    var trailerPhase by remember { mutableStateOf(TrailerPhase.IDLE) }
     val trailerUrl = remember(item) { if (isWide) trailerUrlFor(item) else null }
     val backdropUrl = remember(item) { if (isWide) backdropUrlFor(item) else null }
+    // Per-item status query for the adaptive, state-driven start (bound to this item).
+    val statusProvider: (suspend () -> TrailerStatus?)? =
+        remember(item) { trailerStatusProvider?.let { provider -> { provider(item) } } }
     LaunchedEffect(focused) {
         if (focused && isWide && trailerUrl != null) {
             delay(TRAILER_DWELL_MS)
             playTrailer = true
         } else {
             playTrailer = false
-            trailerReady = false
+            trailerPhase = TrailerPhase.IDLE
         }
     }
+    // Expand as soon as the dwell fires — not gated on the player being READY (that felt sluggish) —
+    // and collapse only if the trailer proves unavailable.
+    val expanded = isWide && playTrailer && trailerUrl != null && trailerPhase != TrailerPhase.UNAVAILABLE
     val animatedWidth by animateDpAsState(
-        targetValue = if (isWide && focused && trailerReady) width * WIDE_FOCUS_EXPAND else width,
+        targetValue = if (expanded) width * WIDE_FOCUS_EXPAND else width,
         animationSpec = tween(durationMillis = 260),
-        label = "wide-card-expand",
+        label = "wide-card-expand-width",
+    )
+    // Subtle +15% height, grown from the centre as a transform (not a layout change) so it holds 60fps,
+    // doesn't reflow the row, and doesn't clip (Phase 12).
+    val heightScale by animateFloatAsState(
+        targetValue = if (expanded) WIDE_FOCUS_HEIGHT_SCALE else 1f,
+        animationSpec = tween(durationMillis = 260),
+        label = "wide-card-expand-height",
     )
 
     Column(
@@ -201,10 +225,18 @@ private fun EngineCardBody(
                 CardDefaults.border(
                     focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = cardShape),
                 ),
-            // Wide cards must NOT scale-transform (that draws over neighbors) — their focus growth is
-            // the animated layout width above, which pushes the row's other cards aside instead.
+            // Wide cards keep the TV focus scale OFF: horizontal growth is the animated layout width
+            // above (neighbours slide aside, no overdraw), and the vertical growth is the centred
+            // graphicsLayer scaleY below — a transform, so it grows into the row's spacing without
+            // reflowing the row or clipping. Poster cards keep the default focus scale.
             scale = if (isWide) CardDefaults.scale(focusedScale = 1f) else CardDefaults.scale(),
-            modifier = Modifier.size(animatedWidth, height),
+            modifier =
+                Modifier
+                    .size(animatedWidth, height)
+                    .graphicsLayer {
+                        scaleY = heightScale
+                        transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    },
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 EngineCardArt(
@@ -215,16 +247,18 @@ private fun EngineCardBody(
                 )
 
                 if (isWide) {
-                    // Mounted after the dwell; stays on the art until READY (which also triggers the
-                    // expansion), plays once with quiet audio, and reports ended/error so the card
-                    // collapses back. No encircled play-icon overlay — enlarge + trailer is the cue.
+                    // Mounted after the dwell; shows the backdrop + shimmer while preparing, crossfades
+                    // to video once actually playing, plays once at the configured volume, and reports
+                    // its phase so the card expands immediately and collapses on end/unavailable.
                     if (playTrailer && trailerUrl != null) {
                         InlineCardTrailer(
                             trailerUrl = trailerUrl,
                             backdropUrl = backdropUrl,
                             play = true,
-                            volume = TRAILER_VOLUME,
-                            onReadyChange = { trailerReady = it },
+                            // Centralised inline-trailer volume (Phase 13); applied live.
+                            volume = LocalTrailerVolume.current,
+                            statusProvider = statusProvider,
+                            onPhaseChange = { trailerPhase = it },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -539,6 +573,8 @@ fun DynamicCardRow(
     // Resolve a 16:9 card's inline trailer + backdrop URLs (engine-cached). Default = no trailer.
     trailerUrlFor: (RenderItem) -> String? = { null },
     backdropUrlFor: (RenderItem) -> String? = { null },
+    // Queries the engine trailer state machine for adaptive, state-driven playback. Null = best-effort.
+    trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
 ) {
     ItemRow(
         title = row.title,
@@ -554,6 +590,7 @@ fun DynamicCardRow(
                     onLongClick = onLongClick,
                     trailerUrlFor = trailerUrlFor,
                     backdropUrlFor = backdropUrlFor,
+                    trailerStatusProvider = trailerStatusProvider,
                     modifier =
                         cardModifier.onFocusChanged {
                             if (it.isFocused) onFocusItem(item)
@@ -574,16 +611,19 @@ private const val WIDE_CARD_SCALE = 0.75f
 private const val LARGE_CARD_SCALE = 1.35f
 
 /**
- * How much wider a focused 16:9 card grows (horizontal-only, in layout — neighbors slide aside).
+ * How much wider a focused 16:9 card grows (horizontal, in layout — neighbors slide aside).
  * The trailer fills the wider box via center-crop for a cinematic look.
  */
 private const val WIDE_FOCUS_EXPAND = 1.45f
 
+/**
+ * How much taller a focused 16:9 card grows — a subtle +15%, applied as a centred transform (not a
+ * layout change) so it grows into the row's spacing without reflowing the row or clipping (Phase 12).
+ */
+private const val WIDE_FOCUS_HEIGHT_SCALE = 1.15f
+
 /** Sustained focus on a 16:9 card before its trailer starts loading (avoids firing while scrolling). */
 private const val TRAILER_DWELL_MS = 3_500L
-
-/** Inline-card trailer audio: quiet, not muted (per the user) and not intrusive on a 10-ft UI. */
-private const val TRAILER_VOLUME = 0.2f
 
 /** Font size of the oversized Top-10 rank numeral drawn over the poster. */
 private val RANK_NUMERAL_SP = 88.sp

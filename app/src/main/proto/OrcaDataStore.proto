@@ -104,6 +104,20 @@ enum ThemeSongVolume {
   HIGHEST = 5;
 }
 
+// Volume level for inline trailer previews (home billboard + 16:9 card trailers). The 0 value is
+// an "unset" sentinel that resolves to Low (20%) at runtime, so existing installs keep the
+// long-standing quiet-not-muted inline audio without a migration. The six concrete levels below
+// are what the settings UI exposes (see the trailer_preview_volume string-array).
+enum TrailerPreviewVolume {
+  TRAILER_PREVIEW_VOLUME_UNSPECIFIED = 0;
+  TRAILER_PREVIEW_VOLUME_MUTE = 1;      // 0%
+  TRAILER_PREVIEW_VOLUME_VERY_LOW = 2;  // 10%
+  TRAILER_PREVIEW_VOLUME_LOW = 3;       // 20% (default)
+  TRAILER_PREVIEW_VOLUME_MEDIUM = 4;    // 35%
+  TRAILER_PREVIEW_VOLUME_HIGH = 5;      // 50%
+  TRAILER_PREVIEW_VOLUME_MAX = 6;       // 100%
+}
+
 enum AppThemeColors {
   PURPLE = 0;
   BLUE = 1;
@@ -183,6 +197,7 @@ message InterfacePreferences {
   bool disable_scroll_top_on_back = 14;
   bool hide_position_footer = 15;
   bool disable_page_with_remote_buttons = 16;
+  TrailerPreviewVolume trailer_preview_volume = 17;
 }
 
 message AdvancedPreferences {

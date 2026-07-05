@@ -630,6 +630,20 @@
         <item>@string/volume_full</item>
     </string-array>
 
+    <string name="trailer_preview_volume">Trailer preview volume</string>
+    <string name="volume_mute">Mute</string>
+    <string name="volume_very_low">Very low</string>
+    <string name="volume_maximum">Maximum</string>
+    <!-- Order MUST match TrailerPreviewVolume enum values 1..6 (Mute..Max); see AppPreference.TrailerPreviewVolumePref. -->
+    <string-array name="trailer_preview_volume_levels">
+        <item>@string/volume_mute</item>
+        <item>@string/volume_very_low</item>
+        <item>@string/volume_low</item>
+        <item>@string/volume_medium</item>
+        <item>@string/volume_high</item>
+        <item>@string/volume_maximum</item>
+    </string-array>
+
     <string name="purple">Purple</string>
     <string name="orange">Orange</string>
     <string name="bold_blue">Bold Blue</string>

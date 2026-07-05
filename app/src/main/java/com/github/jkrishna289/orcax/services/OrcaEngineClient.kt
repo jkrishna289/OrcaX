@@ -13,6 +13,7 @@ import com.github.jkrishna289.orcax.engine.SUPPORTED_CARD_TYPES_QUERY
 import com.github.jkrishna289.orcax.engine.SimilarResponse
 import com.github.jkrishna289.orcax.engine.TelemetryBatch
 import com.github.jkrishna289.orcax.engine.TelemetryEvent
+import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.services.hilt.AuthOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -227,6 +228,37 @@ class OrcaEngineClient
             val path = resolvedPath ?: ENGINE_PATHS.first()
             val type = if (mediaType == com.github.jkrishna289.orcax.engine.MediaType.SERIES) "tv" else "movie"
             return "$base$path/Trailer/$tmdbId?type=$type"
+        }
+
+        /**
+         * Queries the trailer state machine for a title (the trailer redesign's status protocol).
+         * Returns the current lifecycle state, or null when the engine is unreachable / too old to
+         * expose the endpoint (callers then fall back to a best-effort direct play attempt). The
+         * endpoint always answers 200 (state "Unknown" on a miss), so it never trips the 404-based
+         * root probing.
+         */
+        suspend fun getTrailerStatus(
+            tmdbId: Int?,
+            mediaType: com.github.jkrishna289.orcax.engine.MediaType,
+        ): TrailerStatus? {
+            if (tmdbId == null || tmdbId <= 0) return null
+            val type = if (mediaType == com.github.jkrishna289.orcax.engine.MediaType.SERIES) "tv" else "movie"
+            return get("/Trailer/$tmdbId/status?type=$type") { EngineJson.decodeFromString<TrailerStatus>(it) }
+        }
+
+        /**
+         * Predictively enqueues trailer production for titles the user is likely to reach next (row
+         * neighbours, the next hero, a detail page just opened) at a below-focus [priority]. Fire-and-
+         * forget: the engine bounds concurrency and coalesces duplicates, so the client can prefetch
+         * liberally. No-op when there's nothing to send / no engine.
+         */
+        suspend fun prefetchTrailers(
+            items: List<com.github.jkrishna289.orcax.engine.TrailerPrefetchItem>,
+            priority: String,
+        ): Boolean {
+            if (items.isEmpty()) return false
+            val body = EngineJson.encodeToString(items)
+            return post("/Trailer/Prefetch?priority=$priority", body) { true } ?: false
         }
 
         /** Returns true if the engine plugin responds on this server (for graceful degradation). */
