@@ -32,16 +32,32 @@ class PlaybackKeyHandler(
 ) {
     private var leftHandledByRepeat = false
     private var rightHandledByRepeat = false
+    private val seenDownKeys = mutableSetOf<Key>()
 
     fun onKeyEvent(it: KeyEvent): Boolean {
+        // This handler acts on KeyUp. Only act on a KeyUp whose KeyDown it also saw —
+        // an orphan KeyUp means the press was consumed by an overlay that closed
+        // mid-press (focus moved here before release); acting on it double-applies
+        // the key (e.g. OK that resumed from Phase 2 immediately re-pausing).
+        if (it.type == KeyEventType.KeyDown) {
+            seenDownKeys.add(it.key)
+        } else if (it.type == KeyEventType.KeyUp && !seenDownKeys.remove(it.key)) {
+            return false
+        }
+
+        val isBareState = !controllerViewState.controlsVisible && !isOverlayActive()
         if (it.type == KeyEventType.KeyUp) {
             val isPauseFromBareState = isEnterKey(it) &&
-                !controllerViewState.controlsVisible &&
-                !isOverlayActive() &&
+                isBareState &&
                 player.isPlaying
+            // Bare-state skips get the skip indicator as feedback — they must not
+            // summon the toolbar (same exemption as BACK).
+            val isBareSkip = skipWithLeftRight &&
+                (isSkipBack(it) || isSkipForward(it)) &&
+                isBareState
             // BACK must not count as a generic interaction — otherwise it re-shows the
             // toolbar on every press and the dismiss → exit chain can never terminate.
-            if (!isPauseFromBareState && !isBackKey(it)) {
+            if (!isPauseFromBareState && !isBackKey(it) && !isBareSkip) {
                 onInteraction.invoke()
             }
         }
@@ -56,7 +72,7 @@ class PlaybackKeyHandler(
 
         var result = true
         if (isDirectionalDpad(it) || isEnterKey(it) || isControllerMedia(it)) {
-            if (!controllerViewState.controlsVisible && !isOverlayActive()) {
+            if (isBareState) {
                 if (skipWithLeftRight && isSkipBack(it)) {
                     updateSkipIndicator(-seekBack.inWholeMilliseconds)
                     player.seekBack(seekBack)
@@ -72,7 +88,9 @@ class PlaybackKeyHandler(
                         }
                     }
                 } else {
-                    controllerViewState.showControls()
+                    // no-op: the phase toolbar was already summoned via onInteraction.
+                    // The legacy OSD flag must stay untouched during video playback —
+                    // the phase system is the single OSD source of truth.
                 }
             } else {
                 // OSD is visible — D-pad drives UI focus navigation, not transport
@@ -118,8 +136,6 @@ class PlaybackKeyHandler(
                     result = false
                 }
             }
-        } else if (isEnterKey(it) && !controllerViewState.controlsVisible) {
-            controllerViewState.showControls()
         } else if (isBackKey(it)) {
             // BACK is owned by the phase-aware BackHandlers in PlaybackPage (dismiss
             // chrome first, then exit). Keep the legacy OSD in sync but never consume

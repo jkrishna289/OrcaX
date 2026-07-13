@@ -13,6 +13,7 @@ import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.data.model.Person
 import com.github.jkrishna289.orcax.data.model.Trailer
+import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.preferences.ThemeSongVolume
 import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.ExtrasService
@@ -20,6 +21,7 @@ import com.github.jkrishna289.orcax.services.FavoriteWatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.NavigationManager
+import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.PeopleFavorites
 import com.github.jkrishna289.orcax.services.SeerrService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
@@ -48,6 +50,7 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.MediaStreamType
+import com.github.jkrishna289.orcax.engine.MediaType as EngineMediaType
 import org.jellyfin.sdk.model.api.request.GetSimilarItemsRequest
 import timber.log.Timber
 import java.util.UUID
@@ -72,6 +75,7 @@ class MovieViewModel
         private val userPreferencesService: UserPreferencesService,
         private val backdropService: BackdropService,
         private val mediaManagementService: MediaManagementService,
+        private val orcaEngineClient: OrcaEngineClient,
         @Assisted val itemId: UUID,
     ) : ViewModel() {
         @AssistedFactory
@@ -136,7 +140,7 @@ class MovieViewModel
                         chapters = chapters,
                     )
                 }
-                backdropService.submit(movie)
+                backdropService.submit(movie, resolveTrailer = true)
                 viewModelScope.launchIO {
                     trailerService.getLocalTrailers(movie).letNotEmpty { localTrailers ->
                         _state.update {
@@ -145,6 +149,11 @@ class MovieViewModel
                             )
                         }
                     }
+                }
+                viewModelScope.launchIO {
+                    val tmdbId = movie.tmdbId ?: return@launchIO
+                    val status = orcaEngineClient.getRequestStatus(tmdbId, EngineMediaType.MOVIE)
+                    _state.update { it.copy(availability = status?.availability) }
                 }
                 viewModelScope.launchIO {
                     val people = peopleFavorites.getPeopleFor(movie)
@@ -308,7 +317,40 @@ class MovieViewModel
                 navigationManager.goBack()
             }
         }
+
+        /**
+         * Submits an engine-proxied (Jellyseerr) request for this title — only meaningful when the
+         * engine reported [AvailabilityState.REQUEST]. Reflects the engine's response rather than
+         * toggling optimistically.
+         */
+        fun requestMedia() {
+            val movie = state.value.movie ?: return
+            val tmdbId = movie.tmdbId ?: return
+            val userId = serverRepository.currentUser.value?.id ?: return
+            if (state.value.requestInFlight) return
+            _state.update { it.copy(requestInFlight = true) }
+            viewModelScope.launchIO {
+                val result =
+                    runCatching {
+                        orcaEngineClient.requestMedia(userId, tmdbId, "movie", movie.name)
+                    }.getOrNull()
+                _state.update {
+                    it.copy(
+                        requestInFlight = false,
+                        availability =
+                            if (result?.success == true) result.availability else it.availability,
+                    )
+                }
+                if (result?.success != true) {
+                    val message = result?.message?.takeIf { m -> m.isNotBlank() }
+                    showToast(context, message ?: "Couldn't request ${movie.name}")
+                }
+            }
+        }
     }
+
+private val BaseItem.tmdbId: Int?
+    get() = data.providerIds?.get("Tmdb")?.toIntOrNull()
 
 data class MovieState(
     val loading: DataLoadingState<BaseItem> = DataLoadingState.Pending,
@@ -320,6 +362,10 @@ data class MovieState(
     val discovered: List<DiscoverItem> = emptyList(),
     val chosenStreams: ChosenStreams? = null,
     val canDelete: Boolean = false,
+    /** Orca-Engine request status for this title; null = engine disabled / no TMDB match. */
+    val availability: AvailabilityState? = null,
+    /** True while an engine request submitted from this screen is awaiting its response. */
+    val requestInFlight: Boolean = false,
 ) {
     val movie: BaseItem? = (loading as? DataLoadingState.Success<BaseItem>)?.data
 }

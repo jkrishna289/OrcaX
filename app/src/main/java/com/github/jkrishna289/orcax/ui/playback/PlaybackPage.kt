@@ -11,6 +11,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.type
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,12 +79,15 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.surfaceColorAtElevation
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.data.model.Playlist
+import com.github.jkrishna289.orcax.data.model.TrackIndex
 import com.github.jkrishna289.orcax.preferences.AssPlaybackMode
 import com.github.jkrishna289.orcax.preferences.PlayerBackend
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.preferences.skipBackOnResume
 import com.github.jkrishna289.orcax.ui.AspectRatios
+import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
+import com.github.jkrishna289.orcax.ui.components.TimeDisplay
 import com.github.jkrishna289.orcax.ui.components.ErrorMessage
 import com.github.jkrishna289.orcax.ui.components.LoadingPage
 import com.github.jkrishna289.orcax.ui.components.rememberLogoUrl
@@ -239,7 +244,6 @@ fun PlaybackPageContent(
         Modifier.resizeWithContentScale(effectiveContentScale, presentationState.videoSizeDp)
     val focusRequester = remember { FocusRequester() }
     val playPauseState = rememberPlayPauseButtonState(player)
-    val seekBarState = rememberSeekBarState(player, scope)
 
     LaunchedEffect(Unit) {
         focusRequester.tryRequestFocus()
@@ -253,8 +257,7 @@ fun PlaybackPageContent(
     // Single focus owner: while any overlay (Phase 1 toolbar or Phase 2 paused
     // overlay) is showing, the phase system owns focus via its own requesters.
     // Only pull focus back to the video surface when nothing is overlaid.
-    val overlayShowing = phaseState.phase == PlaybackPhase.PAUSED_OVERLAY ||
-        phaseState.toolbarVisibility == ToolbarVisibility.VISIBLE
+    val overlayShowing = phaseState.overlayActive
     LaunchedEffect(overlayShowing) {
         if (!overlayShowing) focusRequester.tryRequestFocus()
     }
@@ -330,11 +333,15 @@ fun PlaybackPageContent(
     // deepened/expandable rail never had anything to reveal. Pull the remaining queue
     // from the playlist (up to 4 ahead) so the rail can actually expand.
     val imageUrlService = LocalImageUrlService.current
-    LaunchedEffect(currentPlayback, playlist, playlist.index, nextUp) {
+    // currentDurationMs is a key because the current card's durationLabel reads it:
+    // it is 0 when the effect first fires and only resolves once playback reports a
+    // real duration — without the key the label would stay "0m" forever.
+    LaunchedEffect(currentPlayback, playlist, playlist.index, nextUp, currentDurationMs) {
         val items = buildList {
             currentPlayback?.item?.let { current ->
                 add(
                     UpNextItem(
+                        itemId              = current.id,
                         episodeNumber       = current.data.indexNumber ?: 0,
                         title               = current.name ?: "",
                         durationLabel       = formatUpNextDurationMs(currentDurationMs),
@@ -351,6 +358,7 @@ fun PlaybackPageContent(
                 val durationMs = (next.data.runTimeTicks ?: 0L) / 10_000L
                 add(
                     UpNextItem(
+                        itemId              = next.id,
                         episodeNumber       = next.data.indexNumber ?: 0,
                         title               = next.name ?: "",
                         durationLabel       = formatUpNextDurationMs(durationMs),
@@ -406,10 +414,16 @@ fun PlaybackPageContent(
         val audioStreams = mediaInfo?.audioStreams.orEmpty()
         val subtitleStreams = mediaInfo?.subtitleStreams.orEmpty()
         val audioItems = audioStreams.map { RouletteItem(title = it.displayTitle, meta = it.codec ?: "") }
-        val subtitleItems = subtitleStreams.map { RouletteItem(title = it.displayTitle, meta = it.language ?: "") }
+        // Row 0 is always "Off" so disabled subtitles read truthfully and can be re-disabled.
+        val subtitleItems = buildList {
+            add(RouletteItem(title = "Off", meta = ""))
+            subtitleStreams.forEach { add(RouletteItem(title = it.displayTitle, meta = it.language ?: "")) }
+        }
         val audioIdx = audioStreams.indexOfFirst { it.index == currentItemPlayback?.audioIndex }.coerceAtLeast(0)
-        val subtitleIdx = subtitleStreams.indexOfFirst { it.index == currentItemPlayback?.subtitleIndex }.takeIf { it >= 0 } ?: -1
-        phaseViewModel.updateTracks(audioItems, subtitleItems, audioIdx, subtitleIdx.coerceAtLeast(0))
+        val subtitleIdx = subtitleStreams
+            .indexOfFirst { it.index == currentItemPlayback?.subtitleIndex }
+            .let { if (it >= 0) it + 1 else 0 }          // 0 = Off
+        phaseViewModel.updateTracks(audioItems, subtitleItems, audioIdx, subtitleIdx)
     }
 
     // ── Bitstream toast: fire phaseViewModel.onPlaybackStarted when tracks
@@ -479,10 +493,7 @@ fun PlaybackPageContent(
                 viewModel.navigationManager.goBack()
             },
             onPlaybackDialogTypeClick = { playbackDialog = it },
-            isOverlayActive = {
-                phaseState.toolbarVisibility == ToolbarVisibility.VISIBLE ||
-                    phaseState.phase == PlaybackPhase.PAUSED_OVERLAY
-            },
+            isOverlayActive = { phaseState.overlayActive },
         )
 
     val onPlaybackActionClick: (PlaybackAction) -> Unit = {
@@ -683,7 +694,9 @@ fun PlaybackPageContent(
             // ACTIVE so they don't paint over the Phase 2 cinematic overlay.
             if (skipIndicatorDuration == 0L && currentItemPlayback.subtitleIndexEnabled &&
                 !presentationState.coverSurface && phaseState.phase == PlaybackPhase.ACTIVE) {
-                val maxSize by animateFloatAsState(if (controllerViewState.controlsVisible) .7f else 1f)
+                val maxSize by animateFloatAsState(
+                    if (phaseState.toolbarVisibility == ToolbarVisibility.VISIBLE) .7f else 1f,
+                )
                 val isImageSubtitles = remember(cues) { cues.firstOrNull()?.bitmap != null }
                 AndroidView(
                     factory = { context ->
@@ -762,12 +775,62 @@ fun PlaybackPageContent(
                             if (stream != null) viewModel.changeAudioStream(stream.index)
                         }
                         RouletteType.SUBTITLE -> {
-                            val stream = mediaInfo?.subtitleStreams?.getOrNull(index)
-                            if (stream != null) viewModel.changeSubtitleStream(stream.index)
+                            if (index == 0) {
+                                // Row 0 is the "Off" entry, not a stream.
+                                viewModel.changeSubtitleStream(TrackIndex.DISABLED)
+                            } else {
+                                mediaInfo?.subtitleStreams?.getOrNull(index - 1)
+                                    ?.let { viewModel.changeSubtitleStream(it.index) }
+                            }
                         }
                     }
-                }
+                },
+                onPlayUpNext = { upNext ->
+                    when {
+                        upNext.isCurrentlyWatching -> {           // card 0 = resume
+                            player.play()
+                            phaseViewModel.onPlayPauseToggle()
+                        }
+                        upNext.itemId != null -> viewModel.playPlaylistItem(upNext.itemId)
+                    }
+                },
+                qualityLabel = qualityLabel,
+                onQualityRequested = { playbackDialog = PlaybackDialogType.QUALITY },
             )
+
+            // ── Clock + debug overlay ────────────────────────────────────────
+            // Carried over from the retired PlaybackOverlay: both ride on the
+            // phase chrome (old gate was the legacy controlsVisible flag).
+            AnimatedVisibility(
+                visible = !showDebugInfo &&
+                    preferences.appPreferences.interfacePreferences.showClock &&
+                    phaseState.overlayActive,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .zIndex(2f),
+            ) {
+                TimeDisplay()
+            }
+            AnimatedVisibility(
+                visible = showDebugInfo && phaseState.overlayActive,
+                enter = slideInVertically() + fadeIn(),
+                exit = slideOutVertically() + fadeOut(),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .zIndex(2f),
+            ) {
+                PlaybackDebugOverlay(
+                    currentPlayback = currentPlayback,
+                    modifier =
+                        Modifier
+                            .padding(8.dp)
+                            .background(AppColors.TransparentBlack50),
+                )
+            }
         }
 
         // Ask to skip intros, etc button
@@ -779,18 +842,27 @@ fun PlaybackPageContent(
                     .align(Alignment.BottomEnd),
         ) {
             currentSegment?.let { segment ->
-                val focusRequester = remember { FocusRequester() }
+                val segmentFocusRequester = remember { FocusRequester() }
                 LaunchedEffect(Unit) {
-                    focusRequester.tryRequestFocus()
+                    segmentFocusRequester.tryRequestFocus()
                     delay(10.seconds)
                     viewModel.updateSegment(segment.segment.id, true)
+                }
+                androidx.compose.runtime.DisposableEffect(Unit) {
+                    onDispose {
+                        // The button held focus; hand it back to the video surface —
+                        // but only if no overlay owns focus right now.
+                        if (!phaseState.overlayActive) {
+                            focusRequester.tryRequestFocus()
+                        }
+                    }
                 }
                 SkipSegmentButton(
                     type = segment.segment.type,
                     onClick = {
                         viewModel.updateSegment(segment.segment.id, false)
                     },
-                    modifier = Modifier.focusRequester(focusRequester),
+                    modifier = Modifier.focusRequester(segmentFocusRequester),
                 )
             }
         }

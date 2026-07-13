@@ -41,6 +41,8 @@ sealed class BitstreamToastState {
 
 @Immutable
 data class UpNextItem(
+    // Playlist identity so OK on a card can actually play it; null = not playable.
+    val itemId: java.util.UUID? = null,
     val episodeNumber: Int,
     val title: String,
     val durationLabel: String,
@@ -118,4 +120,11 @@ data class PlaybackUiState(
     // Phase 2 roulette picker
     val p2PickerType: RouletteType? = null,
     val p2PickerFocusIndex: Int = 0
-)
+) {
+    // Single definition of "an overlay owns focus / chrome is showing". Every
+    // consumer (focus hand-back, key routing, chrome gating) must read this
+    // instead of re-deriving it, so a new phase or overlay state can't drift
+    // the sites apart.
+    val overlayActive: Boolean
+        get() = phase == PlaybackPhase.PAUSED_OVERLAY || toolbarVisibility == ToolbarVisibility.VISIBLE
+}

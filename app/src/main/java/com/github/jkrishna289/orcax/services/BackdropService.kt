@@ -44,6 +44,7 @@ class BackdropService
     constructor(
         @param:ApplicationContext private val context: Context,
         private val imageUrlService: ImageUrlService,
+        private val trailerService: TrailerService,
         private val preferences: DataStore<AppPreferences>,
     ) {
         private val extractedColorCache = LruCache<String, ExtractedColors>(50)
@@ -52,18 +53,39 @@ class BackdropService
         val backdropFlow = _backdropFlow
 
         /**
-         * Update the backdrop to use the specified item
+         * Update the backdrop to use the specified item.
+         *
+         * [resolveTrailer] additionally resolves the item's local trailer stream so the backdrop can
+         * crossfade into an ambient trailer preview. It is opt-in (details pages only) because
+         * [submit] is also called per-focus by grids/rows, where an extra API call per focused card
+         * would be wasteful.
          */
-        suspend fun submit(item: BaseItem) =
-            withContext(Dispatchers.IO) {
-                val imageUrl =
-                    if (item.type == BaseItemKind.GENRE) {
-                        item.imageUrlOverride
-                    } else {
-                        imageUrlService.getItemImageUrl(item, ImageType.BACKDROP)
-                    }
-                submit(item.id.toString(), imageUrl)
+        suspend fun submit(
+            item: BaseItem,
+            resolveTrailer: Boolean = false,
+        ) = withContext(Dispatchers.IO) {
+            val imageUrl =
+                if (item.type == BaseItemKind.GENRE) {
+                    item.imageUrlOverride
+                } else {
+                    imageUrlService.getItemImageUrl(item, ImageType.BACKDROP)
+                }
+            submit(item.id.toString(), imageUrl)
+            if (resolveTrailer) resolveTrailerUrl(item)
+        }
+
+        /**
+         * Resolves the local (Jellyfin-hosted) trailer stream for [item] and attaches it to the
+         * current backdrop — only if the backdrop still belongs to [item] once resolved. Remote
+         * (YouTube) trailers are already excluded by [TrailerService.getLocalTrailerStreamUrl].
+         */
+        private suspend fun resolveTrailerUrl(item: BaseItem) {
+            val itemId = item.id.toString()
+            val trailerUrl = runCatching { trailerService.getLocalTrailerStreamUrl(item.id) }.getOrNull()
+            _backdropFlow.update {
+                if (it.itemId == itemId) it.copy(trailerUrl = trailerUrl) else it
             }
+        }
 
         /**
          * Update the backdrop to use the specified discovered item
@@ -82,6 +104,8 @@ class BackdropService
                     it.copy(
                         itemId = itemId,
                         imageUrl = null,
+                        // A new item never inherits the previous item's ambient trailer.
+                        trailerUrl = null,
                     )
                 }
                 extractColors(itemId, imageUrl)
@@ -274,6 +298,11 @@ data class BackdropResult(
     val primaryColor: Color = Color.Unspecified,
     val secondaryColor: Color = Color.Unspecified,
     val tertiaryColor: Color = Color.Unspecified,
+    /**
+     * Directly-playable local trailer stream for the ambient backdrop preview, or null when the
+     * item has none / the submitter didn't opt in (see [BackdropService.submit]).
+     */
+    val trailerUrl: String? = null,
 ) {
     val hasColors: Boolean =
         primaryColor.isSpecified ||

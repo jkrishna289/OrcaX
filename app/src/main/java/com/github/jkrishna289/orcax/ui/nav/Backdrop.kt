@@ -151,17 +151,10 @@ fun Backdrop(
         Box(
             modifier = modifier.fillMaxSize(),
         ) {
-            AsyncImage(
-                model =
-                    ImageRequest
-                        .Builder(LocalContext.current)
-                        .data(backdrop.imageUrl)
-                        .useExistingImageAsPlaceholder(useExistingImageAsPlaceholder)
-                        .transitionFactory(CrossFadeFactory(crossfadeDuration))
-                        .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                alignment = Alignment.TopEnd,
+            // The still image and the ambient trailer share this one inset box, so the trailer is
+            // bounded and edge-faded by the exact same gradients as the image — it can never become
+            // a fullscreen video takeover.
+            Box(
                 modifier =
                     Modifier
                         .align(Alignment.TopEnd)
@@ -209,7 +202,28 @@ fun Backdrop(
                                 blendMode = BlendMode.DstIn,
                             )
                         },
-            )
+            ) {
+                AsyncImage(
+                    model =
+                        ImageRequest
+                            .Builder(LocalContext.current)
+                            .data(backdrop.imageUrl)
+                            .useExistingImageAsPlaceholder(useExistingImageAsPlaceholder)
+                            .transitionFactory(CrossFadeFactory(crossfadeDuration))
+                            .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.TopEnd,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // Ambient trailer preview: dwell → fade a muted, looping video in over the still
+                // image (which stays underneath as the permanent fallback).
+                AmbientBackdropTrailer(
+                    itemId = backdrop.itemId,
+                    trailerUrl = backdrop.trailerUrl,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }

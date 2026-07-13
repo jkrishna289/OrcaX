@@ -54,6 +54,9 @@ fun CinematicSeekBar(
     // When false the bar is a static, non-scrubbing progress indicator (no LEFT/RIGHT
     // seek, no focus thumb/glow) — but it can still hold focus as an inert anchor.
     interactive: Boolean = true,
+    // When false the bar is removed from the focus graph entirely (Phase 1 shows it
+    // as display-only chrome; Phase 2 COMPACT relies on the default as focus anchor).
+    focusable: Boolean = true,
 ) {
     if (showTimestamps) {
         Column(
@@ -70,6 +73,7 @@ fun CinematicSeekBar(
                 onSeek = onSeek,
                 focusRequester = focusRequester,
                 interactive = interactive,
+                focusable = focusable,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -80,6 +84,7 @@ fun CinematicSeekBar(
             onSeek = onSeek,
             focusRequester = focusRequester,
             interactive = interactive,
+            focusable = focusable,
             modifier = modifier
         )
     }
@@ -117,6 +122,7 @@ private fun SeekBarTrackWithThumb(
     focusRequester: FocusRequester?,
     modifier: Modifier = Modifier,
     interactive: Boolean = true,
+    focusable: Boolean = true,
 ) {
     val density = LocalDensity.current
 
@@ -144,7 +150,10 @@ private fun SeekBarTrackWithThumb(
                     else               -> false
                 }
             }
-            .focusable(interactionSource = interactionSource)
+            .then(
+                if (focusable) Modifier.focusable(interactionSource = interactionSource)
+                else Modifier
+            )
             .then(
                 if (interactive) {
                     Modifier.pointerInput(Unit) {

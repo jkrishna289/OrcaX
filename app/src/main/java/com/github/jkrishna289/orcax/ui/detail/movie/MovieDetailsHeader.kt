@@ -20,11 +20,13 @@ import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.ChosenStreams
 import com.github.jkrishna289.orcax.data.model.BaseItem
+import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.ui.components.GenreText
 import com.github.jkrishna289.orcax.ui.components.HeaderUtils
 import com.github.jkrishna289.orcax.ui.components.OverviewText
 import com.github.jkrishna289.orcax.ui.components.QuickDetails
+import com.github.jkrishna289.orcax.ui.components.RequestAvailabilityBadge
 import com.github.jkrishna289.orcax.ui.components.TitleOrLogo
 import com.github.jkrishna289.orcax.ui.components.VideoStreamDetails
 import com.github.jkrishna289.orcax.ui.isNotNullOrBlank
@@ -38,6 +40,9 @@ fun MovieDetailsHeader(
     preferences: UserPreferences,
     movie: BaseItem,
     chosenStreams: ChosenStreams?,
+    availability: AvailabilityState?,
+    requestInFlight: Boolean,
+    requestOnClick: () -> Unit,
     bringIntoViewRequester: BringIntoViewRequester,
     overviewOnClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -83,6 +88,14 @@ fun MovieDetailsHeader(
                         bottom = 16.dp,
                     ),
             )
+            availability?.let {
+                RequestAvailabilityBadge(
+                    availability = it,
+                    requestInFlight = requestInFlight,
+                    onRequest = requestOnClick,
+                    modifier = Modifier.padding(start = HeaderUtils.startPadding, top = 4.dp),
+                )
+            }
             dto.taglines?.firstOrNull()?.let { tagline ->
                 Text(
                     text = tagline,
