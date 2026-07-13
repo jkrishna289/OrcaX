@@ -55,6 +55,7 @@ import com.github.jkrishna289.orcax.services.ScreensaverService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.UserPreferencesService
 import com.github.jkrishna289.orcax.services.hilt.StandardOkHttpClient
+import com.github.jkrishna289.orcax.ui.playback.quality.NetworkAnalyzer
 import com.github.jkrishna289.orcax.ui.isNotNullOrBlank
 import com.github.jkrishna289.orcax.ui.launchDefault
 import com.github.jkrishna289.orcax.ui.launchIO
@@ -156,6 +157,7 @@ constructor(
     @StandardOkHttpClient private val okHttpClient: OkHttpClient,
     private val musicService: MusicService,
     private val engineClient: OrcaEngineClient,
+    private val networkAnalyzer: NetworkAnalyzer,
     @Assisted private val destination: Destination,
 ) : ViewModel(),
     Player.Listener,
@@ -172,7 +174,7 @@ constructor(
     private var positionPollingJob: Job? = null
 
     // ── Quality selection manager ──────────────────────────────────────────
-    val qualityManager = QualityManager(context, api, okHttpClient)
+    val qualityManager = QualityManager(networkAnalyzer)
 
     // True while a stream switch (quality/audio/subtitle change) is in progress.
     // PlaybackPage shows a black cover whenever this is true, preventing the
@@ -180,33 +182,6 @@ constructor(
     // dimensions from the previous one (old SurfaceView frame shows behind
     // the resized PlayerSurface). Reset in onRenderedFirstFrame().
     val isSwitchingStream = MutableStateFlow(true)
-
-    init {
-        // Live adaptive quality: when AUTO detects a bandwidth drop/rise during
-        // playback, restart the stream at the new tier automatically.
-        viewModelScope.launch {
-            qualityManager.forceSwitchRequired.collect {
-                if (player.isPlaying || player.playWhenReady) {
-                    Timber.d("Quality: force-switch triggered by live bandwidth measurement")
-                    // Re-open the current stream at the new AUTO-resolved tier.
-                    // Pull the current item and track selections from live state.
-                    val item = currentPlayback.value?.item ?: return@collect
-                    val playback = currentItemPlayback.value ?: return@collect
-                    changeStreams(
-                        item = item,
-                        audioIndex = playback.audioIndex,
-                        subtitleIndex = playback.subtitleIndex,
-                        positionMs = onMain { player.currentPosition },
-                        userInitiated = false,
-                        enableDirectPlay = qualityManager.effectiveEnableDirectPlay,
-                        enableDirectStream = true,
-                        allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
-                        forceRebuild = true,
-                    )
-                }
-            }
-        }
-    }
 
     internal lateinit var player: Player
 
@@ -260,8 +235,6 @@ constructor(
     }
 
     private fun disconnectPlayer() {
-        monitoringJob?.cancel()
-        monitoringJob = null
         positionPollingJob?.cancel()
         positionPollingJob = null
         if (this@PlaybackViewModel::player.isInitialized) {
@@ -476,7 +449,10 @@ constructor(
             // ── Notify quality manager a new item is starting ─────────────
             // Movies reset to AUTO; TV shows keep the chosen tier per series.
             viewModelScope.launchIO {
-                qualityManager.onNewItem(item.data.seriesId)
+                qualityManager.onNewItem(
+                    item.data.seriesId,
+                    serverRepository.currentUser.value?.id?.toString(),
+                )
                 // Once the speed test finishes and AUTO resolves to a tier,
                 // re-apply the stream so the correct bitrate cap is sent to Jellyfin
                 qualityManager.resolvedTier.first { it != null }
@@ -1108,7 +1084,11 @@ constructor(
                 Timber.d("Quality tier %s already selected, skipping refetch", tier)
                 return@launchIO
             }
-            qualityManager.selectTier(tier, item.data.seriesId)
+            qualityManager.selectTier(
+                tier,
+                item.data.seriesId,
+                serverRepository.currentUser.value?.id?.toString(),
+            )
             val pos = onMain { player.currentPosition }
             changeStreams(
                 item = item,
@@ -1406,13 +1386,26 @@ constructor(
         }
     }
 
-    // ── Playback monitoring loop (spec §7 buffer rules, §8 decoder safety) ───
-
-    private var monitoringJob: Job? = null
-
-    // Cumulative frame counters — reset on each new stream.
-    private var monitorRendered = 0
-    private var monitorDropped = 0
+    /**
+     * ExoPlayer bandwidth estimate — a refinement signal for the measurement
+     * store, NEVER a switch trigger. Gated to direct play/direct stream:
+     * during transcodes Exo measures the server's transcode speed (Jellyfin
+     * throttles ffmpeg once buffered ahead), not the network.
+     */
+    override fun onBandwidthEstimate(
+        eventTime: AnalyticsListener.EventTime,
+        totalLoadTimeMs: Int,
+        totalBytesLoaded: Long,
+        bitrateEstimate: Long,
+    ) {
+        val method = currentPlayback.value?.playMethod
+        if (method == PlayMethod.DIRECT_PLAY || method == PlayMethod.DIRECT_STREAM) {
+            networkAnalyzer.recordExoSample(
+                bitrateEstimate,
+                serverRepository.currentUser.value?.id?.toString(),
+            )
+        }
+    }
 
     private fun startPositionPolling() {
         positionPollingJob?.cancel()
@@ -1428,34 +1421,6 @@ constructor(
         }
     }
 
-    private fun startMonitoringLoop() {
-        monitoringJob?.cancel()
-        monitoringJob = viewModelScope.launchIO {
-            var prevRendered = 0
-            var prevDropped = 0
-            while (isActive) {
-                delay(3_000L)
-                if (!player.isPlaying && !player.playWhenReady) continue
-
-                val exo = player as? ExoPlayer ?: continue
-                val (counters, forwardBufferMs) = onMain {
-                    val c = exo.videoDecoderCounters ?: return@onMain null
-                    val buf = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0L)
-                    Pair(c, buf)
-                } ?: continue
-
-                val totalRendered = counters.renderedOutputBufferCount
-                val totalDropped = counters.droppedBufferCount
-                val deltaRendered = totalRendered - prevRendered
-                val deltaDropped = totalDropped - prevDropped
-                prevRendered = totalRendered
-                prevDropped = totalDropped
-
-                qualityManager.onPlaybackStats(forwardBufferMs, deltaRendered, deltaDropped)
-            }
-        }
-    }
-
     // Player.Listener version — fires for both ExoPlayer and MPV.
     // Delay the reset by 150 ms so Compose has at least 2-3 frames to observe
     // isSwitchingStream=true and paint the black cover before it's removed.
@@ -1463,15 +1428,12 @@ constructor(
     // after setMediaItem) toggle true→false before Compose ever recomposes,
     // so the cover is never shown and the frozen-size guard never engages.
     override fun onRenderedFirstFrame() {
-        monitorRendered = 0
-        monitorDropped = 0
         Timber.i(
             "[STREAM-SWITCH] First frame rendered: method=%s player=#%d",
             currentPlayback.value?.playMethod?.serialName ?: "unknown",
             System.identityHashCode(player),
         )
         startPositionPolling()
-        startMonitoringLoop()
         maybeShowContentWarning()
         viewModelScope.launch(Dispatchers.Main) {
             delay(150L)
