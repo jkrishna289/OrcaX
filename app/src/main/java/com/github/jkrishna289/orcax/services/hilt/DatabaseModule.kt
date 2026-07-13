@@ -16,6 +16,7 @@ import com.github.jkrishna289.orcax.data.LibraryDisplayInfoDao
 import com.github.jkrishna289.orcax.data.Migrations
 import com.github.jkrishna289.orcax.data.PlaybackEffectDao
 import com.github.jkrishna289.orcax.data.PlaybackLanguageChoiceDao
+import com.github.jkrishna289.orcax.data.QualityPreferenceDao
 import com.github.jkrishna289.orcax.data.SeerrServerDao
 import com.github.jkrishna289.orcax.data.ServerPreferencesDao
 import com.github.jkrishna289.orcax.preferences.AppPreferences
@@ -73,6 +74,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun playbackEffectDao(db: AppDatabase): PlaybackEffectDao = db.playbackEffectDao()
+
+    @Provides
+    @Singleton
+    fun qualityPreferenceDao(db: AppDatabase): QualityPreferenceDao = db.qualityPreferenceDao()
 
     @Provides
     @Singleton

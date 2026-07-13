@@ -137,7 +137,7 @@ sealed interface PlaybackAction {
     data class Scale(val scale: ContentScale) : PlaybackAction
     data object Previous : PlaybackAction
     data object Next : PlaybackAction
-    data class ChangeQuality(val tier: QualityTier) : PlaybackAction
+    data class ChangeQuality(val selection: com.github.jkrishna289.orcax.ui.playback.quality.QualitySelection) : PlaybackAction
 }
 
 val buttonSpacing = 12.dp

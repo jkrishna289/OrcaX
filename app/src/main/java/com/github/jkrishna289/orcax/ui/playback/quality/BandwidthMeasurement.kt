@@ -1,5 +1,12 @@
 package com.github.jkrishna289.orcax.ui.playback.quality
 
+/**
+ * Network environment, classified by the SERVER address (not the client's own
+ * link — audit #5). Only selects cache buckets and probe policy; the actual
+ * measurement always dominates decisions.
+ */
+enum class NetworkType { LAN, INTERNET }
+
 /** Where a bandwidth number came from — determines how much we trust it. */
 enum class MeasurementSource(val baseConfidence: Int) {
     /**

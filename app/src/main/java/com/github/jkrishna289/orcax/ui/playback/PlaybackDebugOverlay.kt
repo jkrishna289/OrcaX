@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.ProvideTextStyle
 import androidx.tv.material3.Text
+import com.github.jkrishna289.orcax.ui.playback.quality.QualityDecisionLog
 import com.github.jkrishna289.orcax.preferences.PlayerBackend
 import com.github.jkrishna289.orcax.ui.formatBitrate
 import com.github.jkrishna289.orcax.ui.letNotEmpty
@@ -85,6 +86,18 @@ fun PlaybackDebugOverlay(
             PlaybackTrackInfo(
                 trackSupport = it,
             )
+        }
+        // Last quality decisions (RESOLVE / RESCUE / MANUAL_SELECT …) from the
+        // engine's ring buffer — newest first.
+        val decisions = remember { QualityDecisionLog.history().takeLast(6).reversed() }
+        decisions.letNotEmpty { entries ->
+            ProvideTextStyle(MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface)) {
+                Column(modifier = Modifier.padding(start = 8.dp)) {
+                    entries.forEach { entry ->
+                        Text(entry.format().removePrefix("[AUTO-QUALITY] "))
+                    }
+                }
+            }
         }
     }
 }

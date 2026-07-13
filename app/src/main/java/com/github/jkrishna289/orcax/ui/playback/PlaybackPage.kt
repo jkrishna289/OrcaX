@@ -297,10 +297,10 @@ fun PlaybackPageContent(
     }
 
     // ── Quality label for the capsule ───────────────────────────────────────
-    val resolvedQualityTier by viewModel.qualityManager.resolvedTier.collectAsState()
-    val selectedQualityTier by viewModel.qualityManager.selectedTier.collectAsState()
+    val qualityMode by viewModel.qualityManager.mode.collectAsState()
+    val qualityRecommendation by viewModel.qualityManager.recommendation.collectAsState()
     val isMeasuring by viewModel.qualityManager.isMeasuring.collectAsState()
-    val qualityLabel = resolvedQualityTier?.label ?: selectedQualityTier.label
+    val qualityLabel = qualitySelectionLabel(qualityMode, qualityRecommendation)
 
     // ── Sync progress + playing state to PlaybackPhaseViewModel ────────────
     LaunchedEffect(currentPositionMs, currentDurationMs, currentBufferedMs) {
@@ -549,7 +549,7 @@ fun PlaybackPageContent(
             }
 
             is PlaybackAction.ChangeQuality -> {
-                viewModel.changeQuality(it.tier)
+                viewModel.changeQuality(it.selection)
             }
         }
     }
@@ -1021,11 +1021,10 @@ fun PlaybackPageContent(
     // Quality selection panel — intercepted here because PlaybackDialog renders Unit for QUALITY
     if (playbackDialog == PlaybackDialogType.QUALITY) {
         QualitySelectionPanel(
-            selectedTier = selectedQualityTier,
-            resolvedTier = resolvedQualityTier,
+            mode = qualityMode,
+            recommendation = qualityRecommendation,
             isMeasuring = isMeasuring,
-            videoStream = mediaInfo?.videoStream,
-            onSelectTier = { onPlaybackActionClick(PlaybackAction.ChangeQuality(it)) },
+            onSelect = { onPlaybackActionClick(PlaybackAction.ChangeQuality(it)) },
             onDismiss = { playbackDialog = null },
         )
     }

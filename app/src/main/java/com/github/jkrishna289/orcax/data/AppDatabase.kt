@@ -16,6 +16,7 @@ import com.github.jkrishna289.orcax.data.model.LibraryDisplayInfo
 import com.github.jkrishna289.orcax.data.model.NavDrawerPinnedItem
 import com.github.jkrishna289.orcax.data.model.PlaybackEffect
 import com.github.jkrishna289.orcax.data.model.PlaybackLanguageChoice
+import com.github.jkrishna289.orcax.data.model.QualityPreference
 import com.github.jkrishna289.orcax.data.model.SeerrServer
 import com.github.jkrishna289.orcax.data.model.SeerrUser
 import com.github.jkrishna289.orcax.ui.components.ViewOptions
@@ -38,9 +39,10 @@ import java.util.UUID
         ItemTrackModification::class,
         SeerrServer::class,
         SeerrUser::class,
+        QualityPreference::class,
 
     ],
-    version = 31,
+    version = 32,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(3, 4),
@@ -55,6 +57,7 @@ import java.util.UUID
         AutoMigration(12, 20),
         AutoMigration(20, 30),
         AutoMigration(30, 31),
+        AutoMigration(31, 32),
     ],
 )
 @TypeConverters(Converters::class)
@@ -72,6 +75,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun seerrServerDao(): SeerrServerDao
 
     abstract fun playbackEffectDao(): PlaybackEffectDao
+
+    abstract fun qualityPreferenceDao(): QualityPreferenceDao
 }
 
 class Converters {

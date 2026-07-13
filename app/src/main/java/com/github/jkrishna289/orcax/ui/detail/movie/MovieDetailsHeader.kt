@@ -41,6 +41,7 @@ fun MovieDetailsHeader(
     movie: BaseItem,
     chosenStreams: ChosenStreams?,
     availability: AvailabilityState?,
+    qualityPreview: String?,
     requestInFlight: Boolean,
     requestOnClick: () -> Unit,
     bringIntoViewRequester: BringIntoViewRequester,
@@ -94,6 +95,15 @@ fun MovieDetailsHeader(
                     requestInFlight = requestInFlight,
                     onRequest = requestOnClick,
                     modifier = Modifier.padding(start = HeaderUtils.startPadding, top = 4.dp),
+                )
+            }
+            // AUTO quality preview — only shown when the measurement cache is
+            // warm; computed without any probe (see MovieViewModel).
+            qualityPreview?.let { preview ->
+                Text(
+                    text = preview,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = HeaderUtils.startPadding),
                 )
             }
             dto.taglines?.firstOrNull()?.let { tagline ->

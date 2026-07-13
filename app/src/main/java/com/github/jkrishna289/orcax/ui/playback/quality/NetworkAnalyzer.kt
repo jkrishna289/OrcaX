@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.github.jkrishna289.orcax.services.hilt.StandardOkHttpClient
-import com.github.jkrishna289.orcax.ui.playback.NetworkType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred

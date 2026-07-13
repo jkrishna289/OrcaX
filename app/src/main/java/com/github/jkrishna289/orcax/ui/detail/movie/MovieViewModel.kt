@@ -3,6 +3,7 @@ package com.github.jkrishna289.orcax.ui.detail.movie
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.ChosenStreams
 import com.github.jkrishna289.orcax.data.ExtrasItem
 import com.github.jkrishna289.orcax.data.ItemPlaybackRepository
@@ -34,6 +35,12 @@ import com.github.jkrishna289.orcax.ui.launchDefault
 import com.github.jkrishna289.orcax.ui.launchIO
 import com.github.jkrishna289.orcax.ui.letNotEmpty
 import com.github.jkrishna289.orcax.ui.nav.Destination
+import com.github.jkrishna289.orcax.ui.playback.bitrateLabel
+import com.github.jkrishna289.orcax.ui.playback.quality.DeviceAnalyzer
+import com.github.jkrishna289.orcax.ui.playback.quality.NetworkAnalyzer
+import com.github.jkrishna289.orcax.ui.playback.quality.QualityResolver
+import com.github.jkrishna289.orcax.ui.playback.quality.QualitySelection
+import com.github.jkrishna289.orcax.ui.playback.resolutionLabel
 import com.github.jkrishna289.orcax.ui.showToast
 import com.github.jkrishna289.orcax.util.DataLoadingState
 import dagger.assisted.Assisted
@@ -76,6 +83,8 @@ class MovieViewModel
         private val backdropService: BackdropService,
         private val mediaManagementService: MediaManagementService,
         private val orcaEngineClient: OrcaEngineClient,
+        private val networkAnalyzer: NetworkAnalyzer,
+        private val deviceAnalyzer: DeviceAnalyzer,
         @Assisted val itemId: UUID,
     ) : ViewModel() {
         @AssistedFactory
@@ -104,6 +113,40 @@ class MovieViewModel
                     }
                 }
             }
+        }
+
+        /**
+         * "AUTO: 1080p · 12 Mbps · connection 35 Mbps" from the measurement
+         * cache. Returns null (preview hidden) when the cache is cold or the
+         * media has no usable profile — never probes from the details page.
+         */
+        private suspend fun buildQualityPreview(movie: BaseItem): String? {
+            val userId = serverRepository.currentUser.value?.id?.toString()
+            val cached = networkAnalyzer.cachedMeasurement(userId) ?: return null
+            val source = movie.data.mediaSources?.firstOrNull() ?: return null
+            val video = source.mediaStreams?.firstOrNull { it.type == MediaStreamType.VIDEO } ?: return null
+            val audio = source.mediaStreams?.firstOrNull { it.type == MediaStreamType.AUDIO }
+            if ((video.bitRate ?: 0) <= 0) return null
+            val recommendation = QualityResolver.resolve(
+                measurement = cached,
+                media = QualityResolver.MediaQualityProfile(
+                    videoBitrateBps = video.bitRate ?: 0,
+                    audioBitrateBps = audio?.bitRate ?: 0,
+                    width = video.width ?: 0,
+                    height = video.height ?: 0,
+                    videoCodec = video.codec,
+                    audioCodec = audio?.codec,
+                    audioChannels = audio?.channels,
+                ),
+                device = deviceAnalyzer.audioCaps(userPreferencesService.getCurrent().appPreferences),
+            )
+            val recommendedLabel = when (val rec = recommendation.recommended) {
+                is QualitySelection.Rung ->
+                    "${resolutionLabel(0, rec.rung.maxHeight)} · ${bitrateLabel(rec.rung.maxBitrateBps)}"
+                else -> context.getString(R.string.quality_original)
+            }
+            val connectionLabel = bitrateLabel(cached.bps.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            return context.getString(R.string.quality_details_preview, recommendedLabel, connectionLabel)
         }
 
         private suspend fun getMovie(): BaseItem {
@@ -141,6 +184,11 @@ class MovieViewModel
                     )
                 }
                 backdropService.submit(movie, resolveTrailer = true)
+                viewModelScope.launchIO {
+                    buildQualityPreview(movie)?.let { preview ->
+                        _state.update { it.copy(qualityPreview = preview) }
+                    }
+                }
                 viewModelScope.launchIO {
                     trailerService.getLocalTrailers(movie).letNotEmpty { localTrailers ->
                         _state.update {
@@ -366,6 +414,12 @@ data class MovieState(
     val availability: AvailabilityState? = null,
     /** True while an engine request submitted from this screen is awaiting its response. */
     val requestInFlight: Boolean = false,
+    /**
+     * AUTO quality preview line ("AUTO: 1080p · 12 Mbps · connection 35 Mbps").
+     * Computed from CACHED measurements + the media profile only — no probe is
+     * ever fired from the details page. Null (hidden) on a cold cache.
+     */
+    val qualityPreview: String? = null,
 ) {
     val movie: BaseItem? = (loading as? DataLoadingState.Success<BaseItem>)?.data
 }

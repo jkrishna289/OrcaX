@@ -54,8 +54,14 @@ import com.github.jkrishna289.orcax.services.RefreshRateService
 import com.github.jkrishna289.orcax.services.ScreensaverService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.UserPreferencesService
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.data.QualityPreferenceDao
 import com.github.jkrishna289.orcax.services.hilt.StandardOkHttpClient
+import com.github.jkrishna289.orcax.ui.playback.quality.DeviceAnalyzer
 import com.github.jkrishna289.orcax.ui.playback.quality.NetworkAnalyzer
+import com.github.jkrishna289.orcax.ui.playback.quality.PlaybackHealthTracker
+import com.github.jkrishna289.orcax.ui.playback.quality.QualityResolver
+import com.github.jkrishna289.orcax.ui.playback.quality.QualitySelection
 import com.github.jkrishna289.orcax.ui.isNotNullOrBlank
 import com.github.jkrishna289.orcax.ui.launchDefault
 import com.github.jkrishna289.orcax.ui.launchIO
@@ -158,6 +164,8 @@ constructor(
     private val musicService: MusicService,
     private val engineClient: OrcaEngineClient,
     private val networkAnalyzer: NetworkAnalyzer,
+    private val deviceAnalyzer: DeviceAnalyzer,
+    private val qualityPreferenceDao: QualityPreferenceDao,
     @Assisted private val destination: Destination,
 ) : ViewModel(),
     Player.Listener,
@@ -174,7 +182,7 @@ constructor(
     private var positionPollingJob: Job? = null
 
     // ── Quality selection manager ──────────────────────────────────────────
-    val qualityManager = QualityManager(networkAnalyzer)
+    val qualityManager = QualityManager(networkAnalyzer, qualityPreferenceDao, viewModelScope)
 
     // True while a stream switch (quality/audio/subtitle change) is in progress.
     // PlaybackPage shows a black cover whenever this is true, preventing the
@@ -232,6 +240,60 @@ constructor(
             }
             init()
         }
+        // Quality engine events: rescue rebuilds + informational toasts.
+        viewModelScope.launch {
+            qualityManager.events.collect { event ->
+                when (event) {
+                    is QualityEvent.RescueDowngrade -> {
+                        showToast(
+                            context,
+                            context.getString(
+                                R.string.quality_rescue_toast,
+                                rungLabel(event.rung),
+                            ),
+                            Toast.LENGTH_LONG,
+                        )
+                        val item = currentPlayback.value?.item ?: return@collect
+                        val playback = currentItemPlayback.value ?: return@collect
+                        changeStreams(
+                            item = item,
+                            audioIndex = playback.audioIndex,
+                            subtitleIndex = playback.subtitleIndex,
+                            positionMs = onMain { player.currentPosition },
+                            userInitiated = false,
+                            enableDirectPlay = false,
+                            enableDirectStream = true,
+                            allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
+                            forceRebuild = true,
+                        )
+                    }
+                    QualityEvent.ManualStruggling ->
+                        showToast(
+                            context,
+                            context.getString(R.string.quality_manual_struggling_toast),
+                            Toast.LENGTH_LONG,
+                        )
+                    is QualityEvent.StartedReduced ->
+                        showToast(
+                            context,
+                            context.getString(
+                                R.string.quality_started_reduced_toast,
+                                rungLabel(event.rung),
+                                event.measuredBps?.let { mbpsLabel(it) } ?: "?",
+                            ),
+                            Toast.LENGTH_LONG,
+                        )
+                }
+            }
+        }
+    }
+
+    private fun rungLabel(rung: com.github.jkrishna289.orcax.ui.playback.quality.QualityRung): String =
+        mbpsLabel(rung.maxBitrateBps.toLong())
+
+    private fun mbpsLabel(bps: Long): String {
+        val mbps = bps / 1_000_000.0
+        return if (mbps >= 10) "${mbps.toInt()} Mbps" else String.format("%.1f Mbps", mbps)
     }
 
     private fun disconnectPlayer() {
@@ -446,45 +508,17 @@ constructor(
             this@PlaybackViewModel.item = item
             this@PlaybackViewModel.itemId = item.id
 
-            // ── Notify quality manager a new item is starting ─────────────
-            // Movies reset to AUTO; TV shows keep the chosen tier per series.
-            viewModelScope.launchIO {
-                qualityManager.onNewItem(
-                    item.data.seriesId,
-                    serverRepository.currentUser.value?.id?.toString(),
-                )
-                // Once the speed test finishes and AUTO resolves to a tier,
-                // re-apply the stream so the correct bitrate cap is sent to Jellyfin
-                qualityManager.resolvedTier.first { it != null }
-                if (qualityManager.selectedTier.value == QualityTier.AUTO) {
-                    val resolved = qualityManager.resolvedTier.value
-                    val method = currentPlayback.value?.playMethod
-                    // Skip the re-prepare (and its black loading cover) when the initial
-                    // stream is already optimal: we're direct-playing and AUTO resolved to a
-                    // direct-play tier, so re-requesting would produce the identical stream.
-                    // Re-apply only when the resolved tier would actually change the stream
-                    // (a bitrate cap that forces transcoding, or a different play method).
-                    val alreadyOptimal =
-                        method == PlayMethod.DIRECT_PLAY && resolved?.isDirectPlay == true
-                    if (alreadyOptimal) {
-                        Timber.i("[AUTO-QUALITY] skip re-prepare — already optimal (${resolved?.label})")
-                    } else {
-                        val pos = onMain { player.currentPosition }
-                        changeStreams(
-                            item = this@PlaybackViewModel.item,
-                            currentItemPlayback = currentItemPlayback.value!!,
-                            audioIndex = currentItemPlayback.value?.audioIndex,
-                            subtitleIndex = currentItemPlayback.value?.subtitleIndex,
-                            positionMs = pos,
-                            userInitiated = false,
-                            enableDirectPlay = qualityManager.effectiveEnableDirectPlay,
-                            enableDirectStream = true,
-                            allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
-                            forceRebuild = true,
-                        )
-                    }
-                }
-            }
+            // ── Quality engine: new item ──────────────────────────────────
+            // Synchronous state reset + persisted manual pick load BEFORE the
+            // stream builds (kills the stale-tier race). AUTO starts at
+            // Original; the rescue engine downgrades only on observed
+            // starvation — there is no post-resolve re-prepare anymore.
+            qualityManager.onNewItem(
+                seriesId = item.data.seriesId,
+                itemId = item.id,
+                userRowId = serverRepository.currentUser.value?.rowId,
+                userId = serverRepository.currentUser.value?.id?.toString(),
+            )
 
             val isLiveTv = item.type == BaseItemKind.TV_CHANNEL
             val base = item.data
@@ -533,9 +567,6 @@ constructor(
                         )
                     }
 
-            // Inform quality engine of peak bitrate for spec §6 peak protection
-            qualityManager.onMediaProfile(videoStream?.bitrateBps ?: 0)
-
             // Create the correct player for the media
             createPlayer(videoStream?.hdr == true, videoStream?.is4k == true)
             val subtitleLanguagePreference =
@@ -572,6 +603,25 @@ constructor(
                         prefs = preferences,
                     )
             val audioIndex = audioStream?.index
+
+            // ── Quality engine: media + device profile ────────────────────
+            // Profiles the source StreamChoiceService actually picked. Decides
+            // the start selection synchronously from the CACHED measurement
+            // (warm-cache pre-empt / audio-compat guard) before the first
+            // stream build; a background probe refines the picker only.
+            qualityManager.onMediaProfile(
+                QualityResolver.MediaQualityProfile(
+                    videoBitrateBps = videoStream?.bitrateBps ?: 0,
+                    audioBitrateBps = audioStream?.bitRate ?: 0,
+                    width = videoStream?.width ?: 0,
+                    height = videoStream?.height ?: 0,
+                    isHdr = videoStream?.hdr == true,
+                    videoCodec = videoStream?.codec,
+                    audioCodec = audioStream?.codec,
+                    audioChannels = audioStream?.channels,
+                ),
+                deviceAnalyzer.audioCaps(preferences.appPreferences),
+            )
 
             val subtitleIndex =
                 streamChoiceService
@@ -1077,18 +1127,14 @@ constructor(
         }
 
     // ── Public function so the UI quality panel can change quality ─────────
-    fun changeQuality(tier: QualityTier) {
+    fun changeQuality(selection: QualitySelection) {
         viewModelScope.launchIO {
-            // Same tier already active and not currently measuring → skip the refetch
-            if (qualityManager.selectedTier.value == tier && !qualityManager.isMeasuring.value) {
-                Timber.d("Quality tier %s already selected, skipping refetch", tier)
+            // Same selection already active and not currently measuring → skip the refetch
+            if (qualityManager.mode.value == selection && !qualityManager.isMeasuring.value) {
+                Timber.d("Quality selection %s already active, skipping refetch", selection)
                 return@launchIO
             }
-            qualityManager.selectTier(
-                tier,
-                item.data.seriesId,
-                serverRepository.currentUser.value?.id?.toString(),
-            )
+            qualityManager.selectMode(selection)
             val pos = onMain { player.currentPosition }
             changeStreams(
                 item = item,
@@ -1140,18 +1186,65 @@ constructor(
             )
         }
 
+    // Watches for a single stall exceeding the rescue limit while buffering.
+    private var stallJob: Job? = null
+
     override fun onPlaybackStateChanged(playbackState: Int) {
-        if (playbackState == Player.STATE_ENDED) {
-            viewModelScope.launchIO {
-                val nextItem = playlist.value?.peek()
-                Timber.v("Setting next up to ${nextItem?.id}")
-                withContext(Dispatchers.Main) {
-                    nextUp.value = nextItem
-                    if (nextItem == null) {
-                        navigationManager.goBack()
+        when (playbackState) {
+            Player.STATE_BUFFERING -> {
+                // Rebuffer while the user wants playback = potential starvation.
+                // Guard windows (post-seek, post-rebuild, end-of-item, switching)
+                // are applied inside the health tracker.
+                if (player.playWhenReady) {
+                    qualityManager.onRebuffer(
+                        positionMs = player.currentPosition,
+                        durationMs = player.duration.coerceAtLeast(0L),
+                        isSwitchingStream = isSwitchingStream.value,
+                    )
+                    stallJob?.cancel()
+                    stallJob = viewModelScope.launch {
+                        delay(PlaybackHealthTracker.STALL_LIMIT_MS)
+                        if (player.playbackState == Player.STATE_BUFFERING && player.playWhenReady) {
+                            qualityManager.onStallExceeded(
+                                positionMs = player.currentPosition,
+                                durationMs = player.duration.coerceAtLeast(0L),
+                                isSwitchingStream = isSwitchingStream.value,
+                            )
+                        }
                     }
                 }
             }
+            Player.STATE_READY -> {
+                stallJob?.cancel()
+                stallJob = null
+            }
+            Player.STATE_ENDED -> {
+                stallJob?.cancel()
+                stallJob = null
+                viewModelScope.launchIO {
+                    val nextItem = playlist.value?.peek()
+                    Timber.v("Setting next up to ${nextItem?.id}")
+                    withContext(Dispatchers.Main) {
+                        nextUp.value = nextItem
+                        if (nextItem == null) {
+                            navigationManager.goBack()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onPositionDiscontinuity(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+        reason: Int,
+    ) {
+        // Post-seek rebuffering is normal — never counts toward a rescue.
+        if (reason == Player.DISCONTINUITY_REASON_SEEK ||
+            reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT
+        ) {
+            qualityManager.onSeek()
         }
     }
 
@@ -1428,6 +1521,8 @@ constructor(
     // after setMediaItem) toggle true→false before Compose ever recomposes,
     // so the cover is never shown and the frozen-size guard never engages.
     override fun onRenderedFirstFrame() {
+        // Buffer must prime after any (re)build before starvation counts again.
+        qualityManager.onPlaybackStarted()
         Timber.i(
             "[STREAM-SWITCH] First frame rendered: method=%s player=#%d",
             currentPlayback.value?.playMethod?.serialName ?: "unknown",
