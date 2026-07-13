@@ -455,6 +455,7 @@ fun MovieDetailsContent(
                             movie = movie,
                             chosenStreams = state.chosenStreams,
                             availability = state.availability,
+                            qualityPreview = state.qualityPreview,
                             requestInFlight = state.requestInFlight,
                             requestOnClick = requestOnClick,
                             bringIntoViewRequester = bringIntoViewRequester,

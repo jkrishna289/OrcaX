@@ -853,4 +853,24 @@
         <item></item><!-- Intentionally blank -->
         <item></item><!-- Intentionally blank -->
     </array>
+
+    <!-- Quality engine (AUTO recommendations + rescue) -->
+    <string name="quality_panel_title">VIDEO QUALITY</string>
+    <string name="quality_auto">Auto</string>
+    <string name="quality_auto_desc">Adapts to your connection</string>
+    <string name="quality_original">Original</string>
+    <string name="quality_original_desc">Full source quality</string>
+    <string name="quality_recommended_max">Recommended: %1$s</string>
+    <string name="quality_connection_detected">Connection: %1$s · measured</string>
+    <string name="quality_connection_estimated">Estimated: %1$s · OS link speed</string>
+    <string name="quality_connection_measuring">Measuring connection…</string>
+    <string name="quality_why_not_original">Needs %1$s · safe bandwidth %2$s · short by %3$s</string>
+    <string name="quality_original_close">Possible, but close to your bandwidth limit</string>
+    <string name="quality_audio_reencoded">%1$s audio isn\'t supported — audio will be re-encoded</string>
+    <string name="quality_direct_native">Playing natively — no transcoding</string>
+    <string name="quality_transcoding">Transcoding to selected quality</string>
+    <string name="quality_rescue_toast">Quality lowered to %1$s — connection can\'t keep up</string>
+    <string name="quality_manual_struggling_toast">Playback is struggling — open the quality menu to lower quality</string>
+    <string name="quality_started_reduced_toast">Started at %1$s — connection %2$s</string>
+    <string name="quality_details_preview">AUTO quality: %1$s · connection %2$s</string>
 </resources>

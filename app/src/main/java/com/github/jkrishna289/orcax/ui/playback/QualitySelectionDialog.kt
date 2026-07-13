@@ -1,7 +1,5 @@
 package com.github.jkrishna289.orcax.ui.playback
 
-import android.content.Context
-import android.view.Display
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,8 +30,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,114 +43,153 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.ui.playback.quality.QualityRecommendation
+import com.github.jkrishna289.orcax.ui.playback.quality.QualitySelection
 import com.github.jkrishna289.orcax.ui.tryRequestFocus
 
 // ─── Glassmorphic tokens ──────────────────────────────────────────────────────
-private val GlassBgTop    = Color(0xD90F0F0F)
+private val GlassBgTop = Color(0xD90F0F0F)
 private val GlassBgBottom = Color(0xCC0A0A0A)
-private val LabelColor    = Color(0xFF888888)
-private val AccentGreen   = Color(0xFF4ADE80)
-private val AccentRed     = Color(0xFFE50914)
+private val LabelColor = Color(0xFF888888)
+private val AccentGreen = Color(0xFF4ADE80)
+private val AccentRed = Color(0xFFE50914)
+private val AccentStar = Color(0xFFFACC15)
 
-// ─── TV capability probe ──────────────────────────────────────────────────────
-@Immutable
-private data class TvCapabilities(val maxWidth: Int, val maxHeight: Int, val supportsHdr: Boolean)
-
-private fun probeTvCapabilities(context: Context): TvCapabilities = try {
-    val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? android.hardware.display.DisplayManager
-    val display = dm?.getDisplay(Display.DEFAULT_DISPLAY)
-    val modes = display?.supportedModes ?: emptyArray()
-    val maxMode = modes.maxByOrNull { it.physicalWidth.toLong() * it.physicalHeight }
-    val hdrCaps = display?.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()
-    TvCapabilities(
-        maxWidth = maxMode?.physicalWidth ?: 1920,
-        maxHeight = maxMode?.physicalHeight ?: 1080,
-        supportsHdr = hdrCaps.isNotEmpty(),
-    )
-} catch (t: Throwable) {
-    TvCapabilities(1920, 1080, false)
-}
-
-// ─── Tier helpers ─────────────────────────────────────────────────────────────
-private fun resolutionLabel(width: Int, height: Int): String = when {
+// ─── Labels (shared with the toolbar) ─────────────────────────────────────────
+internal fun resolutionLabel(width: Int, height: Int): String = when {
     height >= 2000 || width >= 3600 -> "4K"
-    height >= 1400                  -> "1440p"
-    height >= 1000                  -> "1080p"
-    height >= 700                   -> "720p"
-    height >= 400                   -> "480p"
-    height > 0                      -> "${height}p"
-    else                            -> "SD"
+    height >= 1400 -> "1440p"
+    height >= 1000 -> "1080p"
+    height >= 700 -> "720p"
+    height >= 400 -> "480p"
+    height > 0 -> "${height}p"
+    else -> "SD"
 }
 
-private fun bitrateLabel(bps: Int): String = when {
-    bps <= 0         -> "—"
-    bps >= 1_000_000 -> String.format("%.1f Mbps", bps / 1_000_000.0)
-    bps >= 1_000     -> "${bps / 1_000} Kbps"
-    else             -> "$bps bps"
+internal fun bitrateLabel(bps: Int): String = when {
+    bps <= 0 -> "—"
+    bps >= 1_000_000 -> String.format("%.1f Mbps", bps / 1_000_000.0).replace(".0 ", " ")
+    bps >= 1_000 -> "${bps / 1_000} Kbps"
+    else -> "$bps bps"
 }
 
+private fun gbPerHourLabel(bytesPerHour: Long): String? =
+    if (bytesPerHour <= 0) null else String.format("≈%.1f GB/h", bytesPerHour / 1_000_000_000.0)
+
+/** Toolbar chip label for the current quality state. */
+fun qualitySelectionLabel(
+    mode: QualitySelection,
+    recommendation: QualityRecommendation?,
+): String = when (mode) {
+    QualitySelection.Auto -> when (val start = recommendation?.startSelection) {
+        is QualitySelection.Rung -> "Auto · ${bitrateLabel(start.rung.maxBitrateBps)}"
+        else -> "Auto"
+    }
+    QualitySelection.Original -> "Original"
+    is QualitySelection.Rung ->
+        "${resolutionLabel(0, mode.rung.maxHeight)} · ${bitrateLabel(mode.rung.maxBitrateBps)}"
+}
+
+// ─── Row model ────────────────────────────────────────────────────────────────
 @Immutable
-private data class DynamicTier(
-    val tier: QualityTier,
+private data class QualityRow(
+    val selection: QualitySelection,
     val label: String,
     val description: String,
-    val bitrateText: String,
-    val resolutionBadge: String = "",
-    val isDirectPlay: Boolean = false,
+    val resolutionBadge: String,
+    val isDirectPlay: Boolean,
+    val isRecommended: Boolean,
+    val enabled: Boolean,
 )
 
-private fun buildDynamicTiers(
-    width: Int, height: Int, bitrateBps: Int, hdr: Boolean,
-    caps: TvCapabilities,
-): List<DynamicTier> {
-    val tiers = mutableListOf<DynamicTier>()
+@Composable
+private fun buildRows(
+    recommendation: QualityRecommendation?,
+    isMeasuring: Boolean,
+): List<QualityRow> {
+    val rows = mutableListOf<QualityRow>()
 
-    val tvDesc = if (caps.supportsHdr) "HDR TV" else "${caps.maxHeight}p TV"
-    tiers += DynamicTier(QualityTier.AUTO, "Auto", "Adapts to connection · $tvDesc", "—", resolutionBadge = "", isDirectPlay = false)
-
-    if (bitrateBps > 0 || height > 0) {
-        val hdrFlag = if (hdr && caps.supportsHdr) " HDR" else ""
-        val resLabel = resolutionLabel(width, height)
-        tiers += DynamicTier(
-            tier = QualityTier.CINEMA,
-            label = "Original",
-            description = "Direct · $resLabel$hdrFlag",
-            bitrateText = bitrateLabel(bitrateBps),
-            resolutionBadge = resLabel,
-            isDirectPlay = true,
-        )
+    // AUTO row — describes what AUTO would do and why.
+    val autoDesc = when {
+        recommendation == null && isMeasuring -> stringResource(R.string.quality_connection_measuring)
+        recommendation == null -> stringResource(R.string.quality_auto_desc)
+        else -> when (val rec = recommendation.recommended) {
+            is QualitySelection.Rung -> stringResource(
+                R.string.quality_recommended_max,
+                bitrateLabel(rec.rung.maxBitrateBps),
+            )
+            else -> stringResource(R.string.quality_recommended_max, stringResource(R.string.quality_original))
+        }
     }
+    rows += QualityRow(
+        selection = QualitySelection.Auto,
+        label = stringResource(R.string.quality_auto),
+        description = autoDesc,
+        resolutionBadge = "",
+        isDirectPlay = false,
+        isRecommended = false,
+        enabled = true,
+    )
 
-    if (bitrateBps == 0 || bitrateBps > 8_200_000) {
-        val res = if (height >= 1000) "1080p" else resolutionLabel(width, height)
-        tiers += DynamicTier(
-            tier = QualityTier.BALANCED,
-            label = "Balanced",
-            description = "Optimised · $res",
-            bitrateText = bitrateLabel(8_200_000),
-            resolutionBadge = res,
-            isDirectPlay = false,
-        )
+    recommendation?.options?.forEach { option ->
+        val isRecommended = option.selection == recommendation.recommended
+        when (val sel = option.selection) {
+            QualitySelection.Original -> {
+                val verdict = recommendation.originalVerdict
+                val desc = when {
+                    !option.available ->
+                        stringResource(
+                            R.string.quality_audio_reencoded,
+                            (recommendation.reasons
+                                .filterIsInstance<com.github.jkrishna289.orcax.ui.playback.quality.QualityReason.AudioIncompatible>()
+                                .firstOrNull()?.codec ?: "?").uppercase(),
+                        )
+                    !verdict.playable && verdict.safeBps != null ->
+                        stringResource(
+                            R.string.quality_why_not_original,
+                            bitrateLabel(verdict.requiredBps.toInt()),
+                            bitrateLabel(verdict.safeBps.toInt()),
+                            bitrateLabel((verdict.deficitBps ?: 0L).toInt()),
+                        )
+                    verdict.close -> stringResource(R.string.quality_original_close)
+                    else -> listOfNotNull(
+                        bitrateLabel(option.bitrateBps).takeIf { option.bitrateBps > 0 },
+                        gbPerHourLabel(option.estimatedBytesPerHour),
+                    ).joinToString(" · ").ifEmpty { stringResource(R.string.quality_original_desc) }
+                }
+                rows += QualityRow(
+                    selection = sel,
+                    label = stringResource(R.string.quality_original),
+                    description = desc,
+                    resolutionBadge = resolutionLabel(0, option.maxHeight),
+                    isDirectPlay = option.directPlay,
+                    isRecommended = isRecommended,
+                    enabled = true,
+                )
+            }
+            is QualitySelection.Rung -> {
+                rows += QualityRow(
+                    selection = sel,
+                    label = "${resolutionLabel(0, option.maxHeight)} · ${bitrateLabel(option.bitrateBps)}",
+                    description = gbPerHourLabel(option.estimatedBytesPerHour)
+                        ?: stringResource(R.string.quality_transcoding),
+                    resolutionBadge = resolutionLabel(0, option.maxHeight),
+                    isDirectPlay = false,
+                    isRecommended = isRecommended,
+                    enabled = true,
+                )
+            }
+            QualitySelection.Auto -> Unit // never an option row
+        }
     }
-
-    if (bitrateBps == 0 || bitrateBps > 2_500_000) {
-        tiers += DynamicTier(
-            tier = QualityTier.DATA_SAVER,
-            label = "Data Saver",
-            description = "Low bandwidth · 720p",
-            bitrateText = bitrateLabel(2_500_000),
-            resolutionBadge = "720p",
-            isDirectPlay = false,
-        )
-    }
-
-    return tiers
+    return rows
 }
 
 // ─── Quality list row ─────────────────────────────────────────────────────────
 @Composable
 private fun QualityListRow(
-    tier: DynamicTier,
+    row: QualityRow,
     isSelected: Boolean,
     focusRequester: FocusRequester,
     onClick: () -> Unit,
@@ -194,19 +231,21 @@ private fun QualityListRow(
                 )
             }
 
-            // Tier name + "DIRECT" badge + description
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    if (row.isRecommended) {
+                        Text("★", fontSize = 10.sp, color = AccentStar)
+                    }
                     Text(
-                        text = tier.label,
+                        text = row.label,
                         fontSize = 13.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (isSelected || isFocused) Color.White else Color.White.copy(alpha = 0.60f),
                     )
-                    if (tier.isDirectPlay) {
+                    if (row.isDirectPlay) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(3.dp))
@@ -223,18 +262,17 @@ private fun QualityListRow(
                     }
                 }
                 Text(
-                    text = tier.description,
+                    text = row.description,
                     fontSize = 10.sp,
                     color = Color.White.copy(alpha = 0.28f),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
 
-            // Resolution badge on the right
-            if (tier.resolutionBadge.isNotEmpty()) {
+            if (row.resolutionBadge.isNotEmpty()) {
                 Text(
-                    text = tier.resolutionBadge,
+                    text = row.resolutionBadge,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Black,
                     color = if (isSelected) Color.Black else Color.White.copy(alpha = 0.40f),
@@ -249,32 +287,21 @@ private fun QualityListRow(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QualitySelectionPanel — compact flat list, anchored bottom-right above toolbar
+// QualitySelectionPanel — recommendation UI, anchored bottom-right above toolbar
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun QualitySelectionPanel(
-    selectedTier: QualityTier,
-    resolvedTier: QualityTier?,
+    mode: QualitySelection,
+    recommendation: QualityRecommendation?,
     isMeasuring: Boolean,
-    videoStream: SimpleVideoStream?,
-    onSelectTier: (QualityTier) -> Unit,
+    onSelect: (QualitySelection) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val ctx = LocalContext.current
-    val caps = remember { probeTvCapabilities(ctx) }
-    val dynamicTiers = remember(videoStream, caps) {
-        buildDynamicTiers(
-            width = videoStream?.width ?: 0,
-            height = videoStream?.height ?: 0,
-            bitrateBps = videoStream?.bitrateBps ?: 0,
-            hdr = videoStream?.hdr ?: false,
-            caps = caps,
-        )
-    }
+    val rows = buildRows(recommendation, isMeasuring)
 
-    val frs = remember(dynamicTiers.size) { List(dynamicTiers.size) { FocusRequester() } }
+    val frs = remember(rows.size) { List(rows.size) { FocusRequester() } }
     LaunchedEffect(Unit) {
-        val idx = dynamicTiers.indexOfFirst { it.tier == selectedTier }.coerceAtLeast(0)
+        val idx = rows.indexOfFirst { it.selection == mode }.coerceAtLeast(0)
         frs.getOrNull(idx)?.tryRequestFocus()
     }
 
@@ -282,61 +309,88 @@ fun QualitySelectionPanel(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        // Remove system scrim if possible; not critical if it fails
         val dialogWindowProvider = LocalView.current.parent as? DialogWindowProvider
         dialogWindowProvider?.window?.setDimAmount(0f)
 
-        // Full-screen transparent container — panel anchored bottom-end above toolbar
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
             Column(
                 modifier = Modifier
-                    .width(272.dp)
+                    .width(288.dp)
                     .padding(bottom = 88.dp, end = 16.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Brush.verticalGradient(0f to GlassBgTop, 1f to GlassBgBottom)),
             ) {
-                // Header: ⚡ VIDEO QUALITY
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                ) {
-                    Canvas(modifier = Modifier.size(9.dp)) {
-                        val path = Path().apply {
-                            moveTo(size.width * 0.65f, 0f)
-                            lineTo(size.width * 0.25f, size.height * 0.55f)
-                            lineTo(size.width * 0.55f, size.height * 0.55f)
-                            lineTo(size.width * 0.35f, size.height)
-                            lineTo(size.width * 0.75f, size.height * 0.45f)
-                            lineTo(size.width * 0.45f, size.height * 0.45f)
-                            close()
+                // Header: ⚡ VIDEO QUALITY + connection line
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Canvas(modifier = Modifier.size(9.dp)) {
+                            val path = Path().apply {
+                                moveTo(size.width * 0.65f, 0f)
+                                lineTo(size.width * 0.25f, size.height * 0.55f)
+                                lineTo(size.width * 0.55f, size.height * 0.55f)
+                                lineTo(size.width * 0.35f, size.height)
+                                lineTo(size.width * 0.75f, size.height * 0.45f)
+                                lineTo(size.width * 0.45f, size.height * 0.45f)
+                                close()
+                            }
+                            drawPath(path, color = LabelColor)
                         }
-                        drawPath(path, color = LabelColor)
+                        Text(
+                            stringResource(R.string.quality_panel_title),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.10.sp,
+                            color = LabelColor,
+                        )
                     }
-                    Text(
-                        "VIDEO QUALITY",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.10.sp,
-                        color = LabelColor,
-                    )
+                    val connection = recommendation?.connection
+                    val connectionText = when {
+                        connection?.bps != null && connection.isDetected ->
+                            stringResource(R.string.quality_connection_detected, bitrateLabel(connection.bps!!.toInt()))
+                        connection?.bps != null ->
+                            stringResource(R.string.quality_connection_estimated, bitrateLabel(connection.bps!!.toInt()))
+                        isMeasuring -> stringResource(R.string.quality_connection_measuring)
+                        else -> null
+                    }
+                    if (connectionText != null) {
+                        Text(
+                            connectionText,
+                            fontSize = 9.sp,
+                            color = LabelColor.copy(alpha = 0.85f),
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
                 }
 
                 Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.08f)))
 
-                dynamicTiers.forEachIndexed { i, tier ->
+                rows.forEachIndexed { i, row ->
                     QualityListRow(
-                        tier = tier,
-                        isSelected = tier.tier == selectedTier,
+                        row = row,
+                        isSelected = row.selection == mode,
                         focusRequester = frs[i],
-                        onClick = { onSelectTier(tier.tier); onDismiss() },
+                        onClick = {
+                            onSelect(row.selection)
+                            onDismiss()
+                        },
                     )
                 }
 
                 Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color.White.copy(alpha = 0.08f)))
 
-                // Footer: playback mode indicator
-                val selectedInfo = dynamicTiers.firstOrNull { it.tier == selectedTier }
+                // Footer: playback mode indicator for the active selection
+                val activeDirect = when (mode) {
+                    QualitySelection.Auto ->
+                        recommendation?.let { rec ->
+                            (rec.startSelection == QualitySelection.Original) &&
+                                rec.options.firstOrNull()?.directPlay == true
+                        } ?: true
+                    QualitySelection.Original -> true
+                    is QualitySelection.Rung -> false
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -346,13 +400,16 @@ fun QualitySelectionPanel(
                         modifier = Modifier
                             .size(5.dp)
                             .background(
-                                if (selectedInfo?.isDirectPlay == true) AccentGreen else Color(0xFF555555),
+                                if (activeDirect) AccentGreen else Color(0xFF555555),
                                 CircleShape,
                             ),
                     )
                     Text(
-                        if (selectedInfo?.isDirectPlay == true) "Playing natively — no transcoding"
-                        else "Transcoding to selected quality",
+                        if (activeDirect) {
+                            stringResource(R.string.quality_direct_native)
+                        } else {
+                            stringResource(R.string.quality_transcoding)
+                        },
                         fontSize = 9.sp,
                         color = LabelColor,
                     )
