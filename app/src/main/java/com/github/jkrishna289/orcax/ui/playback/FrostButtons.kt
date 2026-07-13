@@ -5,11 +5,13 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -65,79 +68,74 @@ private const val DIMMED_ALPHA = 0.2f
 private const val GLASS_ALPHA = 0.12f
 
 /**
- * Media transport button (seek / play-pause). Icon stacked over a short caption.
+ * Circular transport button per player_mockup.html.
+ * Secondary (skip): 40dp glass circle, text glyph like "«30".
+ * Primary (play/pause): 52dp white-filled circle, black icon.
  *
- * @param mirrorIcon horizontally flips the icon (used to turn a fast-forward glyph
- *                   into a rewind glyph).
+ * @param iconRes    icon to render; null → render [text] glyph instead.
+ * @param text       text glyph ("«30" / "15»") when [iconRes] is null.
  * @param isDimmed   true while a sibling's dropdown is open → content drops to 20%.
  */
 @Composable
 fun FrostPlaybackButton(
-    @DrawableRes iconRes: Int,
-    label: String,
+    @DrawableRes iconRes: Int?,
+    text: String?,
+    contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isPrimary: Boolean = false,
     isDimmed: Boolean = false,
-    mirrorIcon: Boolean = false,
     focusRequester: FocusRequester? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
 
     val bgAlpha by animateFloatAsState(
-        targetValue = if (focused) GLASS_ALPHA else 0f,
-        animationSpec = FrostTween,
-        label = "fpb_bg",
+        targetValue = when {
+            isPrimary && focused -> 1f
+            isPrimary            -> 0.90f
+            focused              -> 0.22f
+            else                 -> 0.08f
+        },
+        animationSpec = FrostTween, label = "fpb_bg",
     )
     val contentAlpha by animateFloatAsState(
-        targetValue = when {
-            isDimmed -> DIMMED_ALPHA
-            focused -> 1f
-            else -> GHOST_ALPHA
-        },
-        animationSpec = FrostTween,
-        label = "fpb_content",
+        targetValue = if (isDimmed) DIMMED_ALPHA else if (focused) 1f else 0.8f,
+        animationSpec = FrostTween, label = "fpb_content",
     )
     val scale by animateFloatAsState(
-        targetValue = if (focused) 1.05f else 1f,
-        animationSpec = FrostTween,
-        label = "fpb_scale",
+        targetValue = if (focused) 1.08f else 1f,
+        animationSpec = FrostTween, label = "fpb_scale",
     )
+    val contentColor = if (isPrimary) Color.Black else Color.White
 
-    Column(
+    Box(
         modifier = modifier
+            .size(if (isPrimary) 52.dp else 40.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(10.dp))
+            .clip(CircleShape)
             .background(Color.White.copy(alpha = bgAlpha))
-            .defaultMinSize(minWidth = 102.dp)
+            .then(if (focused) Modifier.border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape) else Modifier)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = label,
-            tint = Color.White.copy(alpha = contentAlpha),
-            modifier = Modifier
-                .size(20.dp)
-                .then(if (mirrorIcon) Modifier.graphicsLayer { scaleX = -1f } else Modifier),
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            letterSpacing = 1.sp,
-            fontWeight = if (focused) FontWeight.Bold else FontWeight.Normal,
-            color = Color.White.copy(alpha = contentAlpha),
-            style = TextStyle(shadow = FrostTextShadow),
-            maxLines = 1,
-        )
+        if (iconRes != null) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = contentDescription,
+                tint = contentColor.copy(alpha = contentAlpha),
+                modifier = Modifier.size(20.dp),
+            )
+        } else {
+            Text(
+                text = text.orEmpty(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = contentColor.copy(alpha = contentAlpha),
+                style = TextStyle(shadow = if (isPrimary) null else FrostTextShadow),
+            )
+        }
     }
 }
 
@@ -186,9 +184,10 @@ fun FrostSettingButton(
     Column(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(12.dp))
+            // Mockup .chip: content width, min-height 48, radius 8, 14–16dp side padding.
+            .clip(RoundedCornerShape(8.dp))
             .background(Color.White.copy(alpha = bgAlpha))
-            .defaultMinSize(minWidth = 140.dp)
+            .defaultMinSize(minHeight = 48.dp)
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
@@ -203,7 +202,7 @@ fun FrostSettingButton(
                 }
             }
             .focusable(interactionSource = interaction)
-            .padding(horizontal = 24.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {

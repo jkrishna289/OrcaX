@@ -200,6 +200,8 @@ constructor(
                         userInitiated = false,
                         enableDirectPlay = qualityManager.effectiveEnableDirectPlay,
                         enableDirectStream = true,
+                        allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
+                        forceRebuild = true,
                     )
                 }
             }
@@ -501,6 +503,8 @@ constructor(
                             userInitiated = false,
                             enableDirectPlay = qualityManager.effectiveEnableDirectPlay,
                             enableDirectStream = true,
+                            allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
+                            forceRebuild = true,
                         )
                     }
                 }
@@ -665,6 +669,11 @@ constructor(
 
     /**
      * Change which streams (ie audio or subtitle) are active
+     *
+     * @param forceRebuild skip the in-player direct-play track-switch shortcut and
+     * always rebuild the stream via a fresh PlaybackInfo request. Required for
+     * quality tier changes and error fallbacks — the shortcut keeps the existing
+     * stream playing, which would silently turn those into no-ops.
      */
     @OptIn(UnstableApi::class)
     internal suspend fun changeStreams(
@@ -676,11 +685,13 @@ constructor(
         userInitiated: Boolean,
         enableDirectPlay: Boolean = !this.forceTranscoding,
         enableDirectStream: Boolean = !this.forceTranscoding,
+        allowAudioStreamCopy: Boolean = enableDirectStream,
+        forceRebuild: Boolean = false,
     ) = withContext(Dispatchers.IO) {
         val itemId = item.id
 
         val currentPlayback = this@PlaybackViewModel.currentPlayback.value
-        if (currentPlayback != null && currentPlayback.item.id == item.id && currentPlayback.playMethod == PlayMethod.DIRECT_PLAY) {
+        if (!forceRebuild && currentPlayback != null && currentPlayback.item.id == item.id && currentPlayback.playMethod == PlayMethod.DIRECT_PLAY) {
             val wasSuccessful =
                 changeStreamsDirectPlay(
                     currentPlayback = currentPlayback,
@@ -694,7 +705,8 @@ constructor(
 
         Timber.d(
             "changeStreams: userInitiated=$userInitiated, audioIndex=$audioIndex, subtitleIndex=$subtitleIndex, " +
-                    "enableDirectPlay=$enableDirectPlay, enableDirectStream=$enableDirectStream, positionMs=$positionMs",
+                    "enableDirectPlay=$enableDirectPlay, enableDirectStream=$enableDirectStream, " +
+                    "allowAudioStreamCopy=$allowAudioStreamCopy, forceRebuild=$forceRebuild, positionMs=$positionMs",
         )
 
         // ── Quality bitrate cap ────────────────────────────────────────────
@@ -734,7 +746,7 @@ constructor(
                     enableDirectPlay = enableDirectPlay,
                     enableDirectStream = enableDirectStream,
                     allowVideoStreamCopy = enableDirectStream,
-                    allowAudioStreamCopy = enableDirectStream,
+                    allowAudioStreamCopy = allowAudioStreamCopy,
                     enableTranscoding = true,
                     autoOpenLiveStream = true,
                 ),
@@ -1107,6 +1119,8 @@ constructor(
                 userInitiated = true,
                 enableDirectPlay = qualityManager.effectiveEnableDirectPlay,
                 enableDirectStream = true,
+                allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
+                forceRebuild = true,
             )
         }
     }
@@ -1366,10 +1380,14 @@ constructor(
         nextUp.setValueOnMain(null)
     }
 
-    fun playItemInPlaylist(item: BaseItem) {
+    /**
+     * Play an upcoming playlist item by id (Phase 2 Up-Next cards). Advances the
+     * playlist index to the item and runs the same item-swap path as [playNextUp].
+     */
+    fun playPlaylistItem(id: UUID) {
         playlist.value?.let { playlist ->
             viewModelScope.launchIO {
-                val toPlay = playlist.advanceTo(item.id)
+                val toPlay = playlist.advanceTo(id)
                 if (toPlay != null) {
                     val played = play(toPlay, 0)
                     if (!played) {
@@ -1553,6 +1571,7 @@ constructor(
                             false,
                             enableDirectPlay = false,
                             enableDirectStream = false,
+                            forceRebuild = true,
                         )
                         withContext(Dispatchers.Main) {
                             player.prepare()

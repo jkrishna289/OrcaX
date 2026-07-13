@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -66,8 +67,14 @@ class QualityManager(
     /**
      * Emits whenever AUTO detects a change significant enough to warrant
      * restarting the stream. Caller should re-invoke changeStreams().
+     * Buffered: tryEmit from a non-suspending context must never drop the
+     * signal when the collector is mid-processing.
      */
-    private val _forceSwitchRequired = MutableSharedFlow<Unit>(replay = 0)
+    private val _forceSwitchRequired = MutableSharedFlow<Unit>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     val forceSwitchRequired: SharedFlow<Unit> = _forceSwitchRequired.asSharedFlow()
 
     // ─── Internal tracking ────────────────────────────────────────────────────
@@ -109,9 +116,21 @@ class QualityManager(
 
     val effectiveEnableDirectPlay: Boolean
         get() = when {
-            _selectedTier.value == QualityTier.AUTO -> true
+            // AUTO: once the speed test resolves, honor the resolved tier's play
+            // method — a resolved transcode tier must not direct-play the original.
+            // Unresolved (test still running) → allow direct play freely.
+            _selectedTier.value == QualityTier.AUTO ->
+                _resolvedTier.value?.isDirectPlay ?: true
             else -> _selectedTier.value.isDirectPlay
         }
+
+    /**
+     * Whether the server may stream-copy the source audio codec.
+     * Transcode tiers must re-encode audio: stream-copying can carry an audio
+     * codec the device profile overclaims support for, producing silent playback.
+     */
+    val effectiveAllowAudioStreamCopy: Boolean
+        get() = effectiveEnableDirectPlay
 
     val toolbarLabel: String
         get() = when (_selectedTier.value) {

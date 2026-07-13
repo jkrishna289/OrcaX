@@ -64,6 +64,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,7 +108,10 @@ fun PlaybackScreen(
     onSeekRequested: (Long) -> Unit = {},
     onCCRequested: () -> Unit = {},
     onAudioDialogRequested: () -> Unit = {},
-    onConfirmRoulette: (RouletteType, Int) -> Unit = { _, _ -> }
+    onConfirmRoulette: (RouletteType, Int) -> Unit = { _, _ -> },
+    onPlayUpNext: (UpNextItem) -> Unit = {},
+    qualityLabel: String = "",
+    onQualityRequested: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -116,12 +121,28 @@ fun PlaybackScreen(
         if (state.phase2SubState != Phase2SubState.COMPACT) slideshowHold = false
     }
 
+    // Keys the router consumed on KeyDown — their paired KeyUp must also be
+    // swallowed so it can't leak into PlaybackKeyHandler (which acts on KeyUp).
+    val consumedDownKeys = remember { mutableSetOf<Key>() }
+    // When no chrome is showing, focus sits on the video surface and no key can
+    // legitimately reach this router — anything left in the set is a stale entry
+    // from a press whose KeyUp escaped during a phase transition. Clear it so it
+    // can't swallow an unrelated future KeyUp.
+    LaunchedEffect(state.phase, state.toolbarVisibility) {
+        if (state.phase == PlaybackPhase.ACTIVE && state.toolbarVisibility == ToolbarVisibility.HIDDEN) {
+            consumedDownKeys.clear()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyUp) {
+                    return@onKeyEvent consumedDownKeys.remove(event.key)
+                }
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                when (state.phase) {
+                val handled = when (state.phase) {
                     PlaybackPhase.ACTIVE         -> handlePhase1Key(event, state, viewModel, onConfirmRoulette)
                     // Back during pause → handled by BackHandlers in PlaybackPage.
                     // Picker Up/Down/Enter → handled inside RoulettePicker.
@@ -143,7 +164,15 @@ fun PlaybackScreen(
                                     viewModel.onPlayPauseToggle()
                                     true
                                 }
-                                Key.DirectionDown -> { slideshowHold = !slideshowHold; true }
+                                Key.DirectionDown -> {
+                                    // Auto-repeat delivers KeyDowns with no KeyUp between —
+                                    // only the initial press may toggle, or holding DOWN
+                                    // oscillates the hold state.
+                                    if (event.nativeKeyEvent.repeatCount == 0) {
+                                        slideshowHold = !slideshowHold
+                                    }
+                                    true
+                                }
                                 Key.DirectionLeft, Key.DirectionRight -> true
                                 else -> false
                             }
@@ -151,6 +180,8 @@ fun PlaybackScreen(
                             false
                         }
                 }
+                if (handled) consumedDownKeys.add(event.key)
+                handled
             }
     ) {
         PhaseScrim(
@@ -166,14 +197,17 @@ fun PlaybackScreen(
             onSeekRequested        = onSeekRequested,
             onCCRequested          = onCCRequested,
             onAudioDialogRequested = onAudioDialogRequested,
-            onConfirmRoulette      = onConfirmRoulette
+            onConfirmRoulette      = onConfirmRoulette,
+            onPlayUpNext           = onPlayUpNext
         )
 
         Phase1ToolbarLayer(
             state                = state,
             viewModel            = viewModel,
             onPlayPauseRequested = onPlayPauseRequested,
-            onSeekRequested      = onSeekRequested
+            onSeekRequested      = onSeekRequested,
+            qualityLabel         = qualityLabel,
+            onQualityRequested   = onQualityRequested
         )
 
         BitstreamToast(
@@ -195,7 +229,8 @@ private fun handlePhase1Key(
     vm: PlaybackPhaseViewModel,
     onConfirmRoulette: (RouletteType, Int) -> Unit
 ): Boolean {
-    vm.onUserInteraction()
+    // BACK must not re-arm the toolbar timers it is about to dismiss.
+    if (!isBackKey(event)) vm.onUserInteraction()
     return when {
         state.dropdown != null -> when (event.key) {
             Key.DirectionUp              -> { vm.navigateDropdown(-1); true }
@@ -273,7 +308,8 @@ private fun Phase2OverlayLayer(
     onSeekRequested: (Long) -> Unit,
     onCCRequested: () -> Unit,
     onAudioDialogRequested: () -> Unit,
-    onConfirmRoulette: (RouletteType, Int) -> Unit = { _, _ -> }
+    onConfirmRoulette: (RouletteType, Int) -> Unit = { _, _ -> },
+    onPlayUpNext: (UpNextItem) -> Unit = {}
 ) {
     val phase = state.phase
 
@@ -454,7 +490,10 @@ private fun Phase2OverlayLayer(
                             viewModel.onPlayPauseToggle()
                         },
                         onSkipForward = {
-                            val pos = (state.seekPositionMs + 10_000L).coerceAtMost(state.durationMs)
+                            // durationMs == 0 while unknown (live / not yet reported) — clamping
+                            // against it would seek to the start instead of forward.
+                            val limit = if (state.durationMs > 0L) state.durationMs else Long.MAX_VALUE
+                            val pos = (state.seekPositionMs + 10_000L).coerceAtMost(limit)
                             onSeekRequested(pos)
                             viewModel.onSeekTo(pos)
                         },
@@ -605,15 +644,15 @@ private fun Phase2OverlayLayer(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(20.dp))
-                                        .background(Color(0x377C5CFF))
-                                        .border(1.dp, Color(0x727C5CFF), RoundedCornerShape(20.dp))
+                                        .background(PlaybackColors.Purple.copy(alpha = 0.22f))
+                                        .border(1.dp, PlaybackColors.Purple.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
                                         .padding(horizontal = 9.dp, vertical = 2.dp)
                                 ) {
                                     Text(
                                         text       = stringResource(R.string.p2_more_count, hiddenCount),
                                         fontSize   = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color      = Color(0xFFCBBCFF)
+                                        color      = PlaybackColors.Purple
                                     )
                                 }
                             }
@@ -636,6 +675,7 @@ private fun Phase2OverlayLayer(
                         }
                         Phase2Card(
                             item           = displayItem,
+                            onClick        = { onPlayUpNext(displayItem) },
                             focusRequester = cardFRs[0],
                             focusProperties = {
                                 canFocus = !isCompact
@@ -656,6 +696,7 @@ private fun Phase2OverlayLayer(
                                         else FocusRequester.Default
                         Phase2Card(
                             item           = item,
+                            onClick        = { onPlayUpNext(item) },
                             focusRequester = cardFRs[1],
                             focusProperties = {
                                 canFocus = !isCompact
@@ -692,6 +733,7 @@ private fun Phase2OverlayLayer(
 
                             Phase2Card(
                                 item           = item,
+                                onClick        = { onPlayUpNext(item) },
                                 focusRequester = cardFRs[cardIdx],
                                 focusProperties = {
                                     canFocus = isRailExpanded && !isCompact
@@ -897,6 +939,7 @@ private fun P2CircleBtn(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusProperties {
                 this.canFocus = focusEnabled
+                up = FocusRequester.Cancel   // transport row is the top of the Phase-2 focus graph
                 if (leftFR  != null) left  = leftFR
                 if (rightFR != null) right = rightFR
                 if (downFR  != null) down  = downFR
@@ -950,6 +993,7 @@ private fun P2PlayPauseBtn(
             .focusRequester(focusRequester)
             .focusProperties {
                 this.canFocus = focusEnabled
+                up = FocusRequester.Cancel   // transport row is the top of the Phase-2 focus graph
                 if (leftFR  != null) left  = leftFR
                 if (rightFR != null) right = rightFR
                 if (downFR  != null) down  = downFR
@@ -1064,6 +1108,7 @@ private fun formatMinutesLeft(ms: Long): String {
 @Composable
 private fun Phase2Card(
     item: UpNextItem,
+    onClick: () -> Unit,
     focusRequester: FocusRequester,
     focusProperties: (androidx.compose.ui.focus.FocusProperties.() -> Unit) = {},
     onDownPressed: (() -> Unit)?,
@@ -1092,7 +1137,13 @@ private fun Phase2Card(
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
-            .focusable()
+            // clickable subsumes focusable() and consumes BOTH key phases of OK,
+            // so this cannot re-introduce an F1-style KeyUp leak.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .shadow(
                 elevation    = (6 * glowAlpha).dp,
@@ -1518,12 +1569,19 @@ private fun Phase1ToolbarLayer(
     state: PlaybackUiState,
     viewModel: PlaybackPhaseViewModel,
     onPlayPauseRequested: () -> Unit,
-    onSeekRequested: (Long) -> Unit
+    onSeekRequested: (Long) -> Unit,
+    qualityLabel: String = "",
+    onQualityRequested: () -> Unit = {}
 ) {
     val isVisible = state.phase == PlaybackPhase.ACTIVE &&
                     state.toolbarVisibility == ToolbarVisibility.VISIBLE
 
     val playBtnFocusRequester = remember { FocusRequester() }
+
+    // Measured distance from each setting chip's RIGHT edge to the chips-row end, so
+    // each dropdown stays glued over its chip regardless of chip/label width.
+    var audioChipEndInset by remember { mutableStateOf(164.dp) }
+    var subChipEndInset by remember { mutableStateOf(0.dp) }
 
     LaunchedEffect(isVisible) {
         if (isVisible) {
@@ -1602,6 +1660,14 @@ private fun Phase1ToolbarLayer(
                 onPlayPauseRequested = onPlayPauseRequested,
                 onSeekRequested      = onSeekRequested,
                 playBtnFocusRequester = playBtnFocusRequester,
+                qualityLabel         = qualityLabel,
+                onQualityRequested   = onQualityRequested,
+                onChipEndInsetChanged = { type, inset ->
+                    when (type) {
+                        RouletteType.AUDIO    -> audioChipEndInset = inset
+                        RouletteType.SUBTITLE -> subChipEndInset = inset
+                    }
+                },
                 modifier             = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
@@ -1613,12 +1679,12 @@ private fun Phase1ToolbarLayer(
                     )
             )
 
-            // Phase 1 dropdown — renders above the chip that opened it
+            // Phase 1 dropdown — renders above the chip that opened it, right edges
+            // aligned via the measured chip insets.
             state.dropdown?.let { dd ->
                 val endPadding = when (dd.type) {
-                    RouletteType.SUBTITLE -> PlaybackDimens.SafeH
-                    // Sits left of the SUB button so the AUDIO dropdown aligns over its chip.
-                    RouletteType.AUDIO    -> PlaybackDimens.SafeH + 164.dp
+                    RouletteType.SUBTITLE -> PlaybackDimens.SafeH + subChipEndInset
+                    RouletteType.AUDIO    -> PlaybackDimens.SafeH + audioChipEndInset
                 }
                 val dropdownItems = when (dd.type) {
                     RouletteType.AUDIO    -> state.audioItems
@@ -1697,7 +1763,7 @@ private fun P1DropdownMenu(
                     modifier = Modifier
                         .size(6.dp)
                         .background(
-                            if (isCurrent) Color(0xFF7C5CFF) else Color.Transparent,
+                            if (isCurrent) PlaybackColors.Purple else Color.Transparent,
                             CircleShape
                         )
                         .then(
@@ -1832,8 +1898,19 @@ private fun P1BottomBar(
     onPlayPauseRequested: () -> Unit,
     onSeekRequested: (Long) -> Unit,
     playBtnFocusRequester: FocusRequester,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    qualityLabel: String = "",
+    onQualityRequested: () -> Unit = {},
+    onChipEndInsetChanged: (RouletteType, Dp) -> Unit = { _, _ -> },
 ) {
+    val density = LocalDensity.current
+    // Reports the distance from a chip's right edge to the chips-row end, which the
+    // dropdown layer uses to right-align each dropdown over its chip.
+    fun chipInsetModifier(type: RouletteType) = Modifier.onGloballyPositioned { coords ->
+        val row = coords.parentLayoutCoordinates ?: return@onGloballyPositioned
+        val insetPx = row.size.width - coords.positionInParent().x - coords.size.width
+        onChipEndInsetChanged(type, with(density) { insetPx.toDp() })
+    }
     val seekFraction    = if (state.durationMs > 0L) state.seekPositionMs.toFloat() / state.durationMs else 0f
     val bufferedFraction = if (state.durationMs > 0L) state.bufferedPositionMs.toFloat() / state.durationMs else 0f
 
@@ -1852,6 +1929,9 @@ private fun P1BottomBar(
                 onSeekRequested(posMs)
                 viewModel.onSeekTo(posMs)
             },
+            // Display-only in Phase 1 — LEFT/RIGHT are the skip buttons' job; a stray
+            // focusable here strands D-pad focus above the transport row.
+            focusable = false,
             modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = seekBarAlpha }
         )
         val anyDropdownOpen = state.dropdown != null
@@ -1861,32 +1941,38 @@ private fun P1BottomBar(
             verticalAlignment     = Alignment.CenterVertically
         ) {
             FrostPlaybackButton(
-                iconRes    = R.drawable.baseline_fast_forward_24,
-                mirrorIcon = true,
-                label      = "30",
-                isDimmed   = anyDropdownOpen,
-                onClick    = {
+                iconRes            = null,
+                text               = "«30",
+                contentDescription = stringResource(R.string.p1_skip_back_30),
+                isDimmed           = anyDropdownOpen,
+                onClick            = {
                     val pos = (state.seekPositionMs - 30_000L).coerceAtLeast(0L)
                     onSeekRequested(pos)
                     viewModel.onSeekTo(pos)
                 },
             )
             FrostPlaybackButton(
-                iconRes        = if (state.isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24,
-                label          = stringResource(if (state.isPlaying) R.string.p1_pause else R.string.p1_play),
-                isDimmed       = anyDropdownOpen,
-                focusRequester = playBtnFocusRequester,
-                onClick        = {
+                iconRes            = if (state.isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24,
+                text               = null,
+                contentDescription = stringResource(if (state.isPlaying) R.string.p1_pause else R.string.p1_play),
+                isPrimary          = true,
+                isDimmed           = anyDropdownOpen,
+                focusRequester     = playBtnFocusRequester,
+                onClick            = {
                     onPlayPauseRequested()
                     viewModel.onPlayPauseToggle()
                 },
             )
             FrostPlaybackButton(
-                iconRes  = R.drawable.baseline_fast_forward_24,
-                label    = "15",
-                isDimmed = anyDropdownOpen,
-                onClick  = {
-                    val pos = (state.seekPositionMs + 15_000L).coerceAtMost(state.durationMs)
+                iconRes            = null,
+                text               = "15»",
+                contentDescription = stringResource(R.string.p1_skip_forward_15),
+                isDimmed           = anyDropdownOpen,
+                onClick            = {
+                    // durationMs == 0 while unknown (live / not yet reported) — clamping
+                    // against it would seek to the start instead of forward.
+                    val limit = if (state.durationMs > 0L) state.durationMs else Long.MAX_VALUE
+                    val pos = (state.seekPositionMs + 15_000L).coerceAtMost(limit)
                     onSeekRequested(pos)
                     viewModel.onSeekTo(pos)
                 },
@@ -1898,6 +1984,7 @@ private fun P1BottomBar(
                 isActive = state.dropdown?.type == RouletteType.AUDIO,
                 isDimmed = anyDropdownOpen && state.dropdown?.type != RouletteType.AUDIO,
                 onOpen   = { viewModel.openDropdown(RouletteType.AUDIO) },
+                modifier = chipInsetModifier(RouletteType.AUDIO),
             )
             FrostSettingButton(
                 header   = stringResource(R.string.p1_sub),
@@ -1906,6 +1993,14 @@ private fun P1BottomBar(
                 isActive = state.dropdown?.type == RouletteType.SUBTITLE,
                 isDimmed = anyDropdownOpen && state.dropdown?.type != RouletteType.SUBTITLE,
                 onOpen   = { viewModel.openDropdown(RouletteType.SUBTITLE) },
+                modifier = chipInsetModifier(RouletteType.SUBTITLE),
+            )
+            FrostSettingButton(
+                header   = stringResource(R.string.p1_quality),
+                primary  = qualityLabel,
+                isActive = false,
+                isDimmed = anyDropdownOpen,
+                onOpen   = onQualityRequested,
             )
         }
     }

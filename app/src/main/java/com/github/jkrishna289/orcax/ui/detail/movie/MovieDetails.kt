@@ -1,5 +1,8 @@
 package com.github.jkrishna289.orcax.ui.detail.movie
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -299,6 +303,7 @@ fun MovieDetails(
                 },
                 canDelete = state.canDelete,
                 deleteOnClick = { showDeleteDialog = state.movie },
+                requestOnClick = viewModel::requestMedia,
                 modifier = modifier,
             )
         }
@@ -370,6 +375,32 @@ private const val EXTRAS_ROW = CHAPTER_ROW + 1
 private const val SIMILAR_ROW = EXTRAS_ROW + 1
 private const val DISCOVER_ROW = SIMILAR_ROW + 1
 
+private const val DETAILS_ROW_PARENT_FRACTION = 0.18f
+
+/**
+ * Keeps the focused row ~18% down from the top of the screen instead of the default flush-edge
+ * scroll, so the row that follows (Chapters under People, Extras under Chapters, etc.) always
+ * peeks in at the bottom instead of being scrolled fully offscreen.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private val DetailsRowFocusSpec =
+    object : BringIntoViewSpec {
+        override fun calculateScrollDistance(
+            offset: Float,
+            size: Float,
+            containerSize: Float,
+        ): Float {
+            val target = DETAILS_ROW_PARENT_FRACTION * containerSize
+            val clampedTarget =
+                if (size <= containerSize && (containerSize - target) < size) {
+                    containerSize - size // near the end of the list — don't overscroll past the last row
+                } else {
+                    target
+                }
+            return offset - clampedTarget
+        }
+    }
+
 @Composable
 fun MovieDetailsContent(
     preferences: UserPreferences,
@@ -389,6 +420,7 @@ fun MovieDetailsContent(
     onClickDiscover: (Int, DiscoverItem) -> Unit,
     canDelete: Boolean,
     deleteOnClick: () -> Unit,
+    requestOnClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -403,142 +435,148 @@ fun MovieDetailsContent(
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
 
     Box(modifier = modifier) {
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 8.dp),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .bringIntoViewRequester(bringIntoViewRequester),
-                ) {
-                    MovieDetailsHeader(
-                        preferences = preferences,
-                        movie = movie,
-                        chosenStreams = state.chosenStreams,
-                        bringIntoViewRequester = bringIntoViewRequester,
-                        overviewOnClick = overviewOnClick,
+        @OptIn(ExperimentalFoundationApi::class)
+        CompositionLocalProvider(LocalBringIntoViewSpec provides DetailsRowFocusSpec) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 8.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                item {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(top = HeaderUtils.topPadding, bottom = 16.dp),
-                    )
-                    ExpandablePlayButtons(
-                        resumePosition = resumePosition,
-                        watched = dto.userData?.played ?: false,
-                        favorite = dto.userData?.isFavorite ?: false,
-                        playOnClick = {
-                            position = HEADER_ROW
-                            playOnClick.invoke(it)
-                        },
-                        moreOnClick = moreOnClick,
-                        watchOnClick = watchOnClick,
-                        favoriteOnClick = favoriteOnClick,
-                        buttonOnFocusChanged = {
-                            if (it.isFocused) {
+                                .bringIntoViewRequester(bringIntoViewRequester),
+                    ) {
+                        MovieDetailsHeader(
+                            preferences = preferences,
+                            movie = movie,
+                            chosenStreams = state.chosenStreams,
+                            availability = state.availability,
+                            requestInFlight = state.requestInFlight,
+                            requestOnClick = requestOnClick,
+                            bringIntoViewRequester = bringIntoViewRequester,
+                            overviewOnClick = overviewOnClick,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = HeaderUtils.topPadding, bottom = 16.dp),
+                        )
+                        ExpandablePlayButtons(
+                            resumePosition = resumePosition,
+                            watched = dto.userData?.played ?: false,
+                            favorite = dto.userData?.isFavorite ?: false,
+                            playOnClick = {
                                 position = HEADER_ROW
-                                scope.launch(ExceptionHandler()) {
-                                    bringIntoViewRequester.bringIntoView()
+                                playOnClick.invoke(it)
+                            },
+                            moreOnClick = moreOnClick,
+                            watchOnClick = watchOnClick,
+                            favoriteOnClick = favoriteOnClick,
+                            buttonOnFocusChanged = {
+                                if (it.isFocused) {
+                                    position = HEADER_ROW
+                                    scope.launch(ExceptionHandler()) {
+                                        bringIntoViewRequester.bringIntoView()
+                                    }
                                 }
-                            }
-                        },
-                        trailers = state.trailers,
-                        trailerOnClick = {
-                            position = TRAILER_ROW
-                            trailerOnClick.invoke(it)
-                        },
-                        canDelete = canDelete,
-                        deleteOnClick = deleteOnClick,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                                .focusRequester(focusRequesters[HEADER_ROW]),
+                            },
+                            trailers = state.trailers,
+                            trailerOnClick = {
+                                position = TRAILER_ROW
+                                trailerOnClick.invoke(it)
+                            },
+                            canDelete = canDelete,
+                            deleteOnClick = deleteOnClick,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp)
+                                    .focusRequester(focusRequesters[HEADER_ROW]),
+                        )
+                    }
+                }
+                state.people.letNotEmpty { people ->
+                    item {
+                        PersonRow(
+                            people = people,
+                            onClick = {
+                                position = PEOPLE_ROW
+                                onClickPerson.invoke(it)
+                            },
+                            onLongClick = { index, person ->
+                                position = PEOPLE_ROW
+                                onLongClickPerson.invoke(index, person)
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequesters[PEOPLE_ROW]),
+                        )
+                    }
+                }
+                state.chapters.letNotEmpty { chapters ->
+                    item {
+                        ChapterRow(
+                            chapters = chapters,
+                            aspectRatio = movie.data.aspectRatioFloat ?: AspectRatios.WIDE,
+                            onClick = {
+                                position = CHAPTER_ROW
+                                playOnClick.invoke(it.position)
+                            },
+                            onLongClick = {},
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequesters[CHAPTER_ROW]),
+                        )
+                    }
+                }
+                state.extras.letNotEmpty { extras ->
+                    item {
+                        ExtrasRow(
+                            extras = extras,
+                            onClickItem = { index, item ->
+                                position = EXTRAS_ROW
+                                onClickExtra.invoke(index, item)
+                            },
+                            onLongClickItem = { _, _ -> },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequesters[EXTRAS_ROW]),
+                        )
+                    }
+                }
+                // "More Like This" powered by the Orca Engine's content-based similarity (replaces
+                // Jellyfin's native similar list). Self-contained + fail-soft: renders nothing when the
+                // engine is unavailable or has no results.
+                item(key = "engineSimilar") {
+                    EngineSimilarRow(
+                        itemId = movie.id,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
-            }
-            state.people.letNotEmpty { people ->
-                item {
-                    PersonRow(
-                        people = people,
-                        onClick = {
-                            position = PEOPLE_ROW
-                            onClickPerson.invoke(it)
-                        },
-                        onLongClick = { index, person ->
-                            position = PEOPLE_ROW
-                            onLongClickPerson.invoke(index, person)
-                        },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters[PEOPLE_ROW]),
-                    )
-                }
-            }
-            state.chapters.letNotEmpty { chapters ->
-                item {
-                    ChapterRow(
-                        chapters = chapters,
-                        aspectRatio = movie.data.aspectRatioFloat ?: AspectRatios.WIDE,
-                        onClick = {
-                            position = CHAPTER_ROW
-                            playOnClick.invoke(it.position)
-                        },
-                        onLongClick = {},
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters[CHAPTER_ROW]),
-                    )
-                }
-            }
-            state.extras.letNotEmpty { extras ->
-                item {
-                    ExtrasRow(
-                        extras = extras,
-                        onClickItem = { index, item ->
-                            position = EXTRAS_ROW
-                            onClickExtra.invoke(index, item)
-                        },
-                        onLongClickItem = { _, _ -> },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters[EXTRAS_ROW]),
-                    )
-                }
-            }
-            // "More Like This" powered by the Orca Engine's content-based similarity (replaces
-            // Jellyfin's native similar list). Self-contained + fail-soft: renders nothing when the
-            // engine is unavailable or has no results.
-            item(key = "engineSimilar") {
-                EngineSimilarRow(
-                    itemId = movie.id,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            state.discovered.letNotEmpty { discovered ->
-                item {
-                    DiscoverRow(
-                        row =
-                            DiscoverRowData(
-                                stringResource(R.string.discover),
-                                DataLoadingState.Success(discovered),
-                                type = DiscoverRequestType.UNKNOWN,
-                            ),
-                        onClickItem = { index: Int, item: DiscoverItem ->
-                            position = DISCOVER_ROW
-                            onClickDiscover.invoke(index, item)
-                        },
-                        onLongClickItem = { _, _ -> },
-                        onCardFocus = {},
-                        focusRequester = focusRequesters[DISCOVER_ROW],
-                    )
+                state.discovered.letNotEmpty { discovered ->
+                    item {
+                        DiscoverRow(
+                            row =
+                                DiscoverRowData(
+                                    stringResource(R.string.discover),
+                                    DataLoadingState.Success(discovered),
+                                    type = DiscoverRequestType.UNKNOWN,
+                                ),
+                            onClickItem = { index: Int, item: DiscoverItem ->
+                                position = DISCOVER_ROW
+                                onClickDiscover.invoke(index, item)
+                            },
+                            onLongClickItem = { _, _ -> },
+                            onCardFocus = {},
+                            focusRequester = focusRequesters[DISCOVER_ROW],
+                        )
+                    }
                 }
             }
         }

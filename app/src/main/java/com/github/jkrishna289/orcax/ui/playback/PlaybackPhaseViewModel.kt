@@ -214,6 +214,10 @@ class PlaybackPhaseViewModel : ViewModel() {
 
     /** Idle timer in FULL → drop into the ambient COMPACT view (same as BACK). */
     private fun rescheduleIdleCompact() {
+        if (_uiState.value.phase != PlaybackPhase.PAUSED_OVERLAY) return
+        // Picker is modal — the idle → COMPACT clock never runs underneath it.
+        // Enforced here (not just at call sites) so no caller can re-arm it.
+        if (_uiState.value.p2PickerType != null) return
         idleCompactJob?.cancel()
         idleCompactJob = viewModelScope.launch {
             delay(PHASE2_IDLE_MS)
@@ -224,7 +228,8 @@ class PlaybackPhaseViewModel : ViewModel() {
     /** BACK (or idle) from FULL → ambient COMPACT (seek bar is an inert focus anchor). */
     fun compactPhase2() {
         if (_uiState.value.phase == PlaybackPhase.PAUSED_OVERLAY &&
-            _uiState.value.phase2SubState == Phase2SubState.FULL
+            _uiState.value.phase2SubState == Phase2SubState.FULL &&
+            _uiState.value.p2PickerType == null   // picker is modal — never compact under it
         ) {
             idleCompactJob?.cancel()
             _uiState.update { it.copy(phase2SubState = Phase2SubState.COMPACT) }
@@ -353,6 +358,8 @@ class PlaybackPhaseViewModel : ViewModel() {
     // ── Phase 2 roulette picker ───────────────────────────────────────────────
 
     fun openP2Picker(type: RouletteType) {
+        // Picker is modal: stop the idle → COMPACT clock while it is open.
+        idleCompactJob?.cancel()
         val confirmedIdx = when (type) {
             RouletteType.AUDIO    -> _uiState.value.audioConfirmedIndex
             RouletteType.SUBTITLE -> _uiState.value.subtitleConfirmedIndex
@@ -362,10 +369,12 @@ class PlaybackPhaseViewModel : ViewModel() {
 
     fun closeP2Picker() {
         _uiState.update { it.copy(p2PickerType = null) }
+        rescheduleIdleCompact()
     }
 
     fun setP2PickerIndex(index: Int) {
         _uiState.update { it.copy(p2PickerFocusIndex = index) }
+        rescheduleIdleCompact()
     }
 
     fun confirmP2Picker(): Pair<RouletteType, Int>? {
@@ -378,6 +387,7 @@ class PlaybackPhaseViewModel : ViewModel() {
                 RouletteType.SUBTITLE -> it.copy(subtitleConfirmedIndex = index, p2PickerType = null)
             }
         }
+        rescheduleIdleCompact()
         return Pair(type, index)
     }
 

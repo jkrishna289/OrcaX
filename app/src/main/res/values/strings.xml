@@ -60,6 +60,9 @@
     <string name="p1_aud">AUD</string>
     <string name="p1_sub">SUB</string>
     <string name="p1_cc">CC</string>
+    <string name="p1_quality">QUALITY</string>
+    <string name="p1_skip_back_30">Back 30 seconds</string>
+    <string name="p1_skip_forward_15">Forward 15 seconds</string>
     <string name="p1_season_episode">S%1$d  ·  E%2$d</string>
     <string name="minutes_left_under_one">&lt;1m left</string>
     <string name="minutes_left">%1$dm left</string>
@@ -518,6 +521,8 @@
 
     <string name="discover">Discover</string>
     <string name="request">Request</string>
+    <string name="requested">Requested</string>
+    <string name="requesting">Requesting…</string>
     <string name="pending">Pending</string>
     <string name="seerr_integration">Seerr integration</string>
     <string name="remove_seerr_server">Remove Seerr Server</string>

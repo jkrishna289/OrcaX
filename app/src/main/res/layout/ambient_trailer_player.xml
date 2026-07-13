@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+    Ambient backdrop trailer surface. texture_view (not the default SurfaceView) is load-bearing:
+    the video must composite through the backdrop's offscreen layer so the existing DstIn edge-fade
+    gradients mask it — a SurfaceView would punch an unmasked rectangle. Transparent shutter so the
+    still backdrop shows through until the first frame.
+-->
+<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    app:resize_mode="zoom"
+    app:shutter_background_color="@android:color/transparent"
+    app:surface_type="texture_view"
+    app:use_controller="false" />
