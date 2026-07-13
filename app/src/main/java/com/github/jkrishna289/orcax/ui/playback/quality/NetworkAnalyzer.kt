@@ -26,6 +26,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
 import timber.log.Timber
 import java.io.IOException
 import java.net.Inet4Address
@@ -251,12 +252,14 @@ class NetworkAnalyzer @Inject constructor(
         return ProbeSample(bps, wallTimeMs)
     }
 
-    private fun authorizationHeader(): String {
-        val client = api.clientInfo
-        val device = api.deviceInfo
-        return "MediaBrowser Client=\"${client.name}\", Device=\"${device.name}\"," +
-            " DeviceId=\"${device.id}\", Version=\"${client.version}\", Token=\"${api.accessToken}\""
-    }
+    private fun authorizationHeader(): String =
+        AuthorizationHeaderBuilder.buildHeader(
+            clientName = api.clientInfo.name,
+            clientVersion = api.clientInfo.version,
+            deviceId = api.deviceInfo.id,
+            deviceName = api.deviceInfo.name,
+            accessToken = api.accessToken,
+        )
 
     /** OS-reported link capacity at 80% TCP hedge, or null — never a fabricated number. */
     private fun osLinkMeasurement(): BandwidthMeasurement? {
