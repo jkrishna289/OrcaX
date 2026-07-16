@@ -203,8 +203,11 @@
     <string name="suggestions">Suggestions</string>
     <string name="switch_servers">Switch servers</string>
     <string name="switch_user">Switch</string>
+    <string name="top_10">TOP 10</string>
     <string name="top_unwatched">Top Rated Unwatched</string>
     <string name="trailer">Trailer</string>
+    <string name="now_previewing">Now Previewing</string>
+    <string name="up_next">Up Next</string>
     <string name="trailers">Trailers</string>
     <string name="tv_dvr_schedule">DVR Schedule</string>
     <string name="tv_guide">Guide</string>

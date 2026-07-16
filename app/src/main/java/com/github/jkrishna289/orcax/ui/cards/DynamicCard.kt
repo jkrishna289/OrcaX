@@ -1,23 +1,32 @@
 package com.github.jkrishna289.orcax.ui.cards
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,16 +39,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
@@ -48,6 +62,8 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.SubcomposeAsyncImage
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.CardAspectRatio
 import com.github.jkrishna289.orcax.engine.CardBadge
 import com.github.jkrishna289.orcax.engine.CardSize
@@ -58,6 +74,7 @@ import com.github.jkrishna289.orcax.engine.RenderRow
 import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.Cards
+import com.github.jkrishna289.orcax.ui.FontAwesome
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
 import com.github.jkrishna289.orcax.ui.TrailerPhase
@@ -116,13 +133,33 @@ fun DynamicCard(
             )
 
         CardType.STUDIO ->
-            StudioCard(
-                studioId = null,
-                name = card.title,
-                imageUrl = resolvedImageUrl,
+            // Square studio cards are the "Browse by Network" wordmark tiles; StudioCard hard-codes
+            // a 16:9 box, so squares get their own tile treatment.
+            if (card.aspectRatio == CardAspectRatio.SQUARE) {
+                NetworkTileCard(
+                    name = card.title,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    modifier = modifier,
+                )
+            } else {
+                StudioCard(
+                    studioId = null,
+                    name = card.title,
+                    imageUrl = resolvedImageUrl,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    modifier = modifier.width(width),
+                )
+            }
+
+        CardType.TOP_RANKED ->
+            TopRankedCard(
+                item = item,
+                resolvedImageUrl = resolvedImageUrl,
                 onClick = onClick,
                 onLongClick = onLongClick,
-                modifier = modifier.width(width),
+                modifier = modifier,
             )
 
         else ->
@@ -166,7 +203,6 @@ private fun EngineCardBody(
     val sizeScale = if (card.size == CardSize.LARGE) LARGE_CARD_SCALE else 1f
     val height = Cards.height2x3 * baseScale * sizeScale
     val width = height * aspectRatioValue(card.aspectRatio)
-    val rank = card.badges.firstOrNull { it.kind.equals("RANK", ignoreCase = true) }?.text
     val interactionSource = remember { MutableInteractionSource() }
     val focusedAfterDelay by rememberFocusedAfterDelay(interactionSource)
     val cardShape = RoundedCornerShape(8.dp)
@@ -276,7 +312,21 @@ private fun EngineCardBody(
                                 ),
                     )
                     val progress = card.progress
+                    val trailerShowing = playTrailer && trailerPhase == TrailerPhase.PLAYING
                     if (card.showProgress && progress != null) {
+                        val fillFraction = progress.coerceIn(0.0, 1.0).toFloat()
+                        // Soft glow halo behind the accent fill — static normally, pulsing only while
+                        // focused (one infinite animation per row at most, not one per card).
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    .fillMaxWidth(fillFraction)
+                                    .height(9.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = pulsingGlowAlpha(active = focused)),
+                                    ),
+                        )
                         Box(
                             modifier =
                                 Modifier
@@ -289,10 +339,53 @@ private fun EngineCardBody(
                             modifier =
                                 Modifier
                                     .align(Alignment.BottomStart)
-                                    .fillMaxWidth(progress.coerceIn(0.0, 1.0).toFloat())
+                                    .fillMaxWidth(fillFraction)
                                     .height(5.dp)
                                     .background(MaterialTheme.colorScheme.primary),
                         )
+
+                        // Resume affordances hide while an inline trailer is actually showing.
+                        if (!trailerShowing) {
+                            // "24 min left" chip (TIMELEFT badge), just above the progress bar.
+                            card.badges
+                                .firstOrNull { it.kind.equals("TIMELEFT", ignoreCase = true) }
+                                ?.text
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { left ->
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.BottomStart)
+                                                .padding(start = 10.dp, bottom = 14.dp)
+                                                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(5.dp))
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    ) {
+                                        Text(
+                                            text = left,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                        )
+                                    }
+                                }
+                            if (CardAction.RESUME in card.actions) {
+                                ResumePill(
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(end = 10.dp, bottom = 14.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    // Live-preview chrome while the trailer is actually playing: a "TRAILER" chip
+                    // with animated equalizer bars top-left, the volume state top-right.
+                    if (trailerShowing) {
+                        TrailerPlayingChip(modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
+                        TrailerVolumeChip(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
                     }
                 } else {
                     // Poster: bottom scrim so the overlaid title always reads over the art.
@@ -308,36 +401,28 @@ private fun EngineCardBody(
                                 ),
                     )
 
-                    // Top-10 rank numeral (engine tags ranked items with a RANK badge).
-                    if (rank != null) {
-                        Box(modifier = Modifier.align(Alignment.BottomStart).padding(start = 2.dp)) {
-                            Text(
-                                text = rank,
-                                fontWeight = FontWeight.Black,
-                                fontSize = RANK_NUMERAL_SP,
-                                lineHeight = RANK_NUMERAL_SP,
-                                style = TextStyle(drawStyle = Stroke(width = 6f), color = Color.Black.copy(alpha = 0.55f)),
-                            )
-                            Text(
-                                text = rank,
-                                color = Color.White,
-                                fontWeight = FontWeight.Black,
-                                fontSize = RANK_NUMERAL_SP,
-                                lineHeight = RANK_NUMERAL_SP,
-                            )
-                        }
-                    }
-
-                    // Overlaid title (and tag, when not a ranked card), bottom-aligned.
+                    // Overlaid title block, bottom-aligned: an optional centered PREMIERE chip, the
+                    // title, the tag, and an optional italic personalization footnote (CONTEXT badge,
+                    // e.g. "Based on Nightfall Protocol").
                     if (card.showTitle && !card.title.isNullOrBlank()) {
                         Column(
-                            horizontalAlignment = if (rank != null) Alignment.End else Alignment.Start,
+                            horizontalAlignment = Alignment.Start,
                             modifier =
                                 Modifier
                                     .align(Alignment.BottomStart)
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp, vertical = 12.dp),
                         ) {
+                            card.badges.firstOrNull { it.kind.equals("PREMIERE", ignoreCase = true) }?.let { premiere ->
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.CenterHorizontally)
+                                            .padding(bottom = 8.dp),
+                                ) {
+                                    BadgePill(text = premiere.text?.takeIf { it.isNotBlank() } ?: premiere.kind)
+                                }
+                            }
                             Text(
                                 text = card.title!!.uppercase(),
                                 color = Color.White,
@@ -347,9 +432,8 @@ private fun EngineCardBody(
                                 letterSpacing = 0.4.sp,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
-                                textAlign = if (rank != null) TextAlign.End else TextAlign.Start,
                             )
-                            if (rank == null && !card.subtitle.isNullOrBlank()) {
+                            if (!card.subtitle.isNullOrBlank()) {
                                 Text(
                                     text = card.subtitle!!,
                                     color = Color.White.copy(alpha = 0.7f),
@@ -360,22 +444,51 @@ private fun EngineCardBody(
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
                             }
+                            card.badges
+                                .firstOrNull { it.kind.equals("CONTEXT", ignoreCase = true) }
+                                ?.text
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { context ->
+                                    Text(
+                                        text = context,
+                                        color = Color.White.copy(alpha = 0.62f),
+                                        fontWeight = FontWeight.Medium,
+                                        fontStyle = FontStyle.Italic,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
                         }
                     }
                 }
 
-                // Availability / NEW badges top-right (RANK is drawn above; STUDIO is drawn top-left).
+                // Availability / promo badges top-right. Kinds with a dedicated placement are
+                // excluded: RANK feeds TopRankedCard, STUDIO/DAY/TODAY sit top-left, PREMIERE and
+                // CONTEXT live in the title block, TIMELEFT is the wide card's bottom-left chip.
                 val overlayBadges =
-                    card.badges.filterNot {
-                        it.kind.equals("RANK", ignoreCase = true) || it.kind.equals("STUDIO", ignoreCase = true)
+                    card.badges.filterNot { badge ->
+                        PLACED_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) }
                     }
                 if (overlayBadges.isNotEmpty()) {
                     CardBadges(badges = overlayBadges, modifier = Modifier.align(Alignment.TopEnd))
                 }
 
-                // Studio / streaming-provider tag, top-left (provider logo when cached, else a text pill).
-                card.badges.firstOrNull { it.kind.equals("STUDIO", ignoreCase = true) }?.let { studio ->
-                    StudioBadge(badge = studio, modifier = Modifier.align(Alignment.TopStart))
+                // Top-left stack: studio / provider tag, then the premiere-day chip (TODAY glows gold).
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                ) {
+                    card.badges.firstOrNull { it.kind.equals("STUDIO", ignoreCase = true) }?.let { studio ->
+                        StudioBadge(badge = studio)
+                    }
+                    card.badges.firstOrNull { it.kind.equals("TODAY", ignoreCase = true) }?.let { today ->
+                        TodayChip(text = today.text?.takeIf { it.isNotBlank() } ?: today.kind)
+                    }
+                    card.badges.firstOrNull { it.kind.equals("DAY", ignoreCase = true) }?.let { day ->
+                        DayChip(text = day.text?.takeIf { it.isNotBlank() } ?: day.kind)
+                    }
                 }
             }
         }
@@ -470,6 +583,11 @@ private fun aspectRatioValue(aspect: CardAspectRatio): Float =
         CardAspectRatio.TALL -> AspectRatios.TALL
     }
 
+/**
+ * Top-right badge chips, dispatched by kind: TOP_PICK is an accent-filled pill, LIVE is a dark chip
+ * with a pulsing dot (live viewer counts), and everything else (NEW, TRENDING, REQUESTED,
+ * DOWNLOADING, …) renders as a glassy outlined pill per the design language.
+ */
 @Composable
 private fun CardBadges(
     badges: List<CardBadge>,
@@ -480,7 +598,12 @@ private fun CardBadges(
         modifier = modifier.padding(8.dp),
     ) {
         badges.forEach { badge ->
-            BadgePill(text = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind)
+            val label = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind
+            when {
+                badge.kind.equals("TOP_PICK", ignoreCase = true) -> AccentBadgePill(text = label)
+                badge.kind.equals("LIVE", ignoreCase = true) -> LiveViewersBadge(text = label)
+                else -> GlassBadgePill(text = label)
+            }
         }
     }
 }
@@ -520,7 +643,8 @@ private fun BadgePill(
  * The studio / streaming-provider tag (top-left corner). Renders the engine's cached provider logo on a
  * dark chip for contrast (most brand logos are light-on-transparent); falls back to the styled text pill
  * when there's no logo URL or the image fails to load. The chip background is on the container so the
- * loading/error text sits on it without a doubled background.
+ * loading/error text sits on it without a doubled background. Outer padding is the caller's (it sits in
+ * the top-left overlay stack alongside the premiere-day chips).
  */
 @Composable
 private fun StudioBadge(
@@ -529,7 +653,7 @@ private fun StudioBadge(
 ) {
     val label = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind
     val logoUrl = LocalImageUrlService.current.engineImageUrl(badge.iconUrl)
-    Box(modifier = modifier.padding(8.dp)) {
+    Box(modifier = modifier) {
         if (logoUrl == null) {
             BadgePill(text = label)
         } else {
@@ -549,6 +673,443 @@ private fun StudioBadge(
             )
         }
     }
+}
+
+/**
+ * A Top-10 ranked card: the oversized gradient rank numeral sits BESIDE the poster, overlapping its
+ * left edge (per the design mockup — Netflix-style), with the title beneath the poster instead of
+ * overlaid. The numeral is a brushed white→grey gradient over a dark offset copy (the mockup's
+ * stacked drop shadow, collapsed to one draw). Badges other than RANK (e.g. LIVE viewer counts,
+ * REQUESTED) still render top-right; focus keeps the standard white border + scale.
+ */
+@Composable
+private fun TopRankedCard(
+    item: RenderItem,
+    resolvedImageUrl: String?,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val card = item.card
+    val accent = EngineHomeArt.parseAccent(card.accentColorHint)
+    val rank = card.badges.firstOrNull { it.kind.equals("RANK", ignoreCase = true) }?.text.orEmpty()
+    val height = Cards.height2x3
+    val width = height * AspectRatios.TALL
+    val cardShape = RoundedCornerShape(8.dp)
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.width(RANK_NUMERAL_INSET + width),
+    ) {
+        Box {
+            Card(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                shape = CardDefaults.shape(cardShape),
+                colors = CardDefaults.colors(containerColor = Color.Transparent),
+                border =
+                    CardDefaults.border(
+                        focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = cardShape),
+                    ),
+                modifier = Modifier.padding(start = RANK_NUMERAL_INSET).size(width, height),
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    EngineCardArt(
+                        imageUrl = resolvedImageUrl,
+                        name = card.title,
+                        accent = accent,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    val overlayBadges = card.badges.filterNot { it.kind.equals("RANK", ignoreCase = true) }
+                    if (overlayBadges.isNotEmpty()) {
+                        CardBadges(badges = overlayBadges, modifier = Modifier.align(Alignment.TopEnd))
+                    }
+                }
+            }
+            // Drawn after the Card so it overlaps the poster's left edge.
+            RankNumeral(
+                rank = rank,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .width(RANK_NUMERAL_INSET + RANK_NUMERAL_OVERLAP),
+            )
+        }
+        if (card.showTitle && !card.title.isNullOrBlank()) {
+            Text(
+                text = card.title!!,
+                maxLines = 1,
+                fontWeight = FontWeight.Bold,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = RANK_NUMERAL_INSET).fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/**
+ * The oversized rank numeral: end-aligned in its slot so a wider glyph run ("10") spills LEFT into
+ * the row gap (like the mockup) rather than over the poster. Overflow stays visible on purpose.
+ */
+@Composable
+private fun RankNumeral(
+    rank: String,
+    modifier: Modifier = Modifier,
+) {
+    val numeralSize = with(LocalDensity.current) { RANK_NUMERAL_HEIGHT.toSp() }
+    Box(modifier = modifier) {
+        // Dark offset copy behind the gradient — the mockup's stacked drop shadow in a single draw.
+        Text(
+            text = rank,
+            color = RankShadowColor,
+            fontWeight = FontWeight.Black,
+            fontSize = numeralSize,
+            lineHeight = numeralSize,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Visible,
+            textAlign = TextAlign.End,
+            modifier = Modifier.fillMaxWidth().offset(x = 3.dp, y = 6.dp),
+        )
+        Text(
+            text = rank,
+            fontWeight = FontWeight.Black,
+            fontSize = numeralSize,
+            lineHeight = numeralSize,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Visible,
+            textAlign = TextAlign.End,
+            style =
+                TextStyle(
+                    brush = Brush.linearGradient(RankNumeralGradient),
+                    shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(9f, 17f), blurRadius = 20f),
+                ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** A "Browse by Network" tile: a flat square with a centered wordmark (no artwork by design). */
+@Composable
+private fun NetworkTileCard(
+    name: String?,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Card(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        shape = CardDefaults.shape(shape),
+        colors = CardDefaults.colors(containerColor = NetworkTileBackground),
+        border =
+            CardDefaults.border(
+                border = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)), shape = shape),
+                focusedBorder = Border(BorderStroke(2.5.dp, Color.White), shape = shape),
+            ),
+        modifier = modifier.size(NETWORK_TILE_SIZE),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(8.dp)) {
+            Text(
+                text = name.orEmpty().uppercase(),
+                color = Color(0xFFF1ECF8),
+                fontWeight = FontWeight.Black,
+                fontSize = 15.sp,
+                letterSpacing = 1.5.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** A glassy outlined pill (promo badges: NEW, TRENDING, REQUESTED, DOWNLOADING, "New Episode"…). */
+@Composable
+private fun GlassBadgePill(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier =
+            modifier
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.16f),
+                        0.5f to Color.White.copy(alpha = 0.03f),
+                        1f to Color.White.copy(alpha = 0.10f),
+                    ),
+                    shape,
+                )
+                .border(1.25.dp, Color.White.copy(alpha = 0.55f), shape)
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = text.uppercase(),
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            letterSpacing = 1.sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** An accent-filled pill with dark text — the "★ Top Pick" treatment. */
+@Composable
+private fun AccentBadgePill(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
+                .padding(horizontal = 9.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = text.uppercase(),
+            color = Color(0xFF1D1625),
+            fontWeight = FontWeight.Black,
+            fontSize = 10.sp,
+            letterSpacing = 0.8.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** A dark chip with a pulsing red dot — live viewer counts on the Trending row ("2.4k ▲"). */
+@Composable
+private fun LiveViewersBadge(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier =
+            modifier
+                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(5.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(5.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        PulsingDot(color = LiveDotRed)
+        BadgeText(text)
+    }
+}
+
+/** The gold, pulsing "TODAY" premiere chip (top-left). */
+@Composable
+private fun TodayChip(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(6.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier =
+            modifier
+                .background(Color.Black.copy(alpha = 0.6f), shape)
+                .border(1.5.dp, PremiereGold.copy(alpha = 0.8f), shape)
+                .padding(horizontal = 9.dp, vertical = 4.dp),
+    ) {
+        PulsingDot(color = PremiereGold)
+        Text(
+            text = text.uppercase(),
+            color = PremiereGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            letterSpacing = 1.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** A plain day-of-week premiere chip (top-left), e.g. "TUE". */
+@Composable
+private fun DayChip(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier =
+            modifier
+                .background(Color.Black.copy(alpha = 0.6f), shape)
+                .border(1.dp, Color.White.copy(alpha = 0.2f), shape)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = text.uppercase(),
+            color = Color.White.copy(alpha = 0.85f),
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            letterSpacing = 0.8.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** The "TRAILER" chip with animated equalizer bars — shown only while an inline trailer plays. */
+@Composable
+private fun TrailerPlayingChip(modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(6.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        modifier =
+            modifier
+                .background(Color.Black.copy(alpha = 0.6f), shape)
+                .border(1.dp, Color.White.copy(alpha = 0.25f), shape)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.trailer).uppercase(),
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            letterSpacing = 1.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+        TrailerEqualizerBars()
+    }
+}
+
+/** Four staggered audio-wave bars (accent-colored). Composed only while a trailer plays. */
+@Composable
+private fun TrailerEqualizerBars(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "trailer-eq")
+    val fractions =
+        EQ_BAR_STAGGER_MS.map { stagger ->
+            transition.animateFloat(
+                initialValue = 0.3f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = 450),
+                        repeatMode = RepeatMode.Reverse,
+                        initialStartOffset = StartOffset(stagger),
+                    ),
+                label = "trailer-eq-$stagger",
+            )
+        }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.Bottom,
+        modifier = modifier.height(12.dp),
+    ) {
+        fractions.forEach { fraction ->
+            Box(
+                modifier =
+                    Modifier
+                        .width(3.dp)
+                        .fillMaxHeight(fraction.value)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(1.5.dp)),
+            )
+        }
+    }
+}
+
+/** The trailer's volume state (top-right circle) — high/low speaker per the shared preview volume. */
+@Composable
+private fun TrailerVolumeChip(modifier: Modifier = Modifier) {
+    val quiet = LocalTrailerVolume.current <= 0f
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier =
+            modifier
+                .size(28.dp)
+                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
+    ) {
+        Text(
+            text = stringResource(if (quiet) R.string.fa_volume_low else R.string.fa_volume_high),
+            fontFamily = FontAwesome,
+            color = Color.White,
+            fontSize = 11.sp,
+        )
+    }
+}
+
+/** The "▶ Resume" pill on a Continue Watching card (accent-tinted, bottom-right). */
+@Composable
+private fun ResumePill(modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(6.dp)
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier =
+            modifier
+                .background(accent.copy(alpha = 0.18f), shape)
+                .border(1.dp, accent.copy(alpha = 0.55f), shape)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(text = "▶", color = accent, fontSize = 9.sp, maxLines = 1, softWrap = false)
+        Text(
+            text = stringResource(R.string.resume).uppercase(),
+            color = accent,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            letterSpacing = 0.5.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/**
+ * The progress-bar glow alpha: a gentle pulse while [active] (the card is focused), a fixed soft
+ * halo otherwise — so a full Continue Watching row doesn't run a dozen infinite animations at once.
+ */
+@Composable
+private fun pulsingGlowAlpha(active: Boolean): Float =
+    if (active) {
+        val transition = rememberInfiniteTransition(label = "progress-glow")
+        transition
+            .animateFloat(
+                initialValue = PROGRESS_GLOW_IDLE_ALPHA,
+                targetValue = 0.75f,
+                animationSpec = infiniteRepeatable(tween(durationMillis = 1250), RepeatMode.Reverse),
+                label = "progress-glow-alpha",
+            ).value
+    } else {
+        PROGRESS_GLOW_IDLE_ALPHA
+    }
+
+/** A small dot that pulses its alpha — live/today indicators. Shared with the home Billboard. */
+@Composable
+internal fun PulsingDot(
+    color: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 6.dp,
+) {
+    val transition = rememberInfiniteTransition(label = "pulsing-dot")
+    val alpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 700), RepeatMode.Reverse),
+        label = "pulsing-dot-alpha",
+    )
+    Box(
+        modifier =
+            modifier
+                .size(size)
+                .graphicsLayer { this.alpha = alpha }
+                .background(color, CircleShape),
+    )
 }
 
 /**
@@ -625,8 +1186,41 @@ private const val WIDE_FOCUS_HEIGHT_SCALE = 1.15f
 /** Sustained focus on a 16:9 card before its trailer starts loading (avoids firing while scrolling). */
 private const val TRAILER_DWELL_MS = 3_500L
 
-/** Font size of the oversized Top-10 rank numeral drawn over the poster. */
-private val RANK_NUMERAL_SP = 88.sp
+/** Resting alpha of the Continue Watching progress glow (it pulses above this while focused). */
+private const val PROGRESS_GLOW_IDLE_ALPHA = 0.3f
+
+/** Start offsets of the four trailer equalizer bars, so they wave instead of pumping in unison. */
+private val EQ_BAR_STAGGER_MS = listOf(0, 150, 300, 450)
+
+/** Badge kinds with a dedicated placement — excluded from the generic top-right chip row. */
+private val PLACED_BADGE_KINDS = listOf("RANK", "STUDIO", "DAY", "TODAY", "PREMIERE", "CONTEXT", "TIMELEFT")
+
+/** Horizontal room reserved beside a ranked poster for its rank numeral (mockup: ~26% of card width). */
+private val RANK_NUMERAL_INSET = 36.dp
+
+/** How far the rank numeral overlaps the poster's left edge (mockup: ~38% of the card width). */
+private val RANK_NUMERAL_OVERLAP = 44.dp
+
+/** Glyph height of the beside-the-card rank numeral (mockup: ~77% of the poster height). */
+private val RANK_NUMERAL_HEIGHT = 128.dp
+
+/** White→grey vertical sheen of the rank numeral (mockup's 160° gradient). */
+private val RankNumeralGradient = listOf(Color.White, Color(0xFFE1DBEA), Color(0xFFABA1BB))
+
+/** The near-black backing color of the rank numeral's offset copy. */
+private val RankShadowColor = Color(0xFF0A0810)
+
+/** Gold used by the TODAY premiere chip. */
+private val PremiereGold = Color(0xFFFFD250)
+
+/** Red used by live/pulsing dots (live viewer counts, NOW PREVIEWING). */
+internal val LiveDotRed = Color(0xFFFF3B30)
+
+/** Side length of a "Browse by Network" square wordmark tile. */
+private val NETWORK_TILE_SIZE = 128.dp
+
+/** Background of a network wordmark tile (flat, no artwork by design). */
+private val NetworkTileBackground = Color(0xFF1E1A28)
 
 private fun CardImageType.toSdkImageType(): ImageType =
     when (this) {
