@@ -1,6 +1,7 @@
 package com.github.jkrishna289.orcax.ui.main
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.snap
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -73,6 +75,8 @@ import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
+import com.github.jkrishna289.orcax.ui.cards.LiveDotRed
+import com.github.jkrishna289.orcax.ui.cards.PulsingDot
 import com.github.jkrishna289.orcax.ui.rememberLeasedPlayer
 import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.ImageType
