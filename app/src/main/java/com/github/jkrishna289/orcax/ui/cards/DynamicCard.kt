@@ -71,6 +71,7 @@ import com.github.jkrishna289.orcax.engine.CardImageType
 import com.github.jkrishna289.orcax.engine.CardType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RenderRow
+import com.github.jkrishna289.orcax.engine.RowStyle
 import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.Cards
@@ -230,9 +231,10 @@ private fun EngineCardBody(
             trailerPhase = TrailerPhase.IDLE
         }
     }
-    // Expand as soon as the dwell fires — not gated on the player being READY (that felt sluggish) —
-    // and collapse only if the trailer proves unavailable.
-    val expanded = isWide && playTrailer && trailerUrl != null && trailerPhase != TrailerPhase.UNAVAILABLE
+    // Expand only once the trailer is actually PLAYING: the card stays visually untouched while the
+    // trailer prepares (no early expand, no loading animation) and pops into the live preview the
+    // moment playback starts. A card whose trailer never resolves simply never changes.
+    val expanded = isWide && trailerPhase == TrailerPhase.PLAYING
     val animatedWidth by animateDpAsState(
         targetValue = if (expanded) width * WIDE_FOCUS_EXPAND else width,
         animationSpec = tween(durationMillis = 260),
@@ -282,6 +284,10 @@ private fun EngineCardBody(
                     modifier = Modifier.fillMaxSize(),
                 )
 
+                // While a wide card's inline trailer is actually playing it becomes a mini live
+                // preview: the resume affordances and generic promo badges give way to trailer chrome.
+                val trailerShowing = isWide && playTrailer && trailerPhase == TrailerPhase.PLAYING
+
                 if (isWide) {
                     // Mounted after the dwell; shows the backdrop + shimmer while preparing, crossfades
                     // to video once actually playing, plays once at the configured volume, and reports
@@ -312,7 +318,6 @@ private fun EngineCardBody(
                                 ),
                     )
                     val progress = card.progress
-                    val trailerShowing = playTrailer && trailerPhase == TrailerPhase.PLAYING
                     if (card.showProgress && progress != null) {
                         val fillFraction = progress.coerceIn(0.0, 1.0).toFloat()
                         // Soft glow halo behind the accent fill — static normally, pulsing only while
@@ -464,30 +469,33 @@ private fun EngineCardBody(
                     }
                 }
 
-                // Availability / promo badges top-right. Kinds with a dedicated placement are
-                // excluded: RANK feeds TopRankedCard, STUDIO/DAY/TODAY sit top-left, PREMIERE and
-                // CONTEXT live in the title block, TIMELEFT is the wide card's bottom-left chip.
-                val overlayBadges =
-                    card.badges.filterNot { badge ->
-                        PLACED_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) }
+                // The corner badges step aside for the trailer chrome while a preview is playing.
+                if (!trailerShowing) {
+                    // Availability / promo badges top-right. Kinds with a dedicated placement are
+                    // excluded: RANK feeds TopRankedCard, STUDIO/DAY/TODAY sit top-left, PREMIERE and
+                    // CONTEXT live in the title block, TIMELEFT is the wide card's bottom-left chip.
+                    val overlayBadges =
+                        card.badges.filterNot { badge ->
+                            PLACED_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) }
+                        }
+                    if (overlayBadges.isNotEmpty()) {
+                        CardBadges(badges = overlayBadges, modifier = Modifier.align(Alignment.TopEnd))
                     }
-                if (overlayBadges.isNotEmpty()) {
-                    CardBadges(badges = overlayBadges, modifier = Modifier.align(Alignment.TopEnd))
-                }
 
-                // Top-left stack: studio / provider tag, then the premiere-day chip (TODAY glows gold).
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
-                ) {
-                    card.badges.firstOrNull { it.kind.equals("STUDIO", ignoreCase = true) }?.let { studio ->
-                        StudioBadge(badge = studio)
-                    }
-                    card.badges.firstOrNull { it.kind.equals("TODAY", ignoreCase = true) }?.let { today ->
-                        TodayChip(text = today.text?.takeIf { it.isNotBlank() } ?: today.kind)
-                    }
-                    card.badges.firstOrNull { it.kind.equals("DAY", ignoreCase = true) }?.let { day ->
-                        DayChip(text = day.text?.takeIf { it.isNotBlank() } ?: day.kind)
+                    // Top-left stack: studio / provider tag, then the premiere-day chip (TODAY glows gold).
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                    ) {
+                        card.badges.firstOrNull { it.kind.equals("STUDIO", ignoreCase = true) }?.let { studio ->
+                            StudioBadge(badge = studio)
+                        }
+                        card.badges.firstOrNull { it.kind.equals("TODAY", ignoreCase = true) }?.let { today ->
+                            TodayChip(text = today.text?.takeIf { it.isNotBlank() } ?: today.kind)
+                        }
+                        card.badges.firstOrNull { it.kind.equals("DAY", ignoreCase = true) }?.let { day ->
+                            DayChip(text = day.text?.takeIf { it.isNotBlank() } ?: day.kind)
+                        }
                     }
                 }
             }
@@ -608,9 +616,12 @@ private fun CardBadges(
     }
 }
 
-/** The badge label text (bold, small, white) shared by [BadgePill] and the studio-tag fallback. */
+/**
+ * The badge label text (bold, small, white) shared by [BadgePill], the studio-tag fallback, and the
+ * generic [EngineBadge] strip. `internal` so BadgeStrip.kt can reuse the exact same treatment.
+ */
 @Composable
-private fun BadgeText(text: String) {
+internal fun BadgeText(text: String) {
     Text(
         text = text,
         color = Color.White,
@@ -625,7 +636,7 @@ private fun BadgeText(text: String) {
 
 /** A dark rounded pill wrapping [BadgeText] — the shared badge chip. */
 @Composable
-private fun BadgePill(
+internal fun BadgePill(
     text: String,
     modifier: Modifier = Modifier,
 ) {
@@ -1119,9 +1130,13 @@ internal fun PulsingDot(
  *
  * Row-style contract: the **engine is authoritative for each item's [com.github.jkrishna289.orcax.engine.CardType]**.
  * A Top-10 row arrives as `TopRanked` items (rank numerals + RANK badges), a person row as
- * `PersonCircle`, and the spotlight as `Hero` (consumed by the Billboard, not here).
- * [RenderRow.rowStyle] is an advisory hint only — this row renders purely from the per-item card
- * descriptors and deliberately does not re-derive layout from `rowStyle`.
+ * `PersonCircle`, and the legacy hero row as `Hero` (consumed by the Billboard, not here).
+ * [RenderRow.rowStyle] is otherwise an advisory hint only — this row renders purely from the
+ * per-item card descriptors and deliberately does not re-derive carousel layout from `rowStyle`.
+ *
+ * The **one** exception is [RowStyle.SPOTLIGHT], which is genuine routing rather than styling: it
+ * renders its single item as a full-bleed [SpotlightCard] instead of a carousel. It still behaves
+ * as an ordinary focusable row, so the caller's focus-first recede/restore wrapper applies unchanged.
  */
 @Composable
 fun DynamicCardRow(
@@ -1130,6 +1145,7 @@ fun DynamicCardRow(
     modifier: Modifier = Modifier,
     onLongClickItem: (RenderItem) -> Unit = {},
     onFocusItem: (RenderItem) -> Unit = {},
+    onWatchlistItem: (RenderItem) -> Unit = {},
     focusRequester: FocusRequester? = null,
     // Resolve a 16:9 card's inline trailer + backdrop URLs (engine-cached). Default = no trailer.
     trailerUrlFor: (RenderItem) -> String? = { null },
@@ -1137,10 +1153,34 @@ fun DynamicCardRow(
     // Queries the engine trailer state machine for adaptive, state-driven playback. Null = best-effort.
     trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
 ) {
+    if (row.rowStyle == RowStyle.SPOTLIGHT) {
+        // Exactly one item by contract; an empty row is a server bug, so render nothing rather
+        // than crashing on first().
+        val feature = row.items.firstOrNull()
+        if (feature != null) {
+            SpotlightCard(
+                item = feature,
+                onClick = { onClickItem(feature) },
+                onWatchlist = { onWatchlistItem(feature) },
+                trailerUrlFor = trailerUrlFor,
+                trailerStatusProvider = trailerStatusProvider,
+                focusRequester = focusRequester,
+                modifier =
+                    modifier.onFocusChanged {
+                        if (it.hasFocus) onFocusItem(feature)
+                    },
+            )
+        }
+        return
+    }
+
     ItemRow(
         title = row.title,
         items = row.items,
         focusRequester = focusRequester,
+        // A Top-10 row carries a "TOP 10" chip beside its title (the ranked layout itself comes from
+        // each item's TOP_RANKED card type — rowStyle stays an advisory hint).
+        titleExtra = if (row.rowStyle == RowStyle.TOP10) ({ Top10Chip() }) else null,
         onClickItem = { _, item -> onClickItem(item) },
         onLongClickItem = { _, item -> onLongClickItem(item) },
         cardContent = { _, item, cardModifier, onClick, onLongClick ->
@@ -1163,6 +1203,27 @@ fun DynamicCardRow(
     )
 }
 
+/** The "TOP 10" chip beside a Top-10 row's title (light fill, heavy dark text). */
+@Composable
+private fun Top10Chip(modifier: Modifier = Modifier) {
+    Box(
+        modifier =
+            modifier
+                .background(Color(0xFFEFE7FA), RoundedCornerShape(5.dp))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.top_10),
+            color = Color(0xFF1D1625),
+            fontWeight = FontWeight.Black,
+            fontSize = 13.sp,
+            letterSpacing = 1.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
 private const val IMAGE_FILL_HEIGHT = 480
 
 /** Continue Watching / wide cards render at this fraction of the standard poster height (#3). */
@@ -1173,15 +1234,18 @@ private const val LARGE_CARD_SCALE = 1.35f
 
 /**
  * How much wider a focused 16:9 card grows (horizontal, in layout — neighbors slide aside).
- * The trailer fills the wider box via center-crop for a cinematic look.
+ * The trailer fills the wider box via center-crop for a cinematic look. Raised from 1.45 (with the
+ * height scale from 1.15) so the expanded preview reads ~35% larger overall — the old expansion was
+ * too small to comfortably watch on a TV.
  */
-private const val WIDE_FOCUS_EXPAND = 1.45f
+private const val WIDE_FOCUS_EXPAND = 1.95f
 
 /**
- * How much taller a focused 16:9 card grows — a subtle +15%, applied as a centred transform (not a
- * layout change) so it grows into the row's spacing without reflowing the row or clipping (Phase 12).
+ * How much taller a focused 16:9 card grows, applied as a centred transform (not a layout change)
+ * so it grows into the row's spacing without reflowing the row (Phase 12). Kept below the width
+ * factor: as a transform it overdraws neighbouring items, so it only slightly exceeds the row gap.
  */
-private const val WIDE_FOCUS_HEIGHT_SCALE = 1.15f
+private const val WIDE_FOCUS_HEIGHT_SCALE = 1.35f
 
 /** Sustained focus on a 16:9 card before its trailer starts loading (avoids firing while scrolling). */
 private const val TRAILER_DWELL_MS = 3_500L

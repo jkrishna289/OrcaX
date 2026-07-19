@@ -6,6 +6,7 @@ import com.github.jkrishna289.orcax.engine.CardAspectRatio
 import com.github.jkrishna289.orcax.engine.CardBadge
 import com.github.jkrishna289.orcax.engine.CardDescriptor
 import com.github.jkrishna289.orcax.engine.CardImageType
+import com.github.jkrishna289.orcax.engine.CardSize
 import com.github.jkrishna289.orcax.engine.CardType
 import com.github.jkrishna289.orcax.engine.MediaId
 import com.github.jkrishna289.orcax.engine.MediaSource
@@ -68,6 +69,8 @@ object SampleEngineBundle {
         type: CardType = CardType.POSTER_PORTRAIT,
         availability: AvailabilityState = AvailabilityState.WATCH_NOW,
         actions: List<CardAction> = listOf(CardAction.PLAY, CardAction.DETAILS),
+        size: CardSize = CardSize.STANDARD,
+        subtitle: String? = null,
     ): RenderItem {
         val e = entry(key)
         return RenderItem(
@@ -77,8 +80,9 @@ object SampleEngineBundle {
                     type = type,
                     imageType = CardImageType.PRIMARY,
                     aspectRatio = CardAspectRatio.TALL,
+                    size = size,
                     title = e.title,
-                    subtitle = e.tag,
+                    subtitle = subtitle ?: e.tag,
                     showTitle = true,
                     badges = badges,
                     actions = actions,
@@ -89,8 +93,10 @@ object SampleEngineBundle {
 
     private fun wide(
         key: String,
-        progress: Double,
         subtitle: String,
+        progress: Double? = null,
+        badges: List<CardBadge> = emptyList(),
+        actions: List<CardAction> = listOf(CardAction.RESUME, CardAction.PLAY),
     ): RenderItem {
         val e = entry(key)
         return RenderItem(
@@ -103,13 +109,30 @@ object SampleEngineBundle {
                     title = e.title,
                     subtitle = subtitle,
                     showTitle = true,
-                    showProgress = true,
+                    showProgress = progress != null,
                     progress = progress,
-                    actions = listOf(CardAction.RESUME, CardAction.PLAY),
+                    badges = badges,
+                    actions = actions,
                     accentColorHint = e.accent,
                 ),
         )
     }
+
+    /** A single-element TIMELEFT badge list for a Continue Watching card's "N min left" chip. */
+    private fun timeLeft(text: String): List<CardBadge> = listOf(CardBadge(kind = "TIMELEFT", text = text))
+
+    /** A "Browse by Network" square wordmark tile (no catalog entry — purely a labeled provider). */
+    private fun networkTile(name: String): RenderItem =
+        RenderItem(
+            media = MediaId(source = MediaSource.JELLYFIN, mediaType = MediaType.OTHER),
+            card =
+                CardDescriptor(
+                    type = CardType.STUDIO,
+                    aspectRatio = CardAspectRatio.SQUARE,
+                    title = name,
+                    showTitle = true,
+                ),
+        )
 
     private fun hero(
         key: String,
@@ -142,6 +165,47 @@ object SampleEngineBundle {
                     subtitle = tagline,
                     showTitle = true,
                     wantsTrailer = false,
+                    badges = badges,
+                    actions = listOf(CardAction.PLAY, CardAction.DETAILS),
+                    accentColorHint = e.accent,
+                ),
+        )
+    }
+
+    /**
+     * The single item of a [RowStyle.SPOTLIGHT] showcase row: a backdrop-led card with a synopsis
+     * and a mixed badge strip.
+     *
+     * Two deliberate nulls exercise the card's fallbacks, since sample mode has no server behind it:
+     *  - `logoImageUrl = null` → the styled-title treatment stands in for logo art.
+     *  - award badges carry no `iconUrl` → [com.github.jkrishna289.orcax.ui.cards.EngineBadge]
+     *    renders them as text pills, the same path a failed logo load takes.
+     *
+     * [trailerStreamUrl] is the only way a sample item can preview: these entries have no Jellyfin
+     * or TMDB id, so the engine trailer seam can never resolve a URL for them. Left null by default
+     * — set it to a reachable video URL to see the Spotlight trailer path end to end.
+     */
+    private fun spotlight(
+        key: String,
+        synopsis: String,
+        badges: List<CardBadge> = emptyList(),
+        trailerStreamUrl: String? = null,
+    ): RenderItem {
+        val e = entry(key)
+        return RenderItem(
+            media = mediaId(e),
+            card =
+                CardDescriptor(
+                    type = CardType.SPOTLIGHT,
+                    imageType = CardImageType.BACKDROP,
+                    aspectRatio = CardAspectRatio.WIDE,
+                    title = e.title,
+                    subtitle = e.tag,
+                    synopsis = synopsis,
+                    showTitle = true,
+                    wantsTrailer = true,
+                    logoImageUrl = null,
+                    trailerStreamUrl = trailerStreamUrl,
                     badges = badges,
                     actions = listOf(CardAction.PLAY, CardAction.DETAILS),
                     accentColorHint = e.accent,
@@ -202,9 +266,18 @@ object SampleEngineBundle {
                         id = "for_you",
                         title = "For You",
                         rowStyle = RowStyle.STANDARD,
+                        // Heterogeneous: a large Top Pick, a wide inline-trailer card, and posters
+                        // carrying the promo / personalization badge treatments.
                         items =
-                            listOf("loki", "wondertools", "dhindora", "gumball", "mouse", "euphoria", "ifwishes", "nocturne")
-                                .map { poster(it) },
+                            listOf(
+                                poster("loki", badges = listOf(CardBadge(kind = "TOP_PICK", text = "★ Top Pick")), size = CardSize.LARGE),
+                                wide("mouse", subtitle = "Crime · Drama", actions = listOf(CardAction.PLAY, CardAction.DETAILS)),
+                                poster("ember", badges = listOf(CardBadge(kind = "NEW_EPISODE", text = "New Episode"))),
+                                poster("nocturne", badges = listOf(CardBadge(kind = "CONTEXT", text = "Based on Project Loki"))),
+                                poster("verdict", badges = listOf(CardBadge(kind = "TRENDING", text = "▲ Trending"))),
+                                poster("gumball"),
+                                poster("dhindora"),
+                            ),
                     ),
                     RenderRow(
                         id = "recently",
@@ -224,28 +297,127 @@ object SampleEngineBundle {
                         id = "continue",
                         title = "Continue Watching",
                         rowStyle = RowStyle.STANDARD,
+                        // Resume banners with a time-left chip + glowing progress.
                         items =
                             listOf(
-                                wide("mouse", progress = 0.62, subtitle = "S1 · E5 · 24 min left"),
-                                wide("euphoria", progress = 0.28, subtitle = "S2 · E3 · 41 min left"),
-                                wide("verdict", progress = 0.84, subtitle = "S1 · E8 · 9 min left"),
-                                wide("loki", progress = 0.14, subtitle = "S1 · E1 · 47 min left"),
-                                wide("silentbay", progress = 0.48, subtitle = "S1 · E4 · 31 min left"),
+                                wide("mouse", subtitle = "S1 · E5", progress = 0.62, badges = timeLeft("24 min left")),
+                                wide("euphoria", subtitle = "S2 · E3", progress = 0.28, badges = timeLeft("41 min left")),
+                                wide("verdict", subtitle = "S1 · E8 · Almost done", progress = 0.84, badges = timeLeft("9 min left")),
+                                wide("loki", subtitle = "S1 · E1", progress = 0.14, badges = timeLeft("47 min left")),
+                                wide("silentbay", subtitle = "S1 · E4", progress = 0.48, badges = timeLeft("31 min left")),
+                            ),
+                    ),
+                    // A cinematic showcase punctuating the feed. Spotlights sit DEEP in the home,
+                    // never as the first content rows — the Billboard already owns the top, and
+                    // stacking a second near-full-screen surface right beneath it leaves the user
+                    // scrolling through two giant panels before reaching any browsable content.
+                    // The engine picks both the item and the depth; several may appear per home.
+                    RenderRow(
+                        id = "spotlight_feature_1",
+                        title = "In the Spotlight",
+                        rowStyle = RowStyle.SPOTLIGHT,
+                        items =
+                            listOf(
+                                spotlight(
+                                    key = "loki",
+                                    synopsis =
+                                        "Loki and Lorelei crack puzzles, solve cases and uncover dark " +
+                                            "secrets within the halls of Clark University — until one " +
+                                            "case starts pointing back at them.",
+                                    badges =
+                                        listOf(
+                                            // Award badges: no iconUrl in sample mode → text pills.
+                                            CardBadge(kind = "AWARD", text = "Academy Award Winner"),
+                                            CardBadge(kind = "AWARD", text = "3× Emmy Winner"),
+                                            // Plain text badges.
+                                            CardBadge(kind = "MATCH", text = "95% Match"),
+                                            CardBadge(kind = "TRENDING", text = "Trending"),
+                                            CardBadge(kind = "FORMAT", text = "4K HDR"),
+                                            // Consumed by the rating row, not the strip.
+                                            CardBadge(kind = "RATING", text = "9.4"),
+                                            CardBadge(kind = "CERT", text = "TV-MA"),
+                                            CardBadge(kind = "YEAR", text = "2026"),
+                                        ),
+                                ),
                             ),
                     ),
                     RenderRow(
                         id = "trending",
                         title = "Trending Now",
                         rowStyle = RowStyle.TOP10,
+                        // Ranked cards (giant numeral beside the poster) with live viewer counts on
+                        // the top three and a "Requested" glass badge on #4.
                         items =
                             listOf("verdict", "mouse", "euphoria", "loki", "ifwishes", "nocturne", "ember", "dhindora")
                                 .mapIndexed { index, key ->
+                                    val extra =
+                                        when (index) {
+                                            0 -> listOf(CardBadge(kind = "LIVE", text = "2.4k ▲"))
+                                            1 -> listOf(CardBadge(kind = "LIVE", text = "1.8k ▲"))
+                                            2 -> listOf(CardBadge(kind = "LIVE", text = "1.1k"))
+                                            3 -> listOf(CardBadge(kind = "REQUESTED", text = "Requested"))
+                                            else -> emptyList()
+                                        }
                                     poster(
                                         key,
-                                        badges = listOf(CardBadge(kind = "RANK", text = (index + 1).toString())),
+                                        badges = listOf(CardBadge(kind = "RANK", text = (index + 1).toString())) + extra,
                                         type = CardType.TOP_RANKED,
                                     )
                                 },
+                    ),
+                    RenderRow(
+                        id = "premieres",
+                        title = "Premieres This Week",
+                        rowStyle = RowStyle.STANDARD,
+                        // A glowing TODAY premiere leads; the rest carry day-of-week chips, and one is
+                        // still downloading.
+                        items =
+                            listOf(
+                                poster(
+                                    "loki",
+                                    badges = listOf(CardBadge(kind = "TODAY", text = "Today"), CardBadge(kind = "PREMIERE", text = "Series Premiere")),
+                                    size = CardSize.LARGE,
+                                ),
+                                poster("mouse", badges = listOf(CardBadge(kind = "DAY", text = "Tue"))),
+                                poster("ifwishes", badges = listOf(CardBadge(kind = "DAY", text = "Thu"))),
+                                poster(
+                                    "ember",
+                                    badges = listOf(CardBadge(kind = "DAY", text = "Fri"), CardBadge(kind = "DOWNLOADING", text = "Downloading")),
+                                ),
+                                poster("silentbay", badges = listOf(CardBadge(kind = "DAY", text = "Sat"))),
+                            ),
+                    ),
+                    // A second showcase, deeper still — several spotlights per home is the norm,
+                    // not a special case. Deliberately a different badge mix (no awards, a format
+                    // logo slot, a "New Season" hook) so the strip's genericity is visible.
+                    RenderRow(
+                        id = "spotlight_feature_2",
+                        title = "In the Spotlight",
+                        rowStyle = RowStyle.SPOTLIGHT,
+                        items =
+                            listOf(
+                                spotlight(
+                                    key = "euphoria",
+                                    synopsis =
+                                        "A group of high-school students navigate love and friendship " +
+                                            "in a world of drugs, trauma and social media.",
+                                    badges =
+                                        listOf(
+                                            CardBadge(kind = "NEW_SEASON", text = "New Season"),
+                                            CardBadge(kind = "MATCH", text = "88% Match"),
+                                            CardBadge(kind = "FORMAT", text = "Dolby Vision"),
+                                            CardBadge(kind = "RATING", text = "8.4"),
+                                            CardBadge(kind = "CERT", text = "TV-MA"),
+                                            CardBadge(kind = "YEAR", text = "2025"),
+                                        ),
+                                ),
+                            ),
+                    ),
+                    RenderRow(
+                        id = "networks",
+                        title = "Browse by Network",
+                        rowStyle = RowStyle.STANDARD,
+                        items = listOf("APEX", "LUMEN", "NORTHBOX", "VELVET", "ORBIT", "CASCADE").map { networkTile(it) },
                     ),
                     RenderRow(
                         id = "discover",

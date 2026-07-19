@@ -14,8 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -23,12 +21,8 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
-import coil3.request.crossfade
 import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
-import com.github.jkrishna289.orcax.ui.TrailerLoadingShimmer
 import com.github.jkrishna289.orcax.ui.TrailerPhase
 import com.github.jkrishna289.orcax.ui.rememberLeasedPlayer
 import kotlinx.coroutines.delay
@@ -47,6 +41,9 @@ private const val STATUS_POLL_MAX_MS = 4_000L
 /** Give up (mark unavailable) after this many temporary failures / unreachable polls. */
 private const val MAX_TEMP_FAILURES = 4
 
+/** How often the player's position is re-read while a trailer plays, for [InlineCardTrailer]'s onProgress. */
+private const val PROGRESS_POLL_MS = 500L
+
 /**
  * A 16:9 preview that shows the backdrop and crossfades to the trailer once it is actually playing.
  * Playback is **state-driven** (the trailer redesign): rather than blindly playing and retrying on a
@@ -57,6 +54,9 @@ private const val MAX_TEMP_FAILURES = 4
  * video when it plays. The player is leased from [rememberLeasedPlayer] (pooled), plays once
  * (REPEAT_MODE_OFF), and is returned on unmount. [volume] is 0f..1f. When [statusProvider] is null it
  * falls back to a best-effort direct play (older engines without the status endpoint).
+ *
+ * [onProgress] reports playback position as a 0f..1f fraction while the trailer plays (0f whenever it
+ * isn't), for callers that draw a seek/progress bar. Row cards ignore it; the Spotlight showcase uses it.
  */
 @Composable
 fun InlineCardTrailer(
@@ -67,8 +67,8 @@ fun InlineCardTrailer(
     volume: Float = 0f,
     statusProvider: (suspend () -> TrailerStatus?)? = null,
     onPhaseChange: (TrailerPhase) -> Unit = {},
+    onProgress: (Float) -> Unit = {},
 ) {
-    val context = LocalContext.current
     val exo = rememberLeasedPlayer()
 
     // Stable holders (NOT keyed on trailerUrl) so the long-lived player listener below can never
@@ -77,9 +77,26 @@ fun InlineCardTrailer(
     val ended = remember { mutableStateOf(false) }
     val phase = remember { mutableStateOf(TrailerPhase.IDLE) }
     val onPhase = rememberUpdatedState(onPhaseChange)
+    val onProgressUpdated = rememberUpdatedState(onProgress)
 
     // Report phase transitions to the caller.
     LaunchedEffect(phase.value) { onPhase.value(phase.value) }
+
+    // Poll the leased player's position while the trailer is actually playing, so a caller can draw
+    // a progress bar (guarding the pre-READY C.TIME_UNSET duration). Resets to 0f when it stops.
+    LaunchedEffect(ready.value) {
+        if (!ready.value) {
+            onProgressUpdated.value(0f)
+            return@LaunchedEffect
+        }
+        while (isActive) {
+            val duration = exo.duration
+            if (duration > 0) {
+                onProgressUpdated.value((exo.currentPosition.toFloat() / duration).coerceIn(0f, 1f))
+            }
+            delay(PROGRESS_POLL_MS)
+        }
+    }
     // Keep the live volume in sync without recreating the player.
     LaunchedEffect(exo, volume) { exo.volume = volume }
     // Reset per-media flags when the target changes.
@@ -87,6 +104,17 @@ fun InlineCardTrailer(
         ready.value = false
         ended.value = false
         phase.value = TrailerPhase.IDLE
+    }
+
+    // Re-arm once the caller withdraws [play] (focus left), so returning focus previews again.
+    // Without this, [ended] only clears when the URL changes — fine for a row card, which unmounts
+    // when scrolled away, but the Spotlight row stays composed, so its trailer would play exactly
+    // once per home visit and never again.
+    LaunchedEffect(play) {
+        if (!play) {
+            ended.value = false
+            ready.value = false
+        }
     }
 
     // Adaptive, state-driven start. Cancelled the moment [play] flips false or the card unmounts (the
@@ -185,7 +213,7 @@ fun InlineCardTrailer(
         targetState = play && ready.value,
         animationSpec = tween(durationMillis = 400),
         label = "inline-card-trailer",
-        modifier = modifier.background(Color.Black),
+        modifier = modifier,
     ) { playing ->
         if (playing) {
             AndroidView(
@@ -196,23 +224,13 @@ fun InlineCardTrailer(
                         player = exo
                     }
                 },
-                modifier = Modifier.fillMaxSize(),
+                // Black base sits behind the video only. While the trailer is still preparing this
+                // branch renders nothing, so the card's own art stays untouched — no backdrop swap,
+                // no loading animation — until playback actually starts.
+                modifier = Modifier.fillMaxSize().background(Color.Black),
             )
         } else {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (backdropUrl != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(backdropUrl).crossfade(true).build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                // Loading shimmer while the trailer is preparing (Phase 11).
-                if (phase.value == TrailerPhase.PREPARING) {
-                    TrailerLoadingShimmer()
-                }
-            }
+            Box(modifier = Modifier.fillMaxSize())
         }
     }
 }
