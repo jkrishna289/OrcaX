@@ -239,6 +239,9 @@ enum class CardType {
     @SerialName("TopRanked") TOP_RANKED,
     @SerialName("Logo") LOGO,
     @SerialName("NowPlaying") NOW_PLAYING,
+
+    /** The single item of a [RowStyle.SPOTLIGHT] row — a near-full-screen cinematic showcase. */
+    @SerialName("Spotlight") SPOTLIGHT,
 }
 
 @Serializable
@@ -277,6 +280,24 @@ enum class RowStyle {
     @SerialName("Hero") HERO,
     @SerialName("Top10") TOP10,
     @SerialName("Circle") CIRCLE,
+
+    /**
+     * A dedicated cinematic showcase: **exactly one** item rendered nearly full-screen, which plays
+     * its trailer inline on focus. Unlike every other style this one *is* routing — it selects a
+     * different composable ([com.github.jkrishna289.orcax.ui.cards.SpotlightCard]) rather than a
+     * carousel of cards.
+     *
+     * **Several Spotlight rows per home are expected**, punctuating the feed at engine-chosen
+     * depths rather than appearing in fixed positions. Two placement rules:
+     *  - Each row needs a **unique id** — the home renders rows keyed by id, so duplicates break it.
+     *  - They belong **deep in the feed, not as the first content rows**. The Billboard already owns
+     *    the top; a near-full-screen showcase directly beneath it makes the user scroll past two
+     *    giant panels before reaching anything browsable.
+     *
+     * Distinct from the legacy hero row (id `"spotlight"`, consumed by the Billboard): a Spotlight
+     * row must not use that id, or the home view model's hero split will swallow it.
+     */
+    @SerialName("Spotlight") SPOTLIGHT,
 }
 
 /**
@@ -294,11 +315,18 @@ val SUPPORTED_CARD_TYPES: List<CardType> = listOf(
     CardType.SEASON,
     CardType.HERO,
     CardType.TOP_RANKED,
+    CardType.SPOTLIGHT,
 )
 
-/** The `?supported=` query value (engine-side PascalCase enum names). */
-const val SUPPORTED_CARD_TYPES_QUERY: String =
-    "PosterPortrait,BannerWide,Episode,PersonCircle,Genre,Studio,Discover,Season,Hero,TopRanked"
+/**
+ * The `?supported=` query value (engine-side PascalCase enum names). **Derived** from
+ * [SUPPORTED_CARD_TYPES] via each entry's `@SerialName`, so adding a card type in one place can
+ * never leave the advertised list silently out of date.
+ */
+val SUPPORTED_CARD_TYPES_QUERY: String =
+    SUPPORTED_CARD_TYPES.joinToString(",") { type ->
+        CardType.serializer().descriptor.getElementName(type.ordinal)
+    }
 
 /** Card contract version this app implements. */
 const val CARD_CONTRACT_VERSION: Int = 1

@@ -1,8 +1,6 @@
 package com.github.jkrishna289.orcax.ui.main
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,12 +29,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,12 +49,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
@@ -74,35 +62,19 @@ import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
-import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
-import com.github.jkrishna289.orcax.ui.cards.LiveDotRed
-import com.github.jkrishna289.orcax.ui.cards.PulsingDot
-import com.github.jkrishna289.orcax.ui.rememberLeasedPlayer
-import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 
 /**
- * Playback state of the home billboard's inline trailer, reported up to the hero-rotation
- * controller (Phase 19 of the trailer redesign):
- *  - [NONE]: this hero has no trailer — normal timed rotation.
- *  - [PREPARING]: resolving/buffering; still normal timed rotation (only a trailer that actually
- *    starts playing earns a hold).
- *  - [PLAYING]: playing — pause the rotation timer and let it finish (bounded by a safety max-hold).
- *  - [FINISHED]: completed naturally — advance to the next hero immediately.
- *  - [FAILED]: errored/unavailable — resume normal rotation without getting stuck.
- */
-enum class HeroTrailerState { NONE, PREPARING, PLAYING, FINISHED, FAILED }
-
-/**
- * The cinematic spotlight at the top of the engine home — a **floating, rounded key-art card**
+ * The static promotional banner at the top of the engine home — a **floating, rounded key-art card**
  * (inset from the screen edges, with a drop shadow and hairline border) carrying a backdrop +
- * logo (or styled title) + metadata + tagline + Play / Trailer / Watchlist / Info, a giant ghosted
- * title behind the art, a content-rating chip in the corner, and pagination dots. When [trailerUrl]
- * is non-null it crossfades to an inline trailer after the engine's auto-play delay — played once
- * (no loop), at the user's configured preview volume ([LocalTrailerVolume]), returning to the
- * artwork when it ends or fails. When an item has no real backdrop (the sample/demo bundle) the art
- * is a procedural gradient built from the item's accent hint.
+ * logo (or styled title) + metadata + tagline + Play / Trailer / Watchlist / Info, a content-rating
+ * chip in the corner, an "UP NEXT" strip, and pagination dots. When an item has no real backdrop
+ * (the sample/demo bundle) the art is a procedural gradient built from the item's accent hint.
+ *
+ * This banner **never plays a trailer**: trailer playback and its cinematic chrome live solely in
+ * the dedicated `Spotlight` row, so the promotional artwork, title and actions stay stable and
+ * readable at all times. The billboard's only motion is its artwork rotation.
  *
  * When [heroCount] > 1 the home rotates through several spotlight items; [activeIndex] drives the
  * pagination dots. Rigid, linear motion only (per the design language): a single [tween] crossfade.
@@ -110,7 +82,6 @@ enum class HeroTrailerState { NONE, PREPARING, PLAYING, FINISHED, FAILED }
 @Composable
 fun Billboard(
     item: RenderItem,
-    trailerUrl: String?,
     onPlay: () -> Unit,
     onInfo: () -> Unit,
     onWatchlist: () -> Unit,
@@ -122,87 +93,20 @@ fun Billboard(
     navFocusRequester: FocusRequester? = null,
     heroCount: Int = 1,
     activeIndex: Int = 0,
-    // Reports inline-trailer playback state so the caller's hero-rotation timer can pause while a
-    // trailer plays and resume when it ends/fails (Phase 19). No-op by default.
-    onTrailerStateChanged: (HeroTrailerState) -> Unit = {},
+    // The upcoming spotlight items, shown as an "UP NEXT" thumbnail strip. Empty = strip hidden.
+    upNext: List<RenderItem> = emptyList(),
 ) {
     val card = item.card
     val media = item.media
     val imageUrlService = LocalImageUrlService.current
     val jellyfinId = media.jellyfinId?.toUUIDOrNull()
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
-    // Centralised inline-trailer volume (Phase 13): one user preference drives every trailer player.
-    val trailerVolume = LocalTrailerVolume.current
 
     val backdropUrl =
         card.backdropImageUrl
             ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 720) }
 
     val context = LocalContext.current
-
-    // Lease a pooled player for the billboard's lifetime and swap media as the hero rotates, instead
-    // of building/tearing down a codec-holding ExoPlayer per hero (Phase 10). Stable holders (NOT
-    // keyed on trailerUrl) so the persistent listener never captures stale state.
-    val exo = rememberLeasedPlayer()
-    val showTrailer = remember { mutableStateOf(false) }
-    val onStateChanged = rememberUpdatedState(onTrailerStateChanged)
-
-    // Apply live volume changes without recreating the player (Phase 13).
-    LaunchedEffect(exo, trailerVolume) { exo.volume = trailerVolume }
-
-    // One listener for the leased player's lifetime. Reports transitions up to the rotation controller
-    // (Phase 19) and drives the crossfade. On unmount it's detached (not released — the pool owns it).
-    DisposableEffect(exo) {
-        val listener =
-            object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    when (state) {
-                        // Ready + playWhenReady -> actually playing: show the video + hold the rotation.
-                        Player.STATE_READY -> {
-                            showTrailer.value = true
-                            onStateChanged.value(HeroTrailerState.PLAYING)
-                        }
-                        Player.STATE_ENDED -> {
-                            showTrailer.value = false
-                            onStateChanged.value(HeroTrailerState.FINISHED)
-                        }
-                        else -> Unit
-                    }
-                }
-
-                override fun onPlayerError(error: PlaybackException) {
-                    showTrailer.value = false
-                    onStateChanged.value(HeroTrailerState.FAILED)
-                }
-            }
-        exo.addListener(listener)
-        onDispose {
-            exo.removeListener(listener)
-            exo.playWhenReady = false
-        }
-    }
-
-    // Prepare + play the active hero's trailer after the engine's auto-play delay, swapping media on
-    // the leased player. Reports PREPARING immediately (rotation keeps counting until it actually
-    // plays) and NONE when there's no trailer; PLAYING/FINISHED/FAILED come from the listener above.
-    LaunchedEffect(trailerUrl) {
-        showTrailer.value = false
-        if (trailerUrl == null) {
-            exo.playWhenReady = false
-            exo.clearMediaItems()
-            onStateChanged.value(HeroTrailerState.NONE)
-            return@LaunchedEffect
-        }
-        onStateChanged.value(HeroTrailerState.PREPARING)
-        delay(card.autoPlayDelayMs.coerceAtLeast(0).toLong())
-        exo.volume = trailerVolume
-        exo.setMediaItem(MediaItem.fromUri(trailerUrl))
-        exo.prepare()
-        if (card.trailerStartOffsetMs > 0) {
-            exo.seekTo(card.trailerStartOffsetMs.toLong())
-        }
-        exo.playWhenReady = true
-    }
 
     // The floating card: inset (via the caller's padding), rounded, shadowed, hairline-bordered.
     val cardShape = RoundedCornerShape(20.dp)
@@ -214,38 +118,21 @@ fun Billboard(
                 .clip(cardShape)
                 .border(1.dp, Color.White.copy(alpha = 0.06f), cardShape),
     ) {
-        Crossfade(
-            targetState = showTrailer.value,
-            animationSpec = tween(durationMillis = 400),
-            label = "billboard-media",
-        ) { playing ->
-            if (playing) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            useController = false
-                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            player = exo
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else if (backdropUrl != null) {
-                AsyncImage(
-                    model =
-                        ImageRequest
-                            .Builder(context)
-                            .data(backdropUrl)
-                            .crossfade(true)
-                            .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                // Sample/demo item: procedural key-art from the accent hint.
-                Box(modifier = Modifier.fillMaxSize().engineHeroArt(accent))
-            }
+        if (backdropUrl != null) {
+            AsyncImage(
+                model =
+                    ImageRequest
+                        .Builder(context)
+                        .data(backdropUrl)
+                        .crossfade(true)
+                        .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            // Sample/demo item: procedural key-art from the accent hint.
+            Box(modifier = Modifier.fillMaxSize().engineHeroArt(accent))
         }
 
         // (The oversized "ghost" title that used to sit behind the art was removed: a single 160sp
@@ -289,7 +176,12 @@ fun Billboard(
                         ),
                     ),
         )
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)))
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f)),
+        )
 
         Column(
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -336,6 +228,29 @@ fun Billboard(
             GenreBreadcrumb(item)
         }
 
+        // "UP NEXT" thumbnail strip (bottom-right, above the pagination dots) — the upcoming heroes.
+        if (upNext.isNotEmpty()) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 32.dp, bottom = if (heroCount > 1) 52.dp else 28.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.up_next).uppercase(),
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.sp,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    upNext.take(2).forEach { next -> UpNextThumbnail(next) }
+                }
+            }
+        }
+
         // Content-rating chip in the top-right corner (driven by an AGE badge, e.g. "16+").
         item.card.badges.firstOrNull { it.kind.equals("AGE", ignoreCase = true) }?.text?.let { age ->
             Box(
@@ -376,6 +291,35 @@ fun Billboard(
                     )
                 }
             }
+        }
+    }
+}
+
+/** One 16:9 "UP NEXT" thumbnail: the item's backdrop when resolvable, else its procedural key-art. */
+@Composable
+private fun UpNextThumbnail(item: RenderItem) {
+    val imageUrlService = LocalImageUrlService.current
+    val accent = EngineHomeArt.parseAccent(item.card.accentColorHint)
+    val jellyfinId = item.media.jellyfinId?.toUUIDOrNull()
+    val backdropUrl =
+        item.card.backdropImageUrl
+            ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 240) }
+    Box(
+        modifier =
+            Modifier
+                .size(width = UP_NEXT_THUMB_WIDTH, height = UP_NEXT_THUMB_HEIGHT)
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp)),
+    ) {
+        if (backdropUrl != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(backdropUrl).crossfade(true).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxSize().engineHeroArt(accent))
         }
     }
 }
@@ -690,13 +634,19 @@ internal fun BillboardButton(
             ),
         modifier = modifier,
     ) {
+        // Compact pill: the previous 26×14dp padding + 16sp label made the four-button row dominate
+        // the lower third of the billboard (and sit over the playing trailer).
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-            modifier = Modifier.padding(horizontal = 26.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp),
         ) {
-            leading?.let { Text(it, color = textColor, fontSize = 15.sp, maxLines = 1, softWrap = false) }
-            Text(label, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, softWrap = false)
+            leading?.let { Text(it, color = textColor, fontSize = 13.sp, maxLines = 1, softWrap = false) }
+            Text(label, color = textColor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, softWrap = false)
         }
     }
 }
+
+/** Size of an "UP NEXT" spotlight thumbnail (16:9). */
+private val UP_NEXT_THUMB_WIDTH = 116.dp
+private val UP_NEXT_THUMB_HEIGHT = 72.dp

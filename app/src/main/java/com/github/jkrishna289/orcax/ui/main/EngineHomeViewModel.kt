@@ -16,7 +16,6 @@ import com.github.jkrishna289.orcax.services.HomeBundleCache
 import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.services.LocalHomeBundleBuilder
 import com.github.jkrishna289.orcax.services.NavigationManager
-import com.github.jkrishna289.orcax.services.TrailerService
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.ui.DEFAULT_TRAILER_PREVIEW_VOLUME
 import com.github.jkrishna289.orcax.ui.nav.Destination
@@ -45,8 +44,8 @@ import javax.inject.Inject
 
 /**
  * Loads the engine's personalized home (billboard + rows) for the main screen, resolving the
- * authenticated user id and (for the spotlight) an inline trailer. Falls back to a vanilla layout
- * via [EngineHomeState.Unavailable] when the engine can't serve a bundle.
+ * authenticated user id. Falls back to a vanilla layout via [EngineHomeState.Unavailable] when the
+ * engine can't serve a bundle.
  */
 @HiltViewModel
 class EngineHomeViewModel
@@ -56,7 +55,6 @@ class EngineHomeViewModel
         private val localHomeBundleBuilder: LocalHomeBundleBuilder,
         private val homeBundleCache: HomeBundleCache,
         private val preferences: DataStore<AppPreferences>,
-        private val trailerService: TrailerService,
         private val navigationManager: NavigationManager,
         private val backdropService: BackdropService,
         private val imageUrlService: ImageUrlService,
@@ -73,10 +71,6 @@ class EngineHomeViewModel
         private val _heroFavorite = MutableStateFlow(false)
         val heroFavorite: StateFlow<Boolean> = _heroFavorite.asStateFlow()
 
-        // Inline trailer for the active spotlight item; updated as the billboard rotates.
-        private val _activeTrailerUrl = MutableStateFlow<String?>(null)
-        val activeTrailerUrl: StateFlow<String?> = _activeTrailerUrl.asStateFlow()
-
         // Single source of truth for inline-trailer preview volume (Phase 13): the user's
         // preference mapped to a 0f..1f level. The billboard and 16:9 card players both read this
         // (via LocalTrailerVolume), so changing it in Settings applies live to every trailer player.
@@ -85,11 +79,17 @@ class EngineHomeViewModel
                 .map { it.interfacePreferences.trailerPreviewVolume.toTrailerVolume() }
                 .stateIn(viewModelScope, SharingStarted.Eagerly, DEFAULT_TRAILER_PREVIEW_VOLUME)
 
-        // Resolved local-trailer URLs keyed by item id, so rotating back to an item doesn't refetch.
-        // A present key with a null value means "resolved, no local trailer".
-        private val trailerCache = mutableMapOf<UUID, String?>()
+        // Preferred trailer audio language ("" = auto/English-preferred). Forwarded to every engine
+        // trailer request as a production-time hint, and to the players for audio-track selection.
+        val trailerLanguage: StateFlow<String> =
+            preferences.data
+                .map { it.interfacePreferences.trailerLanguage }
+                .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+        /** The effective lang hint for engine trailer calls (null = let the server use its default). */
+        private fun langHint(): String? = trailerLanguage.value.takeIf { it.isNotBlank() }
+
         private var heroes: List<RenderItem> = emptyList()
-        private var activeHeroIndex = 0
 
         // The signed-in user id, resolved on load; needed to attribute engine-proxied requests.
         private var currentUserId: UUID? = null
@@ -174,13 +174,11 @@ class EngineHomeViewModel
             heroes = spotlight?.items.orEmpty()
             val rows = bundle.rows.filterNot { it.id == SPOTLIGHT_ROW_ID }
 
-            trailerCache.clear()
-            _activeTrailerUrl.value = null
             _heroFavorite.value = false
 
             _state.value = EngineHomeState.Success(heroes = heroes, rows = rows)
 
-            // Resolve trailer / favorite / ambient for the first spotlight item.
+            // Resolve favorite / ambient for the first hero item.
             if (heroes.isNotEmpty()) onHeroActive(0)
         }
 
@@ -200,39 +198,16 @@ class EngineHomeViewModel
         }
 
         /**
-         * Called by the billboard pager when a spotlight item becomes active (rotation or first
-         * load). Resolves that item's inline trailer — a local Jellyfin trailer when one exists,
-         * else the engine's server-cached TMDB trailer (so the billboard plays for nearly every
-         * title, under its scrims with the buttons still visible) — seeds the watchlist toggle,
-         * and drives the focus-following ambient backdrop.
+         * Called by the billboard when a hero item becomes active (rotation or first load). Seeds
+         * the watchlist toggle and drives the focus-following ambient backdrop. The billboard is a
+         * static promotional banner, so no trailer is resolved here — trailer playback belongs to
+         * the dedicated Spotlight row, which resolves its own URL via [trailerUrlFor].
          */
         fun onHeroActive(index: Int) {
             val hero = heroes.getOrNull(index) ?: return
-            activeHeroIndex = index
             val heroId = hero.media.jellyfinId?.toUUIDOrNull()
-
-            // Ambient + favorite immediately; trailer may need a network round-trip.
             onCardFocused(hero)
             if (heroId != null) refreshHeroFavorite(heroId) else _heroFavorite.value = false
-
-            // The engine's TMDB trailer is the universal fallback (works for library AND
-            // requestable spotlight items); a local Jellyfin trailer extra still wins when present.
-            val engineUrl = client.trailerUrl(hero.media.tmdbId, hero.media.mediaType)
-            if (heroId == null) {
-                _activeTrailerUrl.value = engineUrl
-                return
-            }
-            if (trailerCache.containsKey(heroId)) {
-                _activeTrailerUrl.value = trailerCache[heroId] ?: engineUrl
-                return
-            }
-            _activeTrailerUrl.value = null
-            viewModelScope.launch {
-                val url = runCatching { trailerService.getLocalTrailerStreamUrl(heroId) }.getOrNull()
-                trailerCache[heroId] = url
-                // Only apply if this item is still the active one (guard against fast rotation).
-                if (activeHeroIndex == index) _activeTrailerUrl.value = url ?: engineUrl
-            }
         }
 
         /**
@@ -261,7 +236,13 @@ class EngineHomeViewModel
         }
 
         /** The server-cached trailer URL for a card (#11), or null when there's no TMDB id. */
-        fun trailerUrlFor(item: RenderItem): String? = client.trailerUrl(item.media.tmdbId, item.media.mediaType)
+        fun trailerUrlFor(item: RenderItem): String? {
+            val url = client.trailerUrl(item.media.tmdbId, item.media.mediaType, langHint())
+            // Trailer diagnostics: a null tmdbId here means the item was fetched without
+            // ItemFields.PROVIDER_IDS, so the engine can never build a trailer URL for it.
+            Timber.d("Engine trailer for '%s': tmdbId=%s → %s", item.card.title, item.media.tmdbId, url ?: "no URL")
+            return url
+        }
 
         /**
          * Queries the engine's trailer state machine for a card, so inline previews can start the
@@ -269,7 +250,7 @@ class EngineHomeViewModel
          * the engine is unreachable / too old to expose the status endpoint.
          */
         suspend fun trailerStatusFor(item: RenderItem): com.github.jkrishna289.orcax.engine.TrailerStatus? =
-            client.getTrailerStatus(item.media.tmdbId, item.media.mediaType)
+            client.getTrailerStatus(item.media.tmdbId, item.media.mediaType, langHint())
 
         /**
          * Predictively prefetches trailers for likely-next items (Phase 3 client half): row neighbours,
@@ -288,7 +269,7 @@ class EngineHomeViewModel
                     }
                 }
             if (payload.isEmpty()) return
-            viewModelScope.launch { runCatching { client.prefetchTrailers(payload, priority) } }
+            viewModelScope.launch { runCatching { client.prefetchTrailers(payload, priority, langHint()) } }
         }
 
         /**
