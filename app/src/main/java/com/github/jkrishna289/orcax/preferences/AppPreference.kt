@@ -9,6 +9,7 @@ import com.github.jkrishna289.orcax.BuildConfig
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.OrcaApplication
 import com.github.jkrishna289.orcax.services.UpdateChecker
+import com.github.jkrishna289.orcax.ui.TrailerLanguages
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.ui.preferences.ConditionalPreferences
 import com.github.jkrishna289.orcax.ui.preferences.PreferenceGroup
@@ -301,6 +302,21 @@ sealed interface AppPreference<Pref, T> {
                     val n = if (value == TrailerPreviewVolume.UNRECOGNIZED) 0 else value.number
                     if (n in 1..6) n - 1 else 2
                 },
+            )
+
+        // Preferred trailer audio language (ISO 639-1 in the store; "" = auto/English-preferred).
+        // Index-aligned with TrailerLanguages.CODES and the trailer_language_options array.
+        val TrailerLanguagePref =
+            AppChoicePreference<AppPreferences, String>(
+                title = R.string.trailer_language,
+                defaultValue = "",
+                getter = { it.interfacePreferences.trailerLanguage },
+                setter = { prefs, value ->
+                    prefs.updateInterfacePreferences { trailerLanguage = value }
+                },
+                displayValues = R.array.trailer_language_options,
+                indexToValue = { TrailerLanguages.CODES.getOrElse(it) { "" } },
+                valueToIndex = { TrailerLanguages.CODES.indexOf(it).coerceAtLeast(0) },
             )
 
         val PlaybackDebugInfo =
@@ -1093,6 +1109,7 @@ val basicPreferences =
                     AppPreference.SignInAuto,
                     AppPreference.PlayThemeMusic,
                     AppPreference.TrailerPreviewVolumePref,
+                    AppPreference.TrailerLanguagePref,
                     AppPreference.RememberSelectedTab,
                     AppPreference.SubtitleStyle,
                     AppPreference.ThemeColors,

@@ -59,6 +59,10 @@ val DefaultItemFields =
         ItemFields.MEDIA_SOURCE_COUNT,
         ItemFields.PARENT_ID,
         ItemFields.CAN_DELETE,
+        // TMDB (and other) provider ids: Jellyfin only returns providerIds when this field is
+        // requested. The engine home resolves inline/billboard trailers by TMDB id, so without it
+        // every locally-built card/hero has a null tmdbId and no trailer can ever load.
+        ItemFields.PROVIDER_IDS,
     )
 
 /**
@@ -74,6 +78,8 @@ val SlimItemFields =
         ItemFields.MEDIA_SOURCE_COUNT,
         ItemFields.PARENT_ID,
         ItemFields.CAN_DELETE,
+        // See DefaultItemFields: needed so engine-home cards carry a TMDB id for trailer resolution.
+        ItemFields.PROVIDER_IDS,
     )
 
 val PhotoItemFields =

@@ -639,6 +639,22 @@
     </string-array>
 
     <string name="trailer_preview_volume">Trailer preview volume</string>
+    <string name="trailer_language">Trailer language</string>
+    <string name="trailer_language_auto">Auto (English preferred)</string>
+    <!-- Order MUST match TrailerLanguages.CODES; see AppPreference.TrailerLanguagePref. -->
+    <string-array name="trailer_language_options">
+        <item>@string/trailer_language_auto</item>
+        <item>English</item>
+        <item>हिन्दी (Hindi)</item>
+        <item>தமிழ் (Tamil)</item>
+        <item>తెలుగు (Telugu)</item>
+        <item>മലയാളം (Malayalam)</item>
+        <item>ಕನ್ನಡ (Kannada)</item>
+        <item>Español (Spanish)</item>
+        <item>Français (French)</item>
+        <item>日本語 (Japanese)</item>
+        <item>한국어 (Korean)</item>
+    </string-array>
     <string name="volume_mute">Mute</string>
     <string name="volume_very_low">Very low</string>
     <string name="volume_maximum">Maximum</string>

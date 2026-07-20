@@ -163,6 +163,8 @@ class LocalHomeBundleBuilder
                         badges =
                             buildList {
                                 if (recentlyAdded) add(CardBadge(kind = "NEW", text = "NEW"))
+                                // Resume cards show a "N min left" chip computed from the item's runtime.
+                                if (showProgress) timeLeftBadge(percent)?.let { add(it) }
                                 data.studios?.firstOrNull()?.name?.takeIf { it.isNotBlank() }
                                     ?.let { add(CardBadge(kind = "STUDIO", text = it)) }
                             },
@@ -212,6 +214,19 @@ class LocalHomeBundleBuilder
                     ),
             )
 
+        /**
+         * A "N min left" [CardBadge] for a resume card, from the item's runtime and how far the user
+         * has watched. Null when there's no runtime or under a minute remains (nothing useful to show).
+         */
+        private fun BaseItem.timeLeftBadge(percent: Double?): CardBadge? {
+            val totalTicks = data.runTimeTicks?.takeIf { it > 0 } ?: return null
+            val watchedFraction = ((percent ?: 0.0) / 100.0).coerceIn(0.0, 1.0)
+            val remainingTicks = (totalTicks * (1.0 - watchedFraction)).toLong()
+            val minutes = remainingTicks / TICKS_PER_MINUTE
+            if (minutes < 1) return null
+            return CardBadge(kind = "TIMELEFT", text = "$minutes min left")
+        }
+
         private fun BaseItem.tmdbId(): Int? = data.providerIds?.get("Tmdb")?.toIntOrNull()
 
         private fun HomeRowConfig.isWatching(): Boolean =
@@ -239,5 +254,8 @@ class LocalHomeBundleBuilder
 
             /** How many items the rotating spotlight cycles through. */
             private const val SPOTLIGHT_COUNT = 5
+
+            /** Jellyfin runtime ticks per minute (100-ns ticks × 60 s). */
+            private const val TICKS_PER_MINUTE = 600_000_000L
         }
     }

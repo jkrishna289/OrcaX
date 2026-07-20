@@ -198,6 +198,10 @@ message InterfacePreferences {
   bool hide_position_footer = 15;
   bool disable_page_with_remote_buttons = 16;
   TrailerPreviewVolume trailer_preview_volume = 17;
+  // Preferred trailer audio language as an ISO 639-1 code (e.g. "en", "hi"). Empty = auto,
+  // which resolves to English-preferred both client-side (ExoPlayer audio-track selection)
+  // and server-side (the engine picks an English trailer when TMDB offers one).
+  string trailer_language = 18;
 }
 
 message AdvancedPreferences {

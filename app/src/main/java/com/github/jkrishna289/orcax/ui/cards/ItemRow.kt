@@ -4,6 +4,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
@@ -15,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -45,6 +47,8 @@ fun <T> ItemRow(
     // Lets a caller push focus back into this row programmatically (e.g. when returning from a
     // details page); the row then restores the last clicked card via its saved position.
     focusRequester: FocusRequester? = null,
+    // Optional content rendered inline after the title (e.g. a "TOP 10" chip). Null = title only.
+    titleExtra: (@Composable () -> Unit)? = null,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
@@ -63,7 +67,17 @@ fun <T> ItemRow(
                 }
             },
     ) {
-        ItemRowTitle(title)
+        if (titleExtra == null) {
+            ItemRowTitle(title)
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ItemRowTitle(title)
+                titleExtra()
+            }
+        }
 
         LazyRow(
             state = state,
