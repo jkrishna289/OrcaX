@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 380" width="1280" height="380" role="img" aria-label="OrcaX — Android TV client for Jellyfin, with the Orca Engine server plugin">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0C1017"/>
+      <stop offset="0.55" stop-color="#090C12"/>
+      <stop offset="1" stop-color="#06080D"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A99CFF"/>
+      <stop offset="1" stop-color="#4FC8BC"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="380" fill="url(#bg)"/>
+  <rect width="7" height="380" fill="url(#rail)"/>
+
+  <g fill="none" stroke="#A99CFF" stroke-opacity="0.10">
+    <circle cx="1215" cy="190" r="130"/>
+    <circle cx="1215" cy="190" r="200"/>
+    <circle cx="1215" cy="190" r="280"/>
+    <circle cx="1215" cy="190" r="368"/>
+  </g>
+  <g stroke="#1B2130" stroke-width="1">
+    <line x1="80" y1="345" x2="1180" y2="345"/>
+  </g>
+
+  <g font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+    <text x="82" y="92" fill="#79839A" font-size="13" letter-spacing="4.5" font-weight="600">JELLYFIN &#183; ANDROID TV &#183; SELF&#8209;HOSTED</text>
+
+    <text x="78" y="196" fill="#ECEFF5" font-size="98" font-weight="700" letter-spacing="1">ORCAX</text>
+    <text x="416" y="196" fill="#A99CFF" font-size="27" font-weight="600" letter-spacing="6">/ ORCA ENGINE</text>
+
+    <line x1="82" y1="228" x2="700" y2="228" stroke="#252B39" stroke-width="1"/>
+
+    <text x="82" y="268" fill="#9AA4B6" font-size="23">A television client that renders the screen. A server plugin that decides what goes on it.</text>
+
+    <g font-size="13" fill="#8B94A5" letter-spacing="0.6">
+      <rect x="82" y="296" width="212" height="32" rx="16" fill="none" stroke="#2A3141"/>
+      <text x="102" y="317">Kotlin &#183; Compose for TV</text>
+
+      <rect x="306" y="296" width="216" height="32" rx="16" fill="none" stroke="#2A3141"/>
+      <text x="326" y="317">.NET 9 &#183; Jellyfin plugin</text>
+
+      <rect x="534" y="296" width="104" height="32" rx="16" fill="none" stroke="#2A3141"/>
+      <text x="554" y="317">GPL&#8209;2.0</text>
+
+      <rect x="650" y="296" width="196" height="32" rx="16" fill="none" stroke="#2A3141"/>
+      <text x="670" y="317">Bring your own library</text>
+    </g>
+  </g>
+</svg>
