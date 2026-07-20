@@ -17,6 +17,8 @@ It has a companion. Most TV clients try to be clever on the device — sorting r
 
 You can run OrcaX against a plain Jellyfin server and it behaves like a polished, fast, focus-first client. Add the engine and the home screen stops being a list of folders and starts being a room that knows the household.
 
+OrcaX did not start from a blank screen. It is a downstream build of **[Wholphin](https://github.com/damontecres/Wholphin)** by [damontecres](https://github.com/damontecres) — see [Acknowledgements](#acknowledgements).
+
 ---
 
 ## First, the part that matters
@@ -134,9 +136,17 @@ One thing worth reading before you open a PR: this project follows [Jellyfin's L
 
 ---
 
+## Acknowledgements
+
+OrcaX did not start from a blank screen. It is built on **[Wholphin](https://github.com/damontecres/Wholphin)**, the Android TV client for Jellyfin created and maintained by **[damontecres](https://github.com/damontecres)**. The architecture this README describes — the single-activity Compose-for-TV client, the playback stack, the D-pad focus model — is their work first. OrcaX is a downstream take on it, and the debt is real: if you like how this app feels on a remote, that lineage is why. Thank you.
+
+Thanks as well to everyone who has contributed to Wholphin over the years — code, bug reports, and especially the translators who quietly make it usable in dozens of languages. Names like Outbreak2096, Priit Jõerüüt, arcker95, SimonHung, idezentas, danpergal84, American_Jesus, and opakholis show up again and again in the history, alongside many more. The full list lives in the [Wholphin](https://github.com/damontecres/Wholphin) commit log and on the [translation project](https://translate.codeberg.org/engage/wholphin/).
+
+And thank you to the **[Jellyfin](https://jellyfin.org)** project and its community — the free-software media server this whole thing exists to sit in front of.
+
 ## License
 
-OrcaX is released under the [GNU General Public License v2.0](LICENSE). It builds on the work of the Jellyfin community and a number of open-source libraries; run the app's about screen, or the `aboutLibraries` report, for the full attribution list.
+OrcaX is released under the [GNU General Public License v2.0](LICENSE), the same license as Wholphin upstream. It builds on Wholphin (see [Acknowledgements](#acknowledgements)), the Jellyfin community, and a number of open-source libraries; run the app's about screen, or the `aboutLibraries` report, for the full attribution list.
 
 <p align="center">
   <sub>A client that renders. An engine that decides. Your library, your server, your call.</sub>
