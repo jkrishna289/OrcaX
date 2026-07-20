@@ -222,12 +222,16 @@ class OrcaEngineClient
         fun trailerUrl(
             tmdbId: Int?,
             mediaType: com.github.jkrishna289.orcax.engine.MediaType,
+            lang: String? = null,
         ): String? {
             if (tmdbId == null || tmdbId <= 0) return null
             val base = baseUrl() ?: return null
             val path = resolvedPath ?: ENGINE_PATHS.first()
             val type = if (mediaType == com.github.jkrishna289.orcax.engine.MediaType.SERIES) "tv" else "movie"
-            return "$base$path/Trailer/$tmdbId?type=$type"
+            // The user's preferred trailer audio language: a production-time hint the engine uses
+            // when the clip isn't cached yet (it picks a matching-language TMDB trailer).
+            val langSuffix = lang?.takeIf { it.isNotBlank() }?.let { "&lang=$it" } ?: ""
+            return "$base$path/Trailer/$tmdbId?type=$type$langSuffix"
         }
 
         /**
@@ -240,10 +244,12 @@ class OrcaEngineClient
         suspend fun getTrailerStatus(
             tmdbId: Int?,
             mediaType: com.github.jkrishna289.orcax.engine.MediaType,
+            lang: String? = null,
         ): TrailerStatus? {
             if (tmdbId == null || tmdbId <= 0) return null
             val type = if (mediaType == com.github.jkrishna289.orcax.engine.MediaType.SERIES) "tv" else "movie"
-            return get("/Trailer/$tmdbId/status?type=$type") { EngineJson.decodeFromString<TrailerStatus>(it) }
+            val langSuffix = lang?.takeIf { it.isNotBlank() }?.let { "&lang=$it" } ?: ""
+            return get("/Trailer/$tmdbId/status?type=$type$langSuffix") { EngineJson.decodeFromString<TrailerStatus>(it) }
         }
 
         /**
@@ -255,10 +261,12 @@ class OrcaEngineClient
         suspend fun prefetchTrailers(
             items: List<com.github.jkrishna289.orcax.engine.TrailerPrefetchItem>,
             priority: String,
+            lang: String? = null,
         ): Boolean {
             if (items.isEmpty()) return false
             val body = EngineJson.encodeToString(items)
-            return post("/Trailer/Prefetch?priority=$priority", body) { true } ?: false
+            val langSuffix = lang?.takeIf { it.isNotBlank() }?.let { "&lang=$it" } ?: ""
+            return post("/Trailer/Prefetch?priority=$priority$langSuffix", body) { true } ?: false
         }
 
         /** Returns true if the engine plugin responds on this server (for graceful degradation). */

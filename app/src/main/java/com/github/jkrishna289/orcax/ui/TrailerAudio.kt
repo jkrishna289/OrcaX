@@ -40,3 +40,20 @@ fun TrailerPreviewVolume.toTrailerVolume(): Float =
  * sensible value.
  */
 val LocalTrailerVolume = compositionLocalOf { DEFAULT_TRAILER_PREVIEW_VOLUME }
+
+/**
+ * The user's preferred trailer audio language. The persisted preference is an ISO 639-1 code;
+ * empty = auto, which resolves to English-preferred everywhere ("use English audio whenever it's
+ * available"): the leased players set it as their preferred audio track language, and the engine
+ * client forwards it so the server picks a matching-language trailer when TMDB offers one.
+ */
+object TrailerLanguages {
+    /** Selectable codes, index-aligned with the `trailer_language_options` string-array ("" = auto). */
+    val CODES = listOf("", "en", "hi", "ta", "te", "ml", "kn", "es", "fr", "ja", "ko")
+
+    /** Resolves the persisted code to the effective preferred audio language. */
+    fun effective(code: String?): String = code?.takeIf { it.isNotBlank() } ?: "en"
+}
+
+/** The persisted trailer-language code ("" = auto/English-preferred), provided near the home root. */
+val LocalTrailerLanguage = compositionLocalOf { "" }

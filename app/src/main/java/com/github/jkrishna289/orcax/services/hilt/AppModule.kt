@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.android.androidDevice
 import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
@@ -101,7 +102,14 @@ object AppModule {
         OkHttpClient
             .Builder()
             .apply {
-                // TODO user agent, timeouts, logging, etc
+                // Bound every request so an unreachable/hung engine host can't stall calls forever.
+                // Default callTimeout is 0 (unbounded); the engine trailer status poll otherwise
+                // hangs each attempt indefinitely. Media playback uses ExoPlayer's own HTTP stack,
+                // so these limits don't affect streaming. TODO user agent, logging, etc.
+                connectTimeout(15, TimeUnit.SECONDS)
+                readTimeout(30, TimeUnit.SECONDS)
+                writeTimeout(30, TimeUnit.SECONDS)
+                callTimeout(60, TimeUnit.SECONDS)
             }.build()
 
     // ── AuthOkHttpClient: injects Jellyfin auth header automatically ──────────
