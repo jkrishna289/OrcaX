@@ -1,20 +1,26 @@
 package com.github.jkrishna289.orcax.services
 
+import android.os.SystemClock
 import com.github.jkrishna289.orcax.engine.AvailabilityStatusResponse
 import com.github.jkrishna289.orcax.engine.BootstrapResponse
 import com.github.jkrishna289.orcax.engine.ContentWarningsResponse
 import com.github.jkrishna289.orcax.engine.EngineJson
 import com.github.jkrishna289.orcax.engine.EngineRequestBody
+import com.github.jkrishna289.orcax.engine.FeatureFlags
 import com.github.jkrishna289.orcax.engine.FeedbackBody
 import com.github.jkrishna289.orcax.engine.RenderBundle
+import com.github.jkrishna289.orcax.engine.SourceGroups
 import com.github.jkrishna289.orcax.engine.RequestResult
 import com.github.jkrishna289.orcax.engine.TriviaResponse
 import com.github.jkrishna289.orcax.engine.SUPPORTED_CARD_TYPES_QUERY
 import com.github.jkrishna289.orcax.engine.SimilarResponse
+import com.github.jkrishna289.orcax.engine.StreamSessionBody
+import com.github.jkrishna289.orcax.engine.StreamSessionResult
 import com.github.jkrishna289.orcax.engine.TelemetryBatch
 import com.github.jkrishna289.orcax.engine.TelemetryEvent
 import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.services.hilt.AuthOkHttpClient
+import com.github.jkrishna289.orcax.services.torrent.TorrentStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
@@ -26,6 +32,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.jellyfin.sdk.api.client.ApiClient
 import timber.log.Timber
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.jvm.Volatile
@@ -52,6 +59,59 @@ class OrcaEngineClient
     ) {
         private fun baseUrl(): String? = apiClient.baseUrl?.trimEnd('/')?.takeIf { it.isNotBlank() }
 
+        /**
+         * A long-timeout twin of the shared client, used only for the home fetch. The default 30s
+         * read / 60s call bounds exist so a hung host can't stall the trailer-status polls, but a
+         * cold personalized home legitimately takes longer to build — and being cut off there is
+         * exactly what used to drop the viewer onto the legacy home. The home request is background
+         * work behind an already-painted screen now, so it can afford to wait for the real bundle.
+         * Shares the parent's connection pool and dispatcher, so this costs nothing to hold.
+         */
+        private val homeHttpClient: OkHttpClient by lazy {
+            okHttpClient
+                .newBuilder()
+                .readTimeout(HOME_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .callTimeout(HOME_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .build()
+        }
+
+        /**
+         * A long-timeout twin for opening a torrent stream session. Sibling of [homeHttpClient] and
+         * needed for the same reason, only more so: the engine has to fetch torrent metadata from
+         * peers, prebuffer the first and last piece, and then ffprobe the container (which alone has a
+         * 90s budget server-side). The shared client's 30s read / 60s call bounds cut that off
+         * mid-flight, and the viewer saw "couldn't open a stream" while the server was still working
+         * and about to succeed.
+         *
+         * ponytail: a multi-minute blocking POST is the honest shape of the current design, not a good
+         * one. If startup latency needs to be visible (progress, or cancel-and-pick-another), this
+         * wants splitting into a create-then-poll pair — a bigger change than the timeout it replaces.
+         */
+        private val streamHttpClient: OkHttpClient by lazy {
+            okHttpClient
+                .newBuilder()
+                .readTimeout(STREAM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .callTimeout(STREAM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .build()
+        }
+
+        /**
+         * A long-timeout twin for source discovery. A cold search fans out across every configured
+         * indexer and legitimately takes tens of seconds; the shared client's 30s read bound cut it
+         * off and the viewer saw "no sources" for a search that was about to succeed. Only fast when
+         * the engine's cache is warm, which is exactly when the shorter bound looked fine in testing.
+         *
+         * Shorter than [streamHttpClient] on purpose: a search that hasn't answered in two minutes is
+         * not going to, and the viewer should be told rather than left waiting.
+         */
+        private val searchHttpClient: OkHttpClient by lazy {
+            okHttpClient
+                .newBuilder()
+                .readTimeout(SEARCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .callTimeout(SEARCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .build()
+        }
+
         // The engine controller root the connected server actually serves, learned on the first
         // successful call and reused thereafter. Reset to null when a probe set stops responding.
         @Volatile
@@ -77,7 +137,7 @@ class OrcaEngineClient
                 if (userId != null) append("&userId=").append(userId)
                 if (inlineVideo) append("&inlineVideo=true")
             }
-            return get(suffix) { EngineJson.decodeFromString<RenderBundle>(it) }
+            return get(suffix, homeHttpClient) { EngineJson.decodeFromString<RenderBundle>(it) }
         }
 
         /**
@@ -96,7 +156,7 @@ class OrcaEngineClient
                 if (userId != null) append("&userId=").append(userId)
                 if (inlineVideo) append("&inlineVideo=true")
             }
-            return get(suffix) { EngineJson.decodeFromString<BootstrapResponse>(it) }
+            return get(suffix, homeHttpClient) { EngineJson.decodeFromString<BootstrapResponse>(it) }
         }
 
         /**
@@ -269,6 +329,89 @@ class OrcaEngineClient
             return post("/Trailer/Prefetch?priority=$priority$langSuffix", body) { true } ?: false
         }
 
+        /**
+         * The engine's effective feature flags, used to decide what the UI may offer at all. Returns
+         * null when there's no engine, in which case callers treat every flag as off.
+         */
+        suspend fun getFeatures(): FeatureFlags? =
+            get("/Settings/Features") { EngineJson.decodeFromString<FeatureFlags>(it) }
+
+        /**
+         * Finds streamable sources for a title. Called only in response to an explicit user action —
+         * never while browsing — so indexer load stays proportional to actual intent.
+         *
+         * Returns null when the engine is absent, source streaming is disabled (the endpoint 404s by
+         * design), or no indexer is configured. An empty [SourceGroups.all] means the search ran and
+         * genuinely found nothing, which the UI words differently.
+         */
+        suspend fun getSources(
+            title: String,
+            year: Int? = null,
+            mediaType: com.github.jkrishna289.orcax.engine.MediaType =
+                com.github.jkrishna289.orcax.engine.MediaType.MOVIE,
+            season: Int? = null,
+            episode: Int? = null,
+            preferredHeight: Int? = null,
+        ): SourceGroups? {
+            if (title.isBlank()) return null
+            val type = if (mediaType == com.github.jkrishna289.orcax.engine.MediaType.SERIES) "tv" else "movie"
+            val suffix =
+                buildString {
+                    append("/Sources?title=").append(java.net.URLEncoder.encode(title, "UTF-8"))
+                    append("&type=").append(type)
+                    if (year != null && year > 1900) append("&year=").append(year)
+                    if (season != null) append("&season=").append(season)
+                    if (episode != null) append("&episode=").append(episode)
+                    if (preferredHeight != null && preferredHeight > 0) {
+                        append("&preferredHeight=").append(preferredHeight)
+                    }
+                }
+            return get(suffix, searchHttpClient) { EngineJson.decodeFromString<SourceGroups>(it) }
+        }
+
+        /**
+         * Opens a torrent streaming session and returns the absolute URL the player should fetch.
+         *
+         * Returns null when the engine is absent, the operator hasn't enabled source streaming (the
+         * endpoint 404s by design), the magnet holds no playable video, or the session cap is hit —
+         * all of which the caller surfaces the same way: this source didn't work, try another.
+         *
+         * The returned URL carries the session's capability token, so it plays without an auth header
+         * (which matters: the ExoPlayer data source doesn't attach one).
+         */
+        suspend fun openStreamSession(
+            sourceId: String? = null,
+            magnet: String? = null,
+            season: Int? = null,
+            episode: Int? = null,
+        ): TorrentStream? {
+            if (sourceId.isNullOrBlank() && magnet.isNullOrBlank()) return null
+            val base = baseUrl() ?: return null
+            val body =
+                EngineJson.encodeToString(
+                    StreamSessionBody(sourceId = sourceId, magnet = magnet, season = season, episode = episode),
+                )
+            val result =
+                post("/Stream/Sessions", body, streamHttpClient) {
+                    EngineJson.decodeFromString<StreamSessionResult>(it)
+                } ?: return null
+
+            if (result.path.isBlank()) return null
+            return TorrentStream(
+                url = base + result.path,
+                token = result.token,
+                fileName = result.fileName,
+                sizeBytes = result.length.takeIf { it > 0 },
+                mediaInfo = result.mediaInfo,
+            )
+        }
+
+        // ponytail: no explicit session close yet — that needs a DELETE verb in the shared
+        // get/post plumbing below, and touching that risks every existing engine call for a
+        // behaviour the server's idle sweep already covers. The engine tears a session down after
+        // StreamSessionIdleMinutes, so nothing leaks; it just keeps seeding a little longer than
+        // necessary. Wire DELETE /Stream/{token} up when playback teardown has a real UI path.
+
         /** Returns true if the engine plugin responds on this server (for graceful degradation). */
         suspend fun isEngineAvailable(): Boolean = get("/Health") { true } ?: false
 
@@ -292,25 +435,28 @@ class OrcaEngineClient
 
         private suspend fun <T> get(
             suffix: String,
+            client: OkHttpClient = okHttpClient,
             parse: (String) -> T,
-        ): T? = execute(suffix, jsonBody = null, parse)
+        ): T? = execute(suffix, jsonBody = null, client, parse)
 
         private suspend fun <T> post(
             suffix: String,
             jsonBody: String,
+            client: OkHttpClient = okHttpClient,
             parse: (String) -> T,
-        ): T? = execute(suffix, jsonBody, parse)
+        ): T? = execute(suffix, jsonBody, client, parse)
 
         private suspend fun <T> execute(
             suffix: String,
             jsonBody: String?,
+            client: OkHttpClient,
             parse: (String) -> T,
         ): T? =
             withContext(Dispatchers.IO) {
                 val base = baseUrl() ?: return@withContext null
                 val candidates = resolvedPath?.let { listOf(it) } ?: ENGINE_PATHS
                 for (path in candidates) {
-                    when (val outcome = attempt("$base$path$suffix", jsonBody, parse)) {
+                    when (val outcome = attempt("$base$path$suffix", jsonBody, client, parse)) {
                         is Attempt.Ok -> {
                             resolvedPath = path
                             return@withContext outcome.value
@@ -328,6 +474,7 @@ class OrcaEngineClient
         private fun <T> attempt(
             url: String,
             jsonBody: String?,
+            client: OkHttpClient,
             parse: (String) -> T,
         ): Attempt<T> =
             try {
@@ -338,7 +485,8 @@ class OrcaEngineClient
                     } else {
                         builder.post(jsonBody.toRequestBody(JSON_MEDIA_TYPE)).build()
                     }
-                okHttpClient.newCall(request).execute().use { response ->
+                val sentAt = SystemClock.elapsedRealtime()
+                client.newCall(request).execute().use { response ->
                     when {
                         response.code == 404 -> Attempt.WrongPath
                         !response.isSuccessful -> {
@@ -346,8 +494,20 @@ class OrcaEngineClient
                             Attempt.Failed
                         }
                         else -> {
+                            // Transfer and parse are timed apart because the performance budget
+                            // treats them apart (<30ms network, <10ms parse) — lumped together
+                            // there's no way to tell a slow LAN from a slow decode.
                             val body = response.body.string()
-                            Attempt.Ok(if (body.isBlank()) null else parse(body))
+                            val transferredAt = SystemClock.elapsedRealtime()
+                            val parsed = if (body.isBlank()) null else parse(body)
+                            Timber.i(
+                                "Orca Engine timing: transfer=%dms parse=%dms bytes=%d %s",
+                                transferredAt - sentAt,
+                                SystemClock.elapsedRealtime() - transferredAt,
+                                body.length,
+                                url,
+                            )
+                            Attempt.Ok(parsed)
                         }
                     }
                 }
@@ -374,5 +534,14 @@ class OrcaEngineClient
             // cached in [resolvedPath] so subsequent calls skip straight to it.
             private val ENGINE_PATHS = listOf("/OrcaEngine", "/WholphinEngine")
             private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+            /** Read/call bound for the home fetch — see [homeHttpClient] for why it's this generous. */
+            private const val HOME_TIMEOUT_SECONDS = 120L
+
+            /** Read/call bound for opening a stream session — see [streamHttpClient]. */
+            private const val STREAM_TIMEOUT_SECONDS = 300L
+
+            /** Read/call bound for a cold source search — see [searchHttpClient]. */
+            private const val SEARCH_TIMEOUT_SECONDS = 120L
         }
     }

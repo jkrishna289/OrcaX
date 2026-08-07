@@ -5,6 +5,7 @@ import android.hardware.display.DisplayManager
 import android.os.Build
 import android.util.Log
 import android.view.Display
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.scrollBy
@@ -39,6 +40,8 @@ import com.github.jkrishna289.orcax.data.ItemPlaybackDao
 import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.services.NavigationManager
+import com.github.jkrishna289.orcax.services.OrcaEngineClient
+import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.ui.launchIO
@@ -57,6 +60,7 @@ import timber.log.Timber
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.Date
+import java.util.UUID
 import javax.inject.Inject
 
 @HiltViewModel
@@ -68,9 +72,64 @@ class DebugViewModel
         val clientInfo: ClientInfo,
         val deviceInfo: DeviceInfo,
         val navigationManager: NavigationManager,
+        val orcaEngineClient: OrcaEngineClient,
     ) : ViewModel() {
         val itemPlaybacks = MutableLiveData<List<ItemPlayback>>(listOf())
         val logcat = MutableLiveData<List<LogcatLine>>(listOf())
+
+        /**
+         * Opens a torrent stream on the engine and hands it to the normal player — the end-to-end
+         * check that a torrent source plays through the existing playback stack.
+         *
+         * Lives on the debug screen on purpose: it proves the pipeline without touching any product
+         * surface, so a failure here can't be confused with a UI problem.
+         */
+        fun playTestMagnet(context: Context) {
+            viewModelScope.launchIO {
+                withContext(Dispatchers.Main) {
+                    // Fetching torrent metadata from peers takes a while, and the button would
+                    // otherwise look dead for up to a minute.
+                    showToast(context, "Opening stream, this can take a minute...", Toast.LENGTH_LONG)
+                }
+
+                val stream = orcaEngineClient.openStreamSession(magnet = TEST_MAGNET)
+                if (stream == null) {
+                    withContext(Dispatchers.Main) {
+                        showToast(
+                            context,
+                            "No stream. Check that source streaming is enabled in the Orca Engine settings.",
+                            Toast.LENGTH_LONG,
+                        )
+                    }
+                    return@launchIO
+                }
+
+                Timber.i(
+                    "Test magnet stream ready: %s (%d bytes, %d tracks)",
+                    stream.fileName,
+                    stream.sizeBytes ?: -1,
+                    stream.mediaInfo?.streams?.size ?: 0,
+                )
+                withContext(Dispatchers.Main) {
+                    navigationManager.navigateTo(
+                        Destination.Playback(
+                            // Throwaway id: there is no Jellyfin item, and a fresh one each time is
+                            // what keeps this out of the resume/next-up tables.
+                            itemId = UUID.randomUUID(),
+                            positionMs = 0,
+                            torrent =
+                                TorrentPlaybackArgs(
+                                    url = stream.url,
+                                    title = "Sintel (test stream)",
+                                    fileName = stream.fileName,
+                                    sizeBytes = stream.sizeBytes,
+                                    mediaInfo = stream.mediaInfo,
+                                ),
+                        ),
+                    )
+                }
+            }
+        }
 
         val supportedModes by lazy {
             val displayManager =
@@ -123,7 +182,107 @@ class DebugViewModel
             }
         }
 
+        /**
+         * Searches real indexers, takes the recommended pick, and plays it.
+         *
+         * Distinct from [playTestMagnet] in the part that matters: this goes through the whole
+         * discovery chain — Prowlarr search, server-side ranking, source-id resolution, and the
+         * **.torrent fetch**. Prowlarr almost always returns .torrent proxy links rather than magnets,
+         * so this is the path every real source-pick takes, and the hardcoded-magnet button never
+         * touches it.
+         */
+        fun playFromRealSources(context: Context) {
+            viewModelScope.launchIO {
+                withContext(Dispatchers.Main) {
+                    showToast(context, "Searching sources for $TEST_TITLE...", Toast.LENGTH_LONG)
+                }
+
+                val groups = orcaEngineClient.getSources(title = TEST_TITLE, year = TEST_YEAR)
+                if (groups == null) {
+                    withContext(Dispatchers.Main) {
+                        showToast(
+                            context,
+                            "No source search. Check source streaming is on and Prowlarr is configured.",
+                            Toast.LENGTH_LONG,
+                        )
+                    }
+                    return@launchIO
+                }
+
+                val pick = groups.recommended ?: groups.all.firstOrNull()
+                if (pick == null) {
+                    // Logged as well as toasted: a toast has faded by the time logcat is read, and
+                    // "search returned zero" is indistinguishable from "the button did nothing"
+                    // without this line.
+                    Timber.w("Source search for %s returned no usable sources", TEST_TITLE)
+                    withContext(Dispatchers.Main) {
+                        showToast(context, "Search ran but found no usable sources.", Toast.LENGTH_LONG)
+                    }
+                    return@launchIO
+                }
+
+                Timber.i(
+                    "Source pick: %s | %s | id=%s seeders=%d indexer=%s",
+                    pick.title,
+                    pick.summary,
+                    pick.id,
+                    pick.seeders,
+                    pick.indexer ?: "?",
+                )
+                withContext(Dispatchers.Main) {
+                    showToast(context, "Opening ${pick.summary}...", Toast.LENGTH_LONG)
+                }
+
+                val stream = orcaEngineClient.openStreamSession(sourceId = pick.id)
+                if (stream == null) {
+                    withContext(Dispatchers.Main) {
+                        showToast(context, "Found sources but couldn't open a stream.", Toast.LENGTH_LONG)
+                    }
+                    return@launchIO
+                }
+
+                Timber.i(
+                    "Real-source stream ready: %s (%d bytes, %d tracks)",
+                    stream.fileName,
+                    stream.sizeBytes ?: -1,
+                    stream.mediaInfo?.streams?.size ?: 0,
+                )
+                withContext(Dispatchers.Main) {
+                    navigationManager.navigateTo(
+                        Destination.Playback(
+                            itemId = UUID.randomUUID(),
+                            positionMs = 0,
+                            torrent =
+                                TorrentPlaybackArgs(
+                                    url = stream.url,
+                                    title = "$TEST_TITLE (from sources)",
+                                    fileName = stream.fileName,
+                                    sizeBytes = stream.sizeBytes,
+                                    mediaInfo = stream.mediaInfo,
+                                ),
+                        ),
+                    )
+                }
+            }
+        }
+
         companion object {
+            // Creative Commons, and already confirmed to return results from the configured indexers.
+            private const val TEST_TITLE = "Sintel"
+            private const val TEST_YEAR = 2010
+
+            /**
+             * Sintel, the Blender Foundation's Creative Commons short film — the canonical WebTorrent
+             * test torrent. Deliberately a well-seeded, freely licensed release so this button is a
+             * plumbing test and nothing else.
+             */
+            private const val TEST_MAGNET =
+                "magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel" +
+                    "&tr=udp%3A%2F%2Fexplodie.org%3A6969" +
+                    "&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337" +
+                    "&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337" +
+                    "&tr=udp%3A%2F%2Fopen.demonii.com%3A1337"
+
             fun getLogCatLines(): List<LogcatLine> {
                 val lineCount = 500
                 val args =
@@ -248,6 +407,20 @@ fun DebugPage(
                 },
             ) {
                 Text(text = "Open Orca Engine Cards")
+            }
+        }
+        item {
+            androidx.tv.material3.Button(
+                onClick = { viewModel.playTestMagnet(context) },
+            ) {
+                Text(text = "Play test torrent stream (Sintel)")
+            }
+        }
+        item {
+            androidx.tv.material3.Button(
+                onClick = { viewModel.playFromRealSources(context) },
+            ) {
+                Text(text = "Search sources and play best (Sintel)")
             }
         }
         item {

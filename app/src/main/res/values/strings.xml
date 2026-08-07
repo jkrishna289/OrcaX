@@ -138,6 +138,7 @@
     <string name="outro">Outro</string>
     <string name="path">Path</string>
     <string name="people">People</string>
+    <string name="cast">Cast</string>
     <string name="play_count">Play Count</string>
     <string name="play_from_here">Play from here</string>
     <string name="play">Play</string>
@@ -510,6 +511,7 @@
     <string name="resolution_switching">Resolution switching</string>
     <string name="local">Local</string>
     <string name="play_trailer">Play trailer</string>
+    <string name="play_trailer_chip">Trailer</string>
     <string name="no_trailers">No trailers</string>
     <string name="clear_track_choices">Clear track choices</string>
     <string name="dts_x">DTS:X</string>
@@ -892,4 +894,26 @@
     <string name="quality_manual_struggling_toast">Playback is struggling — open the quality menu to lower quality</string>
     <string name="quality_started_reduced_toast">Started at %1$s — connection %2$s</string>
     <string name="quality_details_preview">AUTO quality: %1$s · connection %2$s</string>
+
+    <!-- Streaming sources. Wording is deliberately non-technical: a viewer should never need to
+         know what a torrent, magnet, seeder or tracker is. Technical detail appears only after
+         they open "Show details", and even then as a supporting line. -->
+    <string name="find_streaming_sources">Find Sources</string>
+    <string name="available_sources">Available Sources</string>
+    <string name="sources_searching">Looking for sources…</string>
+    <string name="sources_opening">Starting playback…</string>
+    <string name="sources_none_title">Nothing available yet</string>
+    <string name="sources_none_message">We couldn\'t find anything to play for this title right now. You can request it for the library instead, or try again later.</string>
+    <string name="sources_unavailable_message">Sources aren\'t available right now. Your server may not be set up for this yet.</string>
+    <string name="sources_failed_message">That source wouldn\'t start. Try another one.</string>
+    <string name="source_recommended">Recommended</string>
+    <string name="source_best_quality">Best Quality</string>
+    <string name="source_fastest_start">Fastest Start</string>
+    <string name="source_lowest_bandwidth">Uses Least Data</string>
+    <string name="source_4k_hdr">4K HDR</string>
+    <string name="source_show_all">Show all sources</string>
+    <string name="source_show_details">Show details</string>
+    <string name="source_hide_details">Hide details</string>
+    <!-- Advanced/technical line, shown only when details are expanded. -->
+    <string name="source_technical">%1$s · %2$d sharing · %3$s</string>
 </resources>
