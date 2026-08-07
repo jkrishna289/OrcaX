@@ -94,6 +94,8 @@ fun DiscoverMovieDetails(
     val userConfig by viewModel.userConfig.collectAsState(null)
     val request4kEnabled by viewModel.request4kEnabled.collectAsState(false)
     val canCancel by viewModel.canCancelRequest.collectAsState()
+    val sourceStreamingEnabled by viewModel.sourceStreamingEnabled.collectAsState()
+    val sourceSearch by viewModel.sourceSearch.collectAsState()
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var moreDialog by remember { mutableStateOf<DialogParams?>(null) }
@@ -190,11 +192,23 @@ fun DiscoverMovieDetails(
                     trailerOnClick = {
                         TrailerService.onClick(context, it, viewModel::navigateTo)
                     },
+                    canFindSources = sourceStreamingEnabled,
+                    findSourcesOnClick = viewModel::findSources,
                     modifier = modifier,
                 )
             }
         }
     }
+
+    SourcePickerDialog(
+        state = sourceSearch,
+        onPick = viewModel::playSource,
+        onShowAll = viewModel::showAllSources,
+        onToggleDetails = viewModel::toggleSourceDetails,
+        onRetry = viewModel::retrySourceSelection,
+        onDismiss = viewModel::dismissSources,
+    )
+
     overviewDialog?.let { info ->
         ItemDetailsDialog(
             info = info,
@@ -238,6 +252,8 @@ fun DiscoverMovieDetailsContent(
     overviewOnClick: () -> Unit,
     goToOnClick: () -> Unit,
     moreOnClick: () -> Unit,
+    canFindSources: Boolean,
+    findSourcesOnClick: () -> Unit,
     onClickItem: (Int, DiscoverItem) -> Unit,
     onClickPerson: (DiscoverItem) -> Unit,
     onLongClickPerson: (Int, DiscoverItem) -> Unit,
@@ -296,6 +312,10 @@ fun DiscoverMovieDetailsContent(
                         },
                         canRequest = userConfig.hasPermission(SeerrPermission.REQUEST),
                         canCancel = canCancel,
+                        // Gated on the server offering it AND the viewer being allowed to add media at
+                        // all. Someone who can't even request shouldn't get a way to stream instead.
+                        canFindSources = canFindSources && userConfig.hasPermission(SeerrPermission.REQUEST),
+                        findSourcesOnClick = findSourcesOnClick,
                         trailers = trailers,
                         trailerOnClick = trailerOnClick,
                         modifier =

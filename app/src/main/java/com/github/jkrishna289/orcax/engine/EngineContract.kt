@@ -47,6 +47,109 @@ data class FeatureFlags(
     @SerialName("SimilarityRows") val similarityRows: Boolean = true,
     @SerialName("JellyseerrDiscovery") val jellyseerrDiscovery: Boolean = false,
     @SerialName("Requests") val requests: Boolean = false,
+    @SerialName("SourceStreaming") val sourceStreaming: Boolean = false,
+)
+
+/**
+ * One streamable source, already ranked and described by the engine.
+ *
+ * [summary] and [quality] are the plain-language strings meant for display; everything below them
+ * ([seeders], [videoCodec], [tier], [indexer], [title]) is technical detail that belongs behind an
+ * "advanced" affordance, per the design rule that a viewer should never need to know what a seeder is.
+ */
+@Serializable
+data class TorrentSourceDto(
+    @SerialName("Title") val title: String = "",
+    /**
+     * Opaque handle used to open a stream. Deliberately not a magnet or URL: indexer download links
+     * embed the server's API key, so the engine keeps them and resolves this id server-side.
+     */
+    @SerialName("Id") val id: String = "",
+    @SerialName("SizeBytes") val sizeBytes: Long = 0,
+    @SerialName("Seeders") val seeders: Int = 0,
+    @SerialName("Leechers") val leechers: Int = 0,
+    @SerialName("Indexer") val indexer: String? = null,
+    @SerialName("ResolutionHeight") val resolutionHeight: Int = 0,
+    @SerialName("Tier") val tier: String? = null,
+    @SerialName("VideoCodec") val videoCodec: String? = null,
+    @SerialName("Hdr") val hdr: Boolean = false,
+    @SerialName("DolbyVision") val dolbyVision: Boolean = false,
+    @SerialName("Audio") val audio: String? = null,
+    @SerialName("ReleaseGroup") val releaseGroup: String? = null,
+    @SerialName("Quality") val quality: String = "",
+    @SerialName("Summary") val summary: String = "",
+)
+
+/**
+ * Sources bucketed into the few choices a viewer is offered. Any bucket can be null when nothing
+ * qualifies; [all] is empty when the search found nothing usable.
+ */
+@Serializable
+data class SourceGroups(
+    @SerialName("Recommended") val recommended: TorrentSourceDto? = null,
+    @SerialName("BestQuality") val bestQuality: TorrentSourceDto? = null,
+    @SerialName("FastestStart") val fastestStart: TorrentSourceDto? = null,
+    @SerialName("LowestBandwidth") val lowestBandwidth: TorrentSourceDto? = null,
+    @SerialName("FourKHdr") val fourKHdr: TorrentSourceDto? = null,
+    @SerialName("All") val all: List<TorrentSourceDto> = emptyList(),
+)
+
+/**
+ * Body for `POST /Stream/Sessions`. Supply [sourceId] from a prior search, or [magnet] to stream a
+ * magnet link directly (the debug path). Season/episode only matter for a season-pack source.
+ */
+@Serializable
+data class StreamSessionBody(
+    @SerialName("SourceId") val sourceId: String? = null,
+    @SerialName("Magnet") val magnet: String? = null,
+    @SerialName("Season") val season: Int? = null,
+    @SerialName("Episode") val episode: Int? = null,
+)
+
+/**
+ * An open torrent stream. [path] is server-relative — the client joins it to the Jellyfin base URL
+ * to get the URL the player fetches. [token] is a capability: it is the only thing authorizing reads,
+ * so it must not be logged or shared.
+ */
+@Serializable
+data class StreamSessionResult(
+    @SerialName("Token") val token: String = "",
+    @SerialName("Path") val path: String = "",
+    @SerialName("FileName") val fileName: String = "",
+    @SerialName("Length") val length: Long = 0,
+    @SerialName("MediaInfo") val mediaInfo: StreamMediaInfo? = null,
+)
+
+/**
+ * Container facts the engine read out of the torrent with ffprobe. Null on the parent when the probe
+ * couldn't run — the player then discovers tracks itself, which is the pre-probe behaviour.
+ */
+@Serializable
+data class StreamMediaInfo(
+    @SerialName("RunTimeTicks") val runTimeTicks: Long? = null,
+    @SerialName("Bitrate") val bitrate: Int? = null,
+    @SerialName("Container") val container: String? = null,
+    @SerialName("Streams") val streams: List<StreamTrack> = emptyList(),
+)
+
+/** One track inside a torrent's video file. [index] is the container's own index, passed through. */
+@Serializable
+data class StreamTrack(
+    @SerialName("Index") val index: Int = 0,
+    @SerialName("Type") val type: String = "",
+    @SerialName("Codec") val codec: String? = null,
+    @SerialName("Language") val language: String? = null,
+    @SerialName("Title") val title: String? = null,
+    @SerialName("IsDefault") val isDefault: Boolean = false,
+    @SerialName("IsForced") val isForced: Boolean = false,
+    @SerialName("Width") val width: Int? = null,
+    @SerialName("Height") val height: Int? = null,
+    @SerialName("Channels") val channels: Int? = null,
+    @SerialName("ChannelLayout") val channelLayout: String? = null,
+    @SerialName("BitRate") val bitRate: Int? = null,
+    @SerialName("Profile") val profile: String? = null,
+    @SerialName("ColorTransfer") val colorTransfer: String? = null,
+    @SerialName("ColorPrimaries") val colorPrimaries: String? = null,
 )
 
 /** Result of an engine-proxied request (`POST /Requests`). */
