@@ -38,6 +38,8 @@ fun ExpandableDiscoverButtons(
     buttonOnFocusChanged: (FocusState) -> Unit,
     modifier: Modifier = Modifier,
     pendingOnClick: () -> Unit = {},
+    canFindSources: Boolean = false,
+    findSourcesOnClick: () -> Unit = {},
 ) {
     val firstFocus = remember { FocusRequester() }
     LazyRow(
@@ -122,6 +124,23 @@ fun ExpandableDiscoverButtons(
                     modifier =
                         Modifier
                             .onFocusChanged(buttonOnFocusChanged),
+                )
+            }
+        }
+
+        // Streaming sources are a fallback, never the headline. The row order matters: Request stays
+        // the first-focused action because the library route is the better outcome for most viewers —
+        // this button is for when that isn't fast enough or has already failed.
+        //
+        // Rendered only when the server offers it AND the title isn't already in the library. When the
+        // operator hasn't enabled the feature, the viewer never learns it exists.
+        if (canFindSources && availability != SeerrAvailability.AVAILABLE) {
+            item("find_sources") {
+                ExpandableFaButton(
+                    title = R.string.find_streaming_sources,
+                    iconStringRes = R.string.fa_film,
+                    onClick = findSourcesOnClick,
+                    modifier = Modifier.onFocusChanged(buttonOnFocusChanged),
                 )
             }
         }

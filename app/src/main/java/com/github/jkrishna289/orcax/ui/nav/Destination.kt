@@ -9,6 +9,7 @@ import com.github.jkrishna289.orcax.data.model.CollectionFolderFilter
 import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.GetItemsFilter
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
+import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.ui.data.SortAndDirection
 import com.github.jkrishna289.orcax.ui.detail.series.SeasonEpisodeIds
 import com.github.jkrishna289.orcax.ui.preferences.PreferenceScreenOption
@@ -80,6 +81,11 @@ sealed class Destination(
         val positionMs: Long,
         val itemPlayback: ItemPlayback? = null,
         val forceTranscoding: Boolean = false,
+        /**
+         * Set only for a torrent source stream. When present [itemId] is a throwaway id with no
+         * Jellyfin item behind it, and the player takes its source from here instead of the server.
+         */
+        val torrent: TorrentPlaybackArgs? = null,
     ) : Destination(true) {
         constructor(item: BaseItem) : this(item.id, item.resumeMs)
     }

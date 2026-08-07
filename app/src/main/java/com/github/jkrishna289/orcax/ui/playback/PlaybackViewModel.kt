@@ -54,6 +54,8 @@ import com.github.jkrishna289.orcax.services.RefreshRateService
 import com.github.jkrishna289.orcax.services.ScreensaverService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.UserPreferencesService
+import com.github.jkrishna289.orcax.services.torrent.TorrentMediaSource
+import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.QualityPreferenceDao
 import com.github.jkrishna289.orcax.services.hilt.StandardOkHttpClient
@@ -221,6 +223,13 @@ constructor(
     internal lateinit var item: BaseItem
     internal var forceTranscoding: Boolean = false
     private var activityListener: TrackActivityPlaybackListener? = null
+
+    /**
+     * Non-null when this is a torrent source stream rather than a library item. Gates every code
+     * path that assumes [itemId] exists on the Jellyfin server: source resolution, watch-activity
+     * reporting, resume persistence and next-up.
+     */
+    private var torrentPlayback: TorrentPlaybackArgs? = null
     private val jobs = mutableListOf<Job>()
 
     val nextUp = MutableLiveData<BaseItem?>()
@@ -407,6 +416,27 @@ constructor(
                 }
             }
         this.itemId = itemId
+
+        // Torrent source: nothing in the library to look up, so the item is synthesized and handed
+        // straight to play(). Returns early to skip next-up and playlist building, both of which are
+        // meaningless for a one-off stream and would query Jellyfin with an id it doesn't have.
+        (destination as? Destination.Playback)?.torrent?.let { args ->
+            this.torrentPlayback = args
+            viewModelScope.launch(ExceptionHandler()) { controllerViewState.observe() }
+            play(
+                item = TorrentMediaSource.baseItem(
+                    title = args.title,
+                    streamUrl = args.url,
+                    fileName = args.fileName,
+                    sizeBytes = args.sizeBytes,
+                    itemId = itemId,
+                    mediaInfo = args.mediaInfo,
+                ),
+                positionMs = positionMs,
+            )
+            return
+        }
+
         val queriedItem = api.userLibraryApi.getItem(itemId).content
         val base =
             if (queriedItem.type.playable) {
@@ -748,35 +778,53 @@ constructor(
             if (qualityBitrate == Int.MAX_VALUE) prefBitrate
             else minOf(qualityBitrate.toLong(), prefBitrate)
 
-        val response by
-        api.mediaInfoApi
-            .getPostedPlaybackInfo(
-                itemId,
-                PlaybackInfoDto(
-                    startTimeTicks = null,
-                    deviceProfile =
-                        if (currentPlayer.value!!.backend == PlayerBackend.EXO_PLAYER) {
-                            deviceProfileService.getOrCreateDeviceProfile(
-                                preferences.appPreferences.playbackPreferences,
-                                serverRepository.currentServer.value?.serverVersion,
-                            )
-                        } else {
-                            mpvDeviceProfile
-                        },
-                    maxAudioChannels = null,
-                    audioStreamIndex = audioIndex,
-                    subtitleStreamIndex = subtitleIndex,
-                    mediaSourceId = currentItemPlayback.sourceId?.toServerString(),
-                    alwaysBurnInSubtitleWhenTranscoding = false,
-                    maxStreamingBitrate = maxBitrate.toInt(),
-                    enableDirectPlay = enableDirectPlay,
-                    enableDirectStream = enableDirectStream,
-                    allowVideoStreamCopy = enableDirectStream,
-                    allowAudioStreamCopy = allowAudioStreamCopy,
-                    enableTranscoding = true,
-                    autoOpenLiveStream = true,
-                ),
-            )
+        // A torrent stream is served by the engine, not by Jellyfin — asking the server to resolve a
+        // source for an item it has never heard of would just 404. The answer is supplied directly
+        // instead, in the exact shape the rest of this function already expects.
+        val torrent = torrentPlayback
+        val response =
+            if (torrent != null) {
+                TorrentMediaSource.playbackInfo(
+                    streamUrl = torrent.url,
+                    fileName = torrent.fileName,
+                    sizeBytes = torrent.sizeBytes,
+                    sourceId = itemId,
+                    mediaInfo = torrent.mediaInfo,
+                )
+            } else {
+                run {
+                    val jellyfinResponse by
+                    api.mediaInfoApi
+                        .getPostedPlaybackInfo(
+                            itemId,
+                            PlaybackInfoDto(
+                                startTimeTicks = null,
+                                deviceProfile =
+                                    if (currentPlayer.value!!.backend == PlayerBackend.EXO_PLAYER) {
+                                        deviceProfileService.getOrCreateDeviceProfile(
+                                            preferences.appPreferences.playbackPreferences,
+                                            serverRepository.currentServer.value?.serverVersion,
+                                        )
+                                    } else {
+                                        mpvDeviceProfile
+                                    },
+                                maxAudioChannels = null,
+                                audioStreamIndex = audioIndex,
+                                subtitleStreamIndex = subtitleIndex,
+                                mediaSourceId = currentItemPlayback.sourceId?.toServerString(),
+                                alwaysBurnInSubtitleWhenTranscoding = false,
+                                maxStreamingBitrate = maxBitrate.toInt(),
+                                enableDirectPlay = enableDirectPlay,
+                                enableDirectStream = enableDirectStream,
+                                allowVideoStreamCopy = enableDirectStream,
+                                allowAudioStreamCopy = allowAudioStreamCopy,
+                                enableTranscoding = true,
+                                autoOpenLiveStream = true,
+                            ),
+                        )
+                    jellyfinResponse
+                }
+            }
         if (response.errorCode != null) {
             loading.setValueOnMain(LoadingState.Error(response.errorCode?.serialName))
             return@withContext
@@ -888,15 +936,21 @@ constructor(
                     player.removeListener(it)
                 }
 
-                val playbackItemState = PlaybackItemState(playback, currentItemPlayback)
-                val activityListener =
-                    TrackActivityPlaybackListener(
-                        api = api,
-                        player = player,
-                        getState = { playbackItemState },
-                    )
-                player.addListener(activityListener)
-                this@PlaybackViewModel.activityListener = activityListener
+                // A torrent stream has no Jellyfin item, so there is nothing to report watch
+                // activity against — attaching the listener would POST a nonexistent itemId every
+                // five seconds and on teardown. Skipped entirely rather than guarded inside the
+                // listener, which exists only to talk to Jellyfin.
+                if (torrentPlayback == null) {
+                    val playbackItemState = PlaybackItemState(playback, currentItemPlayback)
+                    val activityListener =
+                        TrackActivityPlaybackListener(
+                            api = api,
+                            player = player,
+                            getState = { playbackItemState },
+                        )
+                    player.addListener(activityListener)
+                    this@PlaybackViewModel.activityListener = activityListener
+                }
 
                 // Detect play-method change. A DIRECT_PLAY (or DIRECT_STREAM) →
                 // TRANSCODE switch uses a different container (MPEG-TS) whose SAR
