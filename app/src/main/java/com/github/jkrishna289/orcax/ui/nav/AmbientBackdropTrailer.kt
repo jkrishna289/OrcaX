@@ -3,6 +3,14 @@ package com.github.jkrishna289.orcax.ui.nav
 import android.view.LayoutInflater
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -10,14 +18,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.ui.FontAwesome
 import com.github.jkrishna289.orcax.ui.TrailerPhase
 import com.github.jkrishna289.orcax.ui.rememberLeasedPlayer
 import kotlinx.coroutines.delay
@@ -103,12 +119,43 @@ fun AmbientBackdropTrailer(
         animationSpec = tween(AMBIENT_TRAILER_FADE_MS),
         label = "ambient_trailer_alpha",
     )
-    AndroidView(
-        factory = { ctx ->
-            LayoutInflater.from(ctx).inflate(R.layout.ambient_trailer_player, null) as PlayerView
-        },
-        update = { view -> view.player = exo },
-        onRelease = { view -> view.player = null },
-        modifier = modifier.graphicsLayer { this.alpha = alpha },
-    )
+    Box(modifier = modifier.graphicsLayer { this.alpha = alpha }) {
+        AndroidView(
+            factory = { ctx ->
+                LayoutInflater.from(ctx).inflate(R.layout.ambient_trailer_player, null) as PlayerView
+            },
+            update = { view -> view.player = exo },
+            onRelease = { view -> view.player = null },
+            modifier = Modifier.fillMaxSize(),
+        )
+        // Small "▶ TRAILER" chip so ambient motion is identifiable as a trailer, per the v2 spec.
+        // Fades in/out with the video (shares the Box's alpha layer).
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier =
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 24.dp, end = 24.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.background.copy(alpha = .55f),
+                        shape = RoundedCornerShape(10.dp),
+                    ).border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = .14f),
+                        shape = RoundedCornerShape(10.dp),
+                    ).padding(horizontal = 10.dp, vertical = 4.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.fa_play),
+                fontFamily = FontAwesome,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Text(
+                text = stringResource(R.string.play_trailer_chip).uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 2.sp,
+            )
+        }
+    }
 }

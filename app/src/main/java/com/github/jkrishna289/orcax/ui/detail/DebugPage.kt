@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +43,8 @@ import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
+import com.github.jkrishna289.orcax.ui.detail.discover.SourcePickerDialog
+import com.github.jkrishna289.orcax.ui.detail.discover.SourceStreamingController
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.ui.launchIO
@@ -73,9 +76,25 @@ class DebugViewModel
         val deviceInfo: DeviceInfo,
         val navigationManager: NavigationManager,
         val orcaEngineClient: OrcaEngineClient,
+        sourceStreamingController: SourceStreamingController,
     ) : ViewModel() {
         val itemPlaybacks = MutableLiveData<List<ItemPlayback>>(listOf())
         val logcat = MutableLiveData<List<LogcatLine>>(listOf())
+
+        /**
+         * The real find-a-stream flow, driven from here.
+         *
+         * [playFromRealSources] proves the *pipeline* and shows no UI at all. This drives the same
+         * controller the details screen uses, so the picker, the wait and the escalation ladder are
+         * the shipped composables with real search results in them — the only way to exercise those
+         * screens on a server with no Jellyseerr, which is what gates the product entry point.
+         */
+        val sources: SourceStreamingController = sourceStreamingController
+
+        fun findSourcesWithUi() {
+            sources.attach(viewModelScope, title = TEST_TITLE, year = TEST_YEAR)
+            sources.findSources()
+        }
 
         /**
          * Opens a torrent stream on the engine and hands it to the normal player — the end-to-end
@@ -124,6 +143,7 @@ class DebugViewModel
                                     fileName = stream.fileName,
                                     sizeBytes = stream.sizeBytes,
                                     mediaInfo = stream.mediaInfo,
+                                    token = stream.token,
                                 ),
                         ),
                     )
@@ -259,6 +279,7 @@ class DebugViewModel
                                     fileName = stream.fileName,
                                     sizeBytes = stream.sizeBytes,
                                     mediaInfo = stream.mediaInfo,
+                                    token = stream.token,
                                 ),
                         ),
                     )
@@ -375,6 +396,22 @@ fun DebugPage(
 
     val itemPlaybacks by viewModel.itemPlaybacks.observeAsState(listOf())
     val logcat by viewModel.logcat.observeAsState(listOf())
+    val sourceSearch by viewModel.sources.state.collectAsState()
+
+    // The shipped picker surfaces, hosted here exactly as the details screen hosts them.
+    SourcePickerDialog(
+        state = sourceSearch,
+        title = viewModel.sources.title,
+        onPick = { viewModel.sources.playSource(it) },
+        onRetry = viewModel.sources::retry,
+        // There is no request queue to fall back to from the debug screen, so the request route
+        // simply closes the flow rather than pretending to queue something.
+        onRequest = viewModel.sources::dismiss,
+        onNextStream = { viewModel.sources.nextStream() },
+        onChooseAnother = viewModel.sources::chooseAnother,
+        onKeepWaiting = viewModel.sources::keepWaiting,
+        onDismiss = viewModel.sources::dismiss,
+    )
 
     LazyColumn(
         state = columnState,
@@ -421,6 +458,13 @@ fun DebugPage(
                 onClick = { viewModel.playFromRealSources(context) },
             ) {
                 Text(text = "Search sources and play best (Sintel)")
+            }
+        }
+        item {
+            androidx.tv.material3.Button(
+                onClick = { viewModel.findSourcesWithUi() },
+            ) {
+                Text(text = "Find sources — show the picker UI (Sintel)")
             }
         }
         item {

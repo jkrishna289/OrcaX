@@ -27,6 +27,7 @@ import com.github.jkrishna289.orcax.ui.detail.PersonPage
 import com.github.jkrishna289.orcax.ui.detail.PlaylistDetails
 import com.github.jkrishna289.orcax.ui.detail.collection.CollectionDetails
 import com.github.jkrishna289.orcax.ui.detail.discover.DiscoverMovieDetails
+import com.github.jkrishna289.orcax.ui.detail.engine.EngineDetailsPage
 import com.github.jkrishna289.orcax.ui.detail.discover.DiscoverPersonPage
 import com.github.jkrishna289.orcax.ui.detail.discover.DiscoverSeriesDetails
 import com.github.jkrishna289.orcax.ui.detail.episode.EpisodeDetails
@@ -349,6 +350,13 @@ fun DestinationContent(
         Destination.Discover -> {
             DiscoverPage(
                 preferences = preferences,
+                modifier = modifier,
+            )
+        }
+
+        is Destination.EngineItem -> {
+            EngineDetailsPage(
+                destination = destination,
                 modifier = modifier,
             )
         }

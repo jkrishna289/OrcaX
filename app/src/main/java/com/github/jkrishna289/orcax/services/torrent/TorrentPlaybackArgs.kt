@@ -24,4 +24,12 @@ data class TorrentPlaybackArgs(
     val fileName: String,
     val sizeBytes: Long? = null,
     val mediaInfo: StreamMediaInfo? = null,
+    /**
+     * The engine session this stream belongs to, so the player can read live swarm health.
+     *
+     * Carried explicitly rather than parsed back out of [url]: the URL's shape is the engine's to
+     * change, and a stream that silently stopped reporting its health because a path changed is
+     * exactly the kind of quiet breakage that took a day to find last time.
+     */
+    val token: String = "",
 )

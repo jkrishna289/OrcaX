@@ -1,9 +1,9 @@
 package com.github.jkrishna289.orcax.ui.main
 
+import android.os.SystemClock
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
@@ -91,12 +91,25 @@ class EngineHomeViewModel
 
         private var heroes: List<RenderItem> = emptyList()
 
+        // True once the engine's own bundle has landed. The local library home is only a stand-in
+        // while the engine builds, so a late local row must never paint over the real thing.
+        private var engineApplied = false
+
+        // True once the viewer has focused a row card. From that point a late engine bundle is
+        // cached for the next home entry instead of swapped in, because replacing the row list
+        // under an active D-pad focus resets both scroll position and focus.
+        private var userEngaged = false
+
         // The signed-in user id, resolved on load; needed to attribute engine-proxied requests.
         private var currentUserId: UUID? = null
 
         // One-shot user-facing messages (e.g. request results), surfaced as a toast by the page.
         private val _message = MutableSharedFlow<String>(extraBufferCapacity = 4)
         val message: SharedFlow<String> = _message.asSharedFlow()
+
+        // Load-phase timing (Phase 1 instrumentation): elapsedRealtime so it survives a clock change.
+        private var loadStartedAt: Long = 0
+        private var firstPaintLogged = false
 
         // Feature A telemetry: buffered focus-dwell + click events, flushed in batches.
         private val telemetryBuffer = mutableListOf<TelemetryEvent>()
@@ -116,6 +129,7 @@ class EngineHomeViewModel
 
         fun load() {
             viewModelScope.launch {
+                loadStartedAt = SystemClock.elapsedRealtime()
                 val userId =
                     runCatching {
                         preferences.data.firstOrNull()?.currentUserId?.toUUIDOrNull()
@@ -128,38 +142,83 @@ class EngineHomeViewModel
                     runCatching { homeBundleCache.read(userId) }.getOrNull()
                         ?.takeIf { it.rows.isNotEmpty() }
                 val hadCache = cached != null
+                Timber.i(
+                    "Home timing: prefs+cacheRead=%dms cacheHit=%b",
+                    SystemClock.elapsedRealtime() - loadStartedAt,
+                    hadCache,
+                )
                 if (cached != null) applyBundle(cached) else _state.value = EngineHomeState.Loading
 
+                // With nothing cached, the local library home is built ALONGSIDE the engine request
+                // rather than after it. The engine's personalized bundle is worth waiting for but not
+                // worth an empty screen: this paints real rows in about a second, progressively, while
+                // the engine keeps building. (With a cache we already have something better on screen.)
+                var paintedLocal = false
+                val localJob =
+                    if (hadCache) {
+                        null
+                    } else {
+                        launch {
+                            runCatching {
+                                localHomeBundleBuilder.progressive().collect { partial ->
+                                    // Once the engine has answered, its bundle owns the screen —
+                                    // a late local row must not overwrite it.
+                                    if (engineApplied) return@collect
+                                    if (partial.rows.isNotEmpty()) {
+                                        paintedLocal = true
+                                        applyBundle(partial)
+                                    }
+                                }
+                            }.onFailure { Timber.w(it, "Local home bundle build failed") }
+                        }
+                    }
+
+                val bootstrapAt = SystemClock.elapsedRealtime()
                 val bootstrap = client.getBootstrap(userId = userId, inlineVideo = true)
                 val serverBundle = bootstrap?.home?.takeIf { it.rows.isNotEmpty() }
-                // The server-side Orca Engine drives the home when reachable. If it can't be
-                // reached (offline / older server), build the bundle from the user's real Jellyfin
-                // library client-side instead. Only if THAT is also empty do we degrade to the legacy home.
-                val localBundle =
-                    if (serverBundle == null) {
-                        runCatching { localHomeBundleBuilder.build() }
-                            .onFailure { Timber.w(it, "Local home bundle build failed") }
-                            .getOrNull()
-                    } else {
-                        null
-                    }
-                val bundle = serverBundle ?: localBundle
+                Timber.i(
+                    "Home timing: bootstrap=%dms rows=%d sinceLoad=%dms",
+                    SystemClock.elapsedRealtime() - bootstrapAt,
+                    serverBundle?.rows?.size ?: 0,
+                    SystemClock.elapsedRealtime() - loadStartedAt,
+                )
+
+                // Takes the screen from the local stand-in only when the engine's bundle is actually
+                // going on it. Set BEFORE any suspending call below, so a local row that lands in the
+                // meantime can't paint over the bundle we're about to show.
+                fun claimScreenForEngine() {
+                    engineApplied = true
+                    localJob?.cancel()
+                }
+
                 // Fallback breadcrumb (§3): make "why is the legacy/sample home showing?" diagnosable.
                 when {
                     bootstrap?.settings?.enabled == false -> {
                         // Engine turned off server-side → drop the stale cache and show the fallback.
+                        claimScreenForEngine()
                         runCatching { homeBundleCache.clear(userId) }
                         useFallback("disabled via settings (Enabled=false)")
                     }
-                    // A transient fetch failure must NOT blank a home we already painted from cache.
-                    bundle == null ->
-                        if (!hadCache) useFallback("no engine bundle and no local library rows")
-                    bundle.rows.isEmpty() ->
-                        if (!hadCache) useFallback("bundle had zero rows")
-                    // Re-render + persist only when the fresh bundle differs from what we showed.
-                    !hadCache || bundle != cached -> {
-                        applyBundle(bundle)
-                        runCatching { homeBundleCache.write(userId, bundle) }
+                    // Legacy home ONLY when nothing at all could be shown. A slow or failed engine
+                    // request is not a reason to abandon the engine home — the local rows already are
+                    // it, so let them finish before deciding there's nothing to show.
+                    serverBundle == null -> {
+                        localJob?.join()
+                        if (!hadCache && !paintedLocal) useFallback("no engine bundle and no local library rows")
+                    }
+                    // Persist every fresh engine bundle so the next launch paints instantly, but only
+                    // swap it onto a home the viewer is already browsing when it differs from what's up.
+                    serverBundle != cached -> {
+                        if (userEngaged) {
+                            // Replacing the row list under an active D-pad focus would reset scroll and
+                            // focus. Cache it instead — the next visit to Home paints it instantly — and
+                            // leave the local build running so its remaining rows still fill in.
+                            Timber.i("Orca Engine: bundle arrived while browsing; deferring to next home entry.")
+                        } else {
+                            claimScreenForEngine()
+                            applyBundle(serverBundle)
+                        }
+                        runCatching { homeBundleCache.write(userId, serverBundle) }
                     }
                 }
             }
@@ -171,15 +230,32 @@ class EngineHomeViewModel
          */
         private fun applyBundle(bundle: com.github.jkrishna289.orcax.engine.RenderBundle) {
             val spotlight = bundle.rows.firstOrNull { it.id == SPOTLIGHT_ROW_ID }
-            heroes = spotlight?.items.orEmpty()
+            val nextHeroes = spotlight?.items.orEmpty()
             val rows = bundle.rows.filterNot { it.id == SPOTLIGHT_ROW_ID }
 
-            _heroFavorite.value = false
+            // Progressive loading re-applies the bundle as each row lands, so only re-seed the
+            // billboard when the spotlight itself actually changed — otherwise every arriving row
+            // would restart the rotation and re-fetch the hero's favorite state.
+            val heroesChanged = nextHeroes != heroes
+            heroes = nextHeroes
+            if (heroesChanged) _heroFavorite.value = false
 
             _state.value = EngineHomeState.Success(heroes = heroes, rows = rows)
 
+            // The number the budget actually cares about: how long until the viewer saw rows,
+            // whatever produced them (disk cache, local library build, or the engine).
+            if (!firstPaintLogged) {
+                firstPaintLogged = true
+                Timber.i(
+                    "Home timing: FIRST PAINT at %dms (%d rows, %d heroes)",
+                    SystemClock.elapsedRealtime() - loadStartedAt,
+                    rows.size,
+                    heroes.size,
+                )
+            }
+
             // Resolve favorite / ambient for the first hero item.
-            if (heroes.isNotEmpty()) onHeroActive(0)
+            if (heroesChanged && heroes.isNotEmpty()) onHeroActive(0)
         }
 
         /**
@@ -206,7 +282,8 @@ class EngineHomeViewModel
         fun onHeroActive(index: Int) {
             val hero = heroes.getOrNull(index) ?: return
             val heroId = hero.media.jellyfinId?.toUUIDOrNull()
-            onCardFocused(hero)
+            // Deliberately not onCardFocused: billboard rotation is automatic, not the viewer browsing.
+            trackAndIlluminate(hero)
             if (heroId != null) refreshHeroFavorite(heroId) else _heroFavorite.value = false
         }
 
@@ -215,6 +292,13 @@ class EngineHomeViewModel
          * background "illuminates" with the colors of whatever the user is looking at.
          */
         fun onCardFocused(item: RenderItem) {
+            // A focused row card means the viewer is actively browsing — from here a late engine
+            // bundle is cached rather than swapped in, so it can't reset their scroll/focus.
+            userEngaged = true
+            trackAndIlluminate(item)
+        }
+
+        private fun trackAndIlluminate(item: RenderItem) {
             // Feature A: a focus change ends the previous card's dwell — record it as a signal.
             trackFocusChange(item.media.jellyfinId)
 
@@ -313,13 +397,11 @@ class EngineHomeViewModel
         fun onItemClick(item: RenderItem) {
             item.media.jellyfinId?.let { recordTelemetry(it, "CardClicked", 1.0) }
 
-            // Requestable (Discover) items have no Jellyfin id — clicking them submits a request
-            // instead of opening a (non-existent) details page.
-            if (item.media.availability == AvailabilityState.REQUEST && item.media.jellyfinId == null) {
-                onRequest(item)
-            } else {
-                navigateToDetail(item)
-            }
+            // The badge never changes what Enter does — every card opens details. Firing the request
+            // straight off the card used to be the only option because unowned titles had nowhere to
+            // land; they have a page now, and requesting belongs to the button on it, where the
+            // viewer can also see what they'd be requesting and choose to stream it instead.
+            navigateToDetail(item)
         }
 
         fun onInfo(item: RenderItem) = navigateToDetail(item)
@@ -436,7 +518,17 @@ class EngineHomeViewModel
         }
 
         private fun navigateToDetail(item: RenderItem) {
-            val id = item.media.jellyfinId?.toUUIDOrNull() ?: return
+            val id = item.media.jellyfinId?.toUUIDOrNull()
+            if (id == null) {
+                // Not in the library, so there is no Jellyfin item to open. The engine still knows
+                // the title, and can both request it and find a stream for it, so it gets its own
+                // page rather than the silent no-op this used to be — which also left the billboard's
+                // Info button dead on every unowned hero.
+                if (item.media.tmdbId != null) {
+                    navigationManager.navigateTo(Destination.EngineItem(item))
+                }
+                return
+            }
             val kind = item.media.mediaType.toBaseItemKind()
             val destination =
                 if (kind == BaseItemKind.SERIES) {

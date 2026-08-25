@@ -55,14 +55,15 @@ class BackdropService
         /**
          * Update the backdrop to use the specified item.
          *
-         * [resolveTrailer] additionally resolves the item's local trailer stream so the backdrop can
-         * crossfade into an ambient trailer preview. It is opt-in (details pages only) because
-         * [submit] is also called per-focus by grids/rows, where an extra API call per focused card
-         * would be wasteful.
+         * [hero] marks this as the movie-details hero backdrop: the backdrop renders as the framed
+         * Movie Details v2 hero instead of the default top-right inset, and the item's local
+         * trailer stream is resolved so it can crossfade into an ambient trailer preview. Opt-in
+         * (movie details only) because [submit] is also called per-focus by grids/rows, where the
+         * hero layout is wrong and an extra API call per focused card would be wasteful.
          */
         suspend fun submit(
             item: BaseItem,
-            resolveTrailer: Boolean = false,
+            hero: Boolean = false,
         ) = withContext(Dispatchers.IO) {
             val imageUrl =
                 if (item.type == BaseItemKind.GENRE) {
@@ -70,8 +71,8 @@ class BackdropService
                 } else {
                     imageUrlService.getItemImageUrl(item, ImageType.BACKDROP)
                 }
-            submit(item.id.toString(), imageUrl)
-            if (resolveTrailer) resolveTrailerUrl(item)
+            submit(item.id.toString(), imageUrl, hero)
+            if (hero) resolveTrailerUrl(item)
         }
 
         /**
@@ -98,17 +99,22 @@ class BackdropService
         suspend fun submit(
             itemId: String,
             imageUrl: String?,
+            hero: Boolean = false,
         ) = withContext(Dispatchers.IO) {
-            if (backdropFlow.firstOrNull()?.imageUrl != imageUrl) {
+            val current = backdropFlow.firstOrNull()
+            // Also re-submit when only the hero layout changes (e.g. the same item focused on a
+            // home row right after its details page), so the frame doesn't leak between screens.
+            if (current?.imageUrl != imageUrl || current?.hero != hero) {
                 _backdropFlow.update {
                     it.copy(
                         itemId = itemId,
                         imageUrl = null,
+                        hero = hero,
                         // A new item never inherits the previous item's ambient trailer.
                         trailerUrl = null,
                     )
                 }
-                extractColors(itemId, imageUrl)
+                extractColors(itemId, imageUrl, hero)
             }
         }
 
@@ -148,6 +154,7 @@ class BackdropService
         private suspend fun extractColors(
             itemId: String,
             imageUrl: String?,
+            hero: Boolean = false,
         ) {
             delay(500)
             val backdropStyle =
@@ -172,6 +179,7 @@ class BackdropService
                         primaryColor = primaryColor,
                         secondaryColor = secondaryColor,
                         tertiaryColor = tertiaryColor,
+                        hero = hero,
                     )
                 } else {
                     it
@@ -303,6 +311,11 @@ data class BackdropResult(
      * item has none / the submitter didn't opt in (see [BackdropService.submit]).
      */
     val trailerUrl: String? = null,
+    /**
+     * True only for the movie-details hero: renders the framed Movie Details v2 backdrop instead
+     * of the default top-right inset (see [BackdropService.submit]).
+     */
+    val hero: Boolean = false,
 ) {
     val hasColors: Boolean =
         primaryColor.isSpecified ||

@@ -42,8 +42,10 @@ fun CoilConfig(
             }
         },
     okHttpClient = okHttpClient,
-    debugLogging = false,
-    enableCache = true,
+    // Pass the caller's values through. These were pinned to false/true here, which silently
+    // ignored both parameters and left the per-request image timing interceptor below dead code.
+    debugLogging = debugLogging,
+    enableCache = enableCache,
 )
 
 /**

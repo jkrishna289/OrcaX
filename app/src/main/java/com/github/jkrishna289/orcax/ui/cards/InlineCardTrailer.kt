@@ -220,7 +220,10 @@ fun InlineCardTrailer(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         useController = false
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        // FIT, not ZOOM: the enlarged card is now a true 16:9 box, so a 16:9 trailer
+                        // fills it exactly with no crop; an off-16:9 source letterboxes on the black
+                        // base below rather than having its edges sliced off.
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         player = exo
                     }
                 },

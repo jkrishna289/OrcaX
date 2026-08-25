@@ -96,6 +96,7 @@ fun DiscoverMovieDetails(
     val canCancel by viewModel.canCancelRequest.collectAsState()
     val sourceStreamingEnabled by viewModel.sourceStreamingEnabled.collectAsState()
     val sourceSearch by viewModel.sourceSearch.collectAsState()
+    val keepPrompt by viewModel.keepPrompt.collectAsState()
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
     var moreDialog by remember { mutableStateOf<DialogParams?>(null) }
@@ -202,12 +203,27 @@ fun DiscoverMovieDetails(
 
     SourcePickerDialog(
         state = sourceSearch,
-        onPick = viewModel::playSource,
-        onShowAll = viewModel::showAllSources,
-        onToggleDetails = viewModel::toggleSourceDetails,
+        title = item?.title.orEmpty(),
+        onPick = { viewModel.playSource(it) },
         onRetry = viewModel::retrySourceSelection,
+        onRequest = {
+            viewModel.dismissSources()
+            item?.id?.let { viewModel.request(it, is4k = false) }
+        },
+        onNextStream = { viewModel.nextStream() },
+        onChooseAnother = viewModel::chooseAnotherSource,
+        onKeepWaiting = viewModel::keepWaiting,
         onDismiss = viewModel::dismissSources,
     )
+
+    keepPrompt?.let { watch ->
+        KeepInLibraryPrompt(
+            watch = watch,
+            runtimeMinutes = item?.runtime?.toInt(),
+            onKeep = viewModel::keepInLibrary,
+            onDismiss = viewModel::dismissKeepPrompt,
+        )
+    }
 
     overviewDialog?.let { info ->
         ItemDetailsDialog(
@@ -324,6 +340,20 @@ fun DiscoverMovieDetailsContent(
                                 .padding(bottom = 16.dp)
                                 .focusRequester(focusRequesters[HEADER_ROW]),
                     )
+
+                    // Says where a request actually goes, once, at the only point the viewer is being
+                    // asked to make one. Shown only at the fork — past it the action row already says
+                    // what state the request is in.
+                    if (SeerrAvailability.from(movie.mediaInfo?.status) == null ||
+                        SeerrAvailability.from(movie.mediaInfo?.status) == SeerrAvailability.UNKNOWN
+                    ) {
+                        Text(
+                            text = stringResource(R.string.request_destination_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+                        )
+                    }
                 }
             }
             if (people.isNotEmpty()) {

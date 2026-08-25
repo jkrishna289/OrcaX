@@ -36,6 +36,7 @@ import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.data.model.Playlist
 import com.github.jkrishna289.orcax.data.model.TrackIndex
 import com.github.jkrishna289.orcax.engine.ContentWarningsResponse
+import com.github.jkrishna289.orcax.engine.StreamSessionStatus
 import com.github.jkrishna289.orcax.preferences.AppPreference
 import com.github.jkrishna289.orcax.preferences.PlayerBackend
 import com.github.jkrishna289.orcax.preferences.ShowNextUpWhen
@@ -54,6 +55,7 @@ import com.github.jkrishna289.orcax.services.RefreshRateService
 import com.github.jkrishna289.orcax.services.ScreensaverService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.UserPreferencesService
+import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
 import com.github.jkrishna289.orcax.services.torrent.TorrentMediaSource
 import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.R
@@ -168,6 +170,7 @@ constructor(
     private val networkAnalyzer: NetworkAnalyzer,
     private val deviceAnalyzer: DeviceAnalyzer,
     private val qualityPreferenceDao: QualityPreferenceDao,
+    private val streamWatchTracker: StreamWatchTracker,
     @Assisted private val destination: Destination,
 ) : ViewModel(),
     Player.Listener,
@@ -232,6 +235,22 @@ constructor(
     private var torrentPlayback: TorrentPlaybackArgs? = null
     private val jobs = mutableListOf<Job>()
 
+    /**
+     * True while a torrent source is playing, so the UI can drop controls that mean nothing here.
+     *
+     * Quality selection is the main one: it exists to pick a Jellyfin transcode ladder, and a torrent
+     * stream has no ladder to pick from — the file is whatever the release is, served byte-for-byte.
+     * Offering it implies a choice that does not exist and, worse, acting on it would tear down a
+     * stream that is buffering fine.
+     */
+    val isTorrentStream = MutableStateFlow(false)
+
+    /**
+     * Live swarm health for the playing torrent, refreshed every few seconds; null for library items
+     * or before the first poll returns.
+     */
+    val streamHealth = MutableStateFlow<StreamSessionStatus?>(null)
+
     val nextUp = MutableLiveData<BaseItem?>()
     private val isPlaylist = destination is Destination.PlaybackList
 
@@ -252,6 +271,15 @@ constructor(
         // Quality engine events: rescue rebuilds + informational toasts.
         viewModelScope.launch {
             qualityManager.events.collect { event ->
+                // The quality engine has no jurisdiction over a torrent stream, and acting on one is
+                // actively destructive. Its rescue path rebuilds playback with transcoding — asking
+                // Jellyfin to re-encode a URL it does not own — and the trigger is rebuffering, which
+                // on a torrent is ordinary: the swarm is simply slower than the bitrate for a moment.
+                // So the healthiest possible torrent stream would get torn down mid-film, and the
+                // viewer would be told its "quality" had been reduced when nothing about quality was
+                // ever selectable. There is no ladder here; the file is the release, byte-for-byte.
+                if (torrentPlayback != null) return@collect
+
                 when (event) {
                     is QualityEvent.RescueDowngrade -> {
                         showToast(
@@ -305,10 +333,38 @@ constructor(
         return if (mbps >= 10) "${mbps.toInt()} Mbps" else String.format("%.1f Mbps", mbps)
     }
 
+    /**
+     * Keeps [streamHealth] fresh while a torrent plays.
+     *
+     * Registered in [jobs] so it dies with the player — a poll outliving playback would keep the
+     * engine session's idle timer alive and stop it ever being swept.
+     *
+     * A null reply means the session is gone (failed, or evicted for idleness). The last known
+     * numbers are kept rather than blanked: the viewer is watching, so "the swarm was at 12 peers a
+     * moment ago" is truer than an empty panel, and playback itself will surface a real failure.
+     */
+    private fun pollStreamHealth(token: String) {
+        if (token.isBlank()) return
+
+        jobs +=
+            viewModelScope.launch(Dispatchers.IO + ExceptionHandler()) {
+                while (isActive) {
+                    engineClient.getStreamStatus(token)?.let { streamHealth.value = it }
+                    delay(STREAM_HEALTH_POLL_MS)
+                }
+            }
+    }
+
     private fun disconnectPlayer() {
         positionPollingJob?.cancel()
         positionPollingJob = null
         if (this@PlaybackViewModel::player.isInitialized) {
+            // A torrent stream has no Jellyfin item to report progress against, so where the viewer
+            // stopped would otherwise be lost the moment the player goes away. The Keep prompt needs
+            // it to tell someone who watched the film from someone who bounced off the first minute.
+            if (torrentPlayback != null) {
+                streamWatchTracker.report(player.currentPosition)
+            }
             player.removeListener(this@PlaybackViewModel)
             (player as? ExoPlayer)?.removeAnalyticsListener(this@PlaybackViewModel)
 
@@ -352,6 +408,9 @@ constructor(
                 playerFactory.createVideoPlayer(
                     playerBackend,
                     preferences.appPreferences.playbackPreferences,
+                    // Read from the destination rather than [torrentPlayback]: the player is built
+                    // before the item is loaded, so the field isn't set yet at this point.
+                    patientNetwork = (destination as? Destination.Playback)?.torrent != null,
                 )
             this.player = playerCreation.player
             currentPlayer.update {
@@ -422,6 +481,8 @@ constructor(
         // meaningless for a one-off stream and would query Jellyfin with an id it doesn't have.
         (destination as? Destination.Playback)?.torrent?.let { args ->
             this.torrentPlayback = args
+            isTorrentStream.value = true
+            pollStreamHealth(args.token)
             viewModelScope.launch(ExceptionHandler()) { controllerViewState.observe() }
             play(
                 item = TorrentMediaSource.baseItem(
@@ -1249,7 +1310,12 @@ constructor(
                 // Rebuffer while the user wants playback = potential starvation.
                 // Guard windows (post-seek, post-rebuild, end-of-item, switching)
                 // are applied inside the health tracker.
-                if (player.playWhenReady) {
+                // Not fed for a torrent: buffering there means the swarm is momentarily slower than
+                // the bitrate, which no quality decision can fix — the file is fixed and there is no
+                // ladder to step down. Feeding it would only manufacture rescue events that the
+                // collector then has to discard, and the Stream panel already shows the viewer the
+                // real reason (peers and speed).
+                if (player.playWhenReady && torrentPlayback == null) {
                     qualityManager.onRebuffer(
                         positionMs = player.currentPosition,
                         durationMs = player.duration.coerceAtLeast(0L),
@@ -1907,3 +1973,12 @@ data class PlaybackPositionState(
     val durationMs: Long,
     val bufferedMs: Long,
 )
+
+/**
+ * How often the player re-reads swarm health while a torrent plays.
+ *
+ * Three seconds: fast enough that a collapsing swarm is visible before the buffer runs dry, slow
+ * enough that it stays a rounding error next to the stream itself. The connect screen polls harder
+ * because there is nothing else to look at; here there is a film playing.
+ */
+private const val STREAM_HEALTH_POLL_MS = 3_000L

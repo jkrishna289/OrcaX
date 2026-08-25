@@ -48,6 +48,12 @@ data class FeatureFlags(
     @SerialName("JellyseerrDiscovery") val jellyseerrDiscovery: Boolean = false,
     @SerialName("Requests") val requests: Boolean = false,
     @SerialName("SourceStreaming") val sourceStreaming: Boolean = false,
+    /**
+     * Whether a streamed title can be kept permanently. Separate from [sourceStreaming]: keeping also
+     * needs the operator to have configured a folder inside a Jellyfin library, and without one the
+     * "Keep it?" prompt would be a dead end.
+     */
+    @SerialName("KeepStream") val keepStream: Boolean = false,
 )
 
 /**
@@ -118,7 +124,36 @@ data class StreamSessionResult(
     @SerialName("FileName") val fileName: String = "",
     @SerialName("Length") val length: Long = 0,
     @SerialName("MediaInfo") val mediaInfo: StreamMediaInfo? = null,
+    /** `Preparing` on creation — the session is returned before the swarm has been found. */
+    @SerialName("State") val state: String = "",
 )
+
+/**
+ * A live report on one stream session: where it has got to, and how its swarm is actually performing.
+ *
+ * Every number is measured server-side off the torrent handle, never estimated. The connecting screen
+ * prints them while the viewer waits, so a fabricated value would be a visible lie — and the whole
+ * reason this endpoint exists is that a wait with no information is the worst wait there is.
+ */
+@Serializable
+data class StreamSessionStatus(
+    @SerialName("State") val state: String = "",
+    @SerialName("FailureReason") val failureReason: String? = null,
+    @SerialName("FileName") val fileName: String = "",
+    @SerialName("Length") val length: Long = 0,
+    @SerialName("MediaInfo") val mediaInfo: StreamMediaInfo? = null,
+    @SerialName("Peers") val peers: Int = 0,
+    @SerialName("Seeds") val seeds: Int = 0,
+    @SerialName("Leechers") val leechers: Int = 0,
+    @SerialName("DownloadRateBytesPerSecond") val downloadRateBps: Long = 0,
+    @SerialName("DownloadedBytes") val downloadedBytes: Long = 0,
+    @SerialName("Progress") val progress: Double = 0.0,
+    @SerialName("TorrentState") val torrentState: String = "",
+    @SerialName("HasMetadata") val hasMetadata: Boolean = false,
+) {
+    val isReady: Boolean get() = state.equals("Ready", ignoreCase = true)
+    val isFailed: Boolean get() = state.equals("Failed", ignoreCase = true)
+}
 
 /**
  * Container facts the engine read out of the torrent with ffprobe. Null on the parent when the probe

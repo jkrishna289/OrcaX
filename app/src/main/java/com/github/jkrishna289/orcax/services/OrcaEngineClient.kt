@@ -16,6 +16,7 @@ import com.github.jkrishna289.orcax.engine.SUPPORTED_CARD_TYPES_QUERY
 import com.github.jkrishna289.orcax.engine.SimilarResponse
 import com.github.jkrishna289.orcax.engine.StreamSessionBody
 import com.github.jkrishna289.orcax.engine.StreamSessionResult
+import com.github.jkrishna289.orcax.engine.StreamSessionStatus
 import com.github.jkrishna289.orcax.engine.TelemetryBatch
 import com.github.jkrishna289.orcax.engine.TelemetryEvent
 import com.github.jkrishna289.orcax.engine.TrailerStatus
@@ -404,6 +405,33 @@ class OrcaEngineClient
                 sizeBytes = result.length.takeIf { it > 0 },
                 mediaInfo = result.mediaInfo,
             )
+        }
+
+        /**
+         * Reads a session's progress and live swarm health.
+         *
+         * Returns null when the session is gone — failed and swept, or evicted for idleness — which
+         * the caller treats as a terminal "this stream stopped responding" rather than retrying.
+         */
+        suspend fun getStreamStatus(token: String): StreamSessionStatus? {
+            if (token.isBlank()) return null
+            return get("/Stream/Sessions/$token/status") {
+                EngineJson.decodeFromString<StreamSessionStatus>(it)
+            }
+        }
+
+        /**
+         * Asks the engine to keep a streamed title: finish the download, copy it into the library
+         * folder and scan it in.
+         *
+         * Returns true once the engine has *scheduled* the work, not when the film has landed —
+         * completing a torrent takes minutes and the viewer has already left the prompt behind. False
+         * means the session expired or no keep folder is configured, which the caller reports the
+         * same way: this one couldn't be kept.
+         */
+        suspend fun keepStream(token: String): Boolean {
+            if (token.isBlank()) return false
+            return post("/Stream/Sessions/$token/keep", "{}") { true } ?: false
         }
 
         // ponytail: no explicit session close yet — that needs a DELETE verb in the shared

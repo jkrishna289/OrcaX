@@ -112,6 +112,9 @@ fun PlaybackScreen(
     onPlayUpNext: (UpNextItem) -> Unit = {},
     qualityLabel: String = "",
     onQualityRequested: () -> Unit = {},
+    isTorrentStream: Boolean = false,
+    streamHealthLabel: String = "",
+    onStreamHealthRequested: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -207,7 +210,10 @@ fun PlaybackScreen(
             onPlayPauseRequested = onPlayPauseRequested,
             onSeekRequested      = onSeekRequested,
             qualityLabel         = qualityLabel,
-            onQualityRequested   = onQualityRequested
+            onQualityRequested   = onQualityRequested,
+            isTorrentStream      = isTorrentStream,
+            streamHealthLabel    = streamHealthLabel,
+            onStreamHealthRequested = onStreamHealthRequested,
         )
 
         BitstreamToast(
@@ -1571,7 +1577,10 @@ private fun Phase1ToolbarLayer(
     onPlayPauseRequested: () -> Unit,
     onSeekRequested: (Long) -> Unit,
     qualityLabel: String = "",
-    onQualityRequested: () -> Unit = {}
+    onQualityRequested: () -> Unit = {},
+    isTorrentStream: Boolean = false,
+    streamHealthLabel: String = "",
+    onStreamHealthRequested: () -> Unit = {},
 ) {
     val isVisible = state.phase == PlaybackPhase.ACTIVE &&
                     state.toolbarVisibility == ToolbarVisibility.VISIBLE
@@ -1662,6 +1671,9 @@ private fun Phase1ToolbarLayer(
                 playBtnFocusRequester = playBtnFocusRequester,
                 qualityLabel         = qualityLabel,
                 onQualityRequested   = onQualityRequested,
+                isTorrentStream      = isTorrentStream,
+                streamHealthLabel    = streamHealthLabel,
+                onStreamHealthRequested = onStreamHealthRequested,
                 onChipEndInsetChanged = { type, inset ->
                     when (type) {
                         RouletteType.AUDIO    -> audioChipEndInset = inset
@@ -1901,6 +1913,9 @@ private fun P1BottomBar(
     modifier: Modifier = Modifier,
     qualityLabel: String = "",
     onQualityRequested: () -> Unit = {},
+    isTorrentStream: Boolean = false,
+    streamHealthLabel: String = "",
+    onStreamHealthRequested: () -> Unit = {},
     onChipEndInsetChanged: (RouletteType, Dp) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current
@@ -1995,13 +2010,26 @@ private fun P1BottomBar(
                 onOpen   = { viewModel.openDropdown(RouletteType.SUBTITLE) },
                 modifier = chipInsetModifier(RouletteType.SUBTITLE),
             )
-            FrostSettingButton(
-                header   = stringResource(R.string.p1_quality),
-                primary  = qualityLabel,
-                isActive = false,
-                isDimmed = anyDropdownOpen,
-                onOpen   = onQualityRequested,
-            )
+            // Quality picks a Jellyfin transcode ladder. A torrent has no ladder — the file is the
+            // release, served byte-for-byte — so the control is replaced rather than merely disabled:
+            // what a viewer actually wants to know here is whether the swarm is keeping up.
+            if (isTorrentStream) {
+                FrostSettingButton(
+                    header   = stringResource(R.string.p1_stream),
+                    primary  = streamHealthLabel,
+                    isActive = false,
+                    isDimmed = anyDropdownOpen,
+                    onOpen   = onStreamHealthRequested,
+                )
+            } else {
+                FrostSettingButton(
+                    header   = stringResource(R.string.p1_quality),
+                    primary  = qualityLabel,
+                    isActive = false,
+                    isDimmed = anyDropdownOpen,
+                    onOpen   = onQualityRequested,
+                )
+            }
         }
     }
 }

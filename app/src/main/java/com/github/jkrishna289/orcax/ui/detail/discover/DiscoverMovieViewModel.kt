@@ -1,6 +1,7 @@
 package com.github.jkrishna289.orcax.ui.detail.discover
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,11 +9,11 @@ import com.github.jkrishna289.orcax.api.seerr.model.MediaRequest
 import com.github.jkrishna289.orcax.api.seerr.model.MovieDetails
 import com.github.jkrishna289.orcax.api.seerr.model.RelatedVideo
 import com.github.jkrishna289.orcax.api.seerr.model.RequestPostRequest
-import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.DiscoverRating
 import com.github.jkrishna289.orcax.data.model.RemoteTrailer
+import com.github.jkrishna289.orcax.data.model.SeerrAvailability
 import com.github.jkrishna289.orcax.data.model.SeerrPermission
 import com.github.jkrishna289.orcax.data.model.Trailer
 import com.github.jkrishna289.orcax.data.model.hasPermission
@@ -20,6 +21,8 @@ import com.github.jkrishna289.orcax.engine.TorrentSourceDto
 import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
+import com.github.jkrishna289.orcax.services.torrent.StreamWatch
+import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
 import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.services.SeerrServerRepository
 import com.github.jkrishna289.orcax.services.SeerrService
@@ -39,12 +42,14 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import org.jellyfin.sdk.api.client.ApiClient
 import timber.log.Timber
@@ -60,6 +65,8 @@ class DiscoverMovieViewModel
         val serverRepository: ServerRepository,
         val seerrService: SeerrService,
         private val seerrServerRepository: SeerrServerRepository,
+        private val streamWatchTracker: StreamWatchTracker,
+        private val sources: SourceStreamingController,
         private val orcaEngineClient: OrcaEngineClient,
         @Assisted val item: DiscoverItem,
     ) : ViewModel() {
@@ -78,14 +85,8 @@ class DiscoverMovieViewModel
         val recommended = MutableLiveData<List<DiscoverItem>>()
         val canCancelRequest = MutableStateFlow(false)
 
-        /**
-         * Whether the server offers source streaming at all. Off unless the operator enabled it, and
-         * when off the entry point is not rendered — the feature stays invisible rather than showing a
-         * button that explains it's unavailable.
-         */
-        val sourceStreamingEnabled = MutableStateFlow(false)
-
-        val sourceSearch = MutableStateFlow<SourceSearchState>(SourceSearchState.Idle)
+        /** Non-null while the "Keep it?" prompt is up. See [checkKeepPrompt] for when it isn't. */
+        val keepPrompt = MutableStateFlow<StreamWatch?>(null)
 
         val userConfig = seerrServerRepository.current.map { it?.config }
         val request4kEnabled =
@@ -93,7 +94,13 @@ class DiscoverMovieViewModel
 
         init {
             init()
-            loadSourceStreamingFlag()
+            // Bound from the card that opened this page, so the feature flag is known by the time the
+            // action row composes rather than after the details fetch lands.
+            sources.attach(
+                scope = viewModelScope,
+                title = item.title.orEmpty(),
+                year = item.releaseDate?.year,
+            )
         }
 
         private fun fetchAndSetItem(): Deferred<MovieDetails> =
@@ -123,6 +130,9 @@ class DiscoverMovieViewModel
                 backdropService.submit(discoveredItem)
 
                 updateCanCancel()
+                // Runs on every resume, which is exactly when a return from the player happens. The
+                // tracker only yields something once, so revisiting the page later asks nothing.
+                checkKeepPrompt()
 
                 withContext(Dispatchers.Main) {
                     loading.value = LoadingState.Success
@@ -200,113 +210,66 @@ class DiscoverMovieViewModel
         }
 
         // ── Source streaming ────────────────────────────────────────────────
-        // Nothing here runs on its own. The flag lookup is the only automatic call, and it asks the
-        // server what it offers — it never touches an indexer. A search happens if and only if the
-        // viewer presses the button.
+        // The flow itself lives in [SourceStreamingController], which has no Jellyseerr dependency —
+        // this screen is just the surface that happens to host its entry point.
 
-        private fun loadSourceStreamingFlag() {
-            viewModelScope.launchIO {
-                val enabled = orcaEngineClient.getFeatures()?.sourceStreaming ?: false
-                sourceStreamingEnabled.update { enabled }
-            }
-        }
+        val sourceSearch = sources.state
+        val sourceStreamingEnabled = sources.enabled
 
-        /** Searches for streamable sources. Explicit user action only. */
-        fun findSources() {
+        fun findSources() = sources.findSources()
+
+        fun playSource(source: TorrentSourceDto) = sources.playSource(source)
+
+        fun nextStream() = sources.nextStream()
+
+        fun chooseAnotherSource() = sources.chooseAnother()
+
+        fun keepWaiting() = sources.keepWaiting()
+
+        fun retrySourceSelection() = sources.retry()
+
+        fun dismissSources() = sources.dismiss()
+
+        // ── Keep it? ────────────────────────────────────────────────────────
+        // Asked once, on the way back from a streamed film, and only when the answer could plausibly
+        // be yes. Everything below is a reason not to ask.
+
+        private suspend fun checkKeepPrompt() {
+            val watch = streamWatchTracker.consume() ?: return
             val details = movie.value ?: return
-            val title = details.title ?: return
 
-            sourceSearch.update { SourceSearchState.Searching }
-            viewModelScope.launchIO {
-                val year =
-                    details.releaseDate
-                        ?.takeIf { it.length >= 4 }
-                        ?.substring(0, 4)
-                        ?.toIntOrNull()
+            // Already in the library — there is nothing to keep.
+            if (SeerrAvailability.from(details.mediaInfo?.status) == SeerrAvailability.AVAILABLE) return
 
-                val groups = orcaEngineClient.getSources(title = title, year = year)
+            // Too early to have an opinion. The Continue Watching entry still exists either way.
+            if (watch.positionMs < KEEP_MIN_WATCH_MS) return
 
-                sourceSearch.update {
-                    when {
-                        // Null means the engine, the feature or the indexer config is missing — a
-                        // server-setup problem, which reads differently from "nothing to play".
-                        groups == null ->
-                            SourceSearchState.Failed(
-                                R.string.sources_unavailable_message,
-                                canRetry = false,
-                            )
+            // No route to a permanent copy, so the offer would be a dead end. The engine reports this
+            // off unless source streaming is on AND a library folder is configured to copy into.
+            if (orcaEngineClient.getFeatures()?.keepStream != true) return
 
-                        groups.all.isEmpty() -> SourceSearchState.NoSources
-
-                        else -> SourceSearchState.Found(groups)
-                    }
-                }
-            }
+            keepPrompt.update { watch }
         }
 
         /**
-         * Opens a stream for the chosen source and hands it to the normal player.
+         * Keeping is handled entirely by the engine: it already holds the torrent this film streamed
+         * from, so it finishes the download, copies the file into the library folder and asks Jellyfin
+         * to scan it in. Nothing is requested from anyone — the bytes are most of the way here already.
          *
-         * Slow by nature — torrent metadata has to arrive and the head pieces have to buffer before
-         * playback can start — hence the explicit [SourceSearchState.Opening] state rather than a
-         * silent wait.
+         * Fire-and-forget by design. The work runs for as long as the remaining pieces take, and the
+         * viewer has already left this screen; the film simply appears in the library when it lands.
          */
-        fun playSource(source: TorrentSourceDto) {
-            sourceSearch.update { SourceSearchState.Opening(source) }
-            viewModelScope.launchIO {
-                val stream = orcaEngineClient.openStreamSession(sourceId = source.id)
-                if (stream == null) {
-                    // Keep the picker open so the viewer can simply choose another source, which is
-                    // the useful next step when one swarm turns out to be dead.
-                    sourceSearch.update { SourceSearchState.Failed(R.string.sources_failed_message, canRetry = true) }
-                    return@launchIO
-                }
-
-                sourceSearch.update { SourceSearchState.Idle }
-                withContext(Dispatchers.Main) {
-                    navigationManager.navigateTo(
-                        Destination.Playback(
-                            // No Jellyfin item exists for this; a fresh id per session also keeps it
-                            // out of the resume and next-up tables, which are keyed on real ids.
-                            itemId = UUID.randomUUID(),
-                            positionMs = 0,
-                            torrent =
-                                TorrentPlaybackArgs(
-                                    url = stream.url,
-                                    title = movie.value?.title ?: source.title,
-                                    fileName = stream.fileName,
-                                    sizeBytes = stream.sizeBytes,
-                                    mediaInfo = stream.mediaInfo,
-                                ),
-                        ),
-                    )
-                }
-            }
+        fun keepInLibrary() {
+            val watch = keepPrompt.value ?: return
+            streamWatchTracker.markAnswered(watch.title)
+            keepPrompt.update { null }
+            viewModelScope.launchIO { orcaEngineClient.keepStream(watch.token) }
         }
 
-        /** Reopens the ranked list after a failed pick, so a dead source isn't a dead end. */
-        fun retrySourceSelection() {
-            findSources()
-        }
-
-        fun dismissSources() {
-            sourceSearch.update { SourceSearchState.Idle }
-        }
-
-        fun showAllSources() {
-            sourceSearch.update { current ->
-                if (current is SourceSearchState.Found) current.copy(showAll = true) else current
-            }
-        }
-
-        fun toggleSourceDetails() {
-            sourceSearch.update { current ->
-                if (current is SourceSearchState.Found) {
-                    current.copy(expandedDetails = !current.expandedDetails)
-                } else {
-                    current
-                }
-            }
+        /** "Not now", BACK and the timeout all land here. Silence is never read as consent. */
+        fun dismissKeepPrompt() {
+            keepPrompt.value?.let { streamWatchTracker.markAnswered(it.title) }
+            keepPrompt.update { null }
         }
 
         fun cancelRequest(id: Int) {
@@ -320,6 +283,12 @@ class DiscoverMovieViewModel
             }
         }
     }
+
+/**
+ * Watch this much of a streamed film and the Keep prompt is worth asking. Below it the viewer hasn't
+ * formed an opinion yet, and asking anyway trains them to dismiss it without reading.
+ */
+private const val KEEP_MIN_WATCH_MS = 15 * 60 * 1000L
 
 fun canUserCancelRequest(
     user: SeerrUserConfig?,

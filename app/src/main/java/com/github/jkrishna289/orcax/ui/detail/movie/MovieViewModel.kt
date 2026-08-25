@@ -183,7 +183,7 @@ class MovieViewModel
                         chapters = chapters,
                     )
                 }
-                backdropService.submit(movie, resolveTrailer = true)
+                backdropService.submit(movie, hero = true)
                 viewModelScope.launchIO {
                     buildQualityPreview(movie)?.let { preview ->
                         _state.update { it.copy(qualityPreview = preview) }

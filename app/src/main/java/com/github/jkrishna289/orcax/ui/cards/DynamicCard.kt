@@ -4,7 +4,6 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -43,13 +42,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +60,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.SubcomposeAsyncImage
 import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.CardAspectRatio
 import com.github.jkrishna289.orcax.engine.CardBadge
@@ -73,6 +71,7 @@ import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RenderRow
 import com.github.jkrishna289.orcax.engine.RowStyle
 import com.github.jkrishna289.orcax.engine.TrailerStatus
+import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.Cards
 import com.github.jkrishna289.orcax.ui.FontAwesome
@@ -211,9 +210,11 @@ private fun EngineCardBody(
     // 16:9 trailer flow (redesigned for perceived performance). Hold focus for the dwell (3.5s) → the
     // card expands IMMEDIATELY and shows a loading shimmer while the trailer prepares (no waiting on
     // the player to reach READY) → it crossfades to video once actually playing → it collapses back
-    // when the trailer ends or turns out unavailable. Expansion is horizontal layout width (the LazyRow
-    // slides neighbours aside) PLUS a subtle centred +15% height. Cards without a trailer URL never
-    // enlarge; poster cards are untouched.
+    // when the trailer ends or turns out unavailable. Expansion is a single UNIFORM scale applied to
+    // both width and height as real layout, so the box stays a true 16:9 rectangle the 16:9 trailer
+    // fills exactly (no crop, no letterbox bars). The LazyRow slides neighbours aside horizontally and
+    // the row grows vertically — the focused row is centred on screen (EngineHomePage) to make room.
+    // Cards without a trailer URL never enlarge; poster cards are untouched.
     val focused by interactionSource.collectIsFocusedAsState()
     var playTrailer by remember { mutableStateOf(false) }
     var trailerPhase by remember { mutableStateOf(TrailerPhase.IDLE) }
@@ -235,15 +236,16 @@ private fun EngineCardBody(
     // trailer prepares (no early expand, no loading animation) and pops into the live preview the
     // moment playback starts. A card whose trailer never resolves simply never changes.
     val expanded = isWide && trailerPhase == TrailerPhase.PLAYING
+    // One uniform scale for BOTH axes (real layout), so the enlarged box keeps the base 16:9 aspect and
+    // the trailer fills it with no crop and no bars. Width reflows the LazyRow (neighbours slide); height
+    // grows the row, which the centred focused-row scroll (EngineHomePage) leaves room for.
     val animatedWidth by animateDpAsState(
-        targetValue = if (expanded) width * WIDE_FOCUS_EXPAND else width,
+        targetValue = if (expanded) width * WIDE_FOCUS_SCALE else width,
         animationSpec = tween(durationMillis = 260),
         label = "wide-card-expand-width",
     )
-    // Subtle +15% height, grown from the centre as a transform (not a layout change) so it holds 60fps,
-    // doesn't reflow the row, and doesn't clip (Phase 12).
-    val heightScale by animateFloatAsState(
-        targetValue = if (expanded) WIDE_FOCUS_HEIGHT_SCALE else 1f,
+    val animatedHeight by animateDpAsState(
+        targetValue = if (expanded) height * WIDE_FOCUS_SCALE else height,
         animationSpec = tween(durationMillis = 260),
         label = "wide-card-expand-height",
     )
@@ -263,18 +265,12 @@ private fun EngineCardBody(
                 CardDefaults.border(
                     focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = cardShape),
                 ),
-            // Wide cards keep the TV focus scale OFF: horizontal growth is the animated layout width
-            // above (neighbours slide aside, no overdraw), and the vertical growth is the centred
-            // graphicsLayer scaleY below — a transform, so it grows into the row's spacing without
-            // reflowing the row or clipping. Poster cards keep the default focus scale.
+            // Wide cards keep the TV focus scale OFF: the enlargement is the uniform animated layout
+            // size (animatedWidth × animatedHeight) — both axes are real layout, so neighbours slide,
+            // the row grows honestly, nothing is overdrawn, and the box holds 16:9 for the trailer.
+            // Poster cards keep the default focus scale.
             scale = if (isWide) CardDefaults.scale(focusedScale = 1f) else CardDefaults.scale(),
-            modifier =
-                Modifier
-                    .size(animatedWidth, height)
-                    .graphicsLayer {
-                        scaleY = heightScale
-                        transformOrigin = TransformOrigin(0.5f, 0.5f)
-                    },
+            modifier = Modifier.size(animatedWidth, animatedHeight),
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 EngineCardArt(
@@ -407,8 +403,8 @@ private fun EngineCardBody(
                     )
 
                     // Overlaid title block, bottom-aligned: an optional centered PREMIERE chip, the
-                    // title, the tag, and an optional italic personalization footnote (CONTEXT badge,
-                    // e.g. "Based on Nightfall Protocol").
+                    // title, and the tag. (No recommendation footnote — the CONTEXT "why this is shown"
+                    // line was intentionally removed.)
                     if (card.showTitle && !card.title.isNullOrBlank()) {
                         Column(
                             horizontalAlignment = Alignment.Start,
@@ -449,22 +445,6 @@ private fun EngineCardBody(
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
                             }
-                            card.badges
-                                .firstOrNull { it.kind.equals("CONTEXT", ignoreCase = true) }
-                                ?.text
-                                ?.takeIf { it.isNotBlank() }
-                                ?.let { context ->
-                                    Text(
-                                        text = context,
-                                        color = Color.White.copy(alpha = 0.62f),
-                                        fontWeight = FontWeight.Medium,
-                                        fontStyle = FontStyle.Italic,
-                                        fontSize = 10.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                }
                         }
                     }
                 }
@@ -472,15 +452,19 @@ private fun EngineCardBody(
                 // The corner badges step aside for the trailer chrome while a preview is playing.
                 if (!trailerShowing) {
                     // Availability / promo badges top-right. Kinds with a dedicated placement are
-                    // excluded: RANK feeds TopRankedCard, STUDIO/DAY/TODAY sit top-left, PREMIERE and
-                    // CONTEXT live in the title block, TIMELEFT is the wide card's bottom-left chip.
+                    // excluded: RANK feeds TopRankedCard, STUDIO/DAY/TODAY sit top-left, PREMIERE lives
+                    // in the title block, TIMELEFT is the wide card's bottom-left chip, and CONTEXT is
+                    // deliberately unrendered (kept in PLACED_BADGE_KINDS so it can't leak in here).
                     val overlayBadges =
                         card.badges.filterNot { badge ->
-                            PLACED_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) }
+                            PLACED_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) } ||
+                                AVAILABILITY_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) }
                         }
-                    if (overlayBadges.isNotEmpty()) {
-                        CardBadges(badges = overlayBadges, modifier = Modifier.align(Alignment.TopEnd))
-                    }
+                    CardBadges(
+                        badges = overlayBadges,
+                        availability = item.media.availability,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    )
 
                     // Top-left stack: studio / provider tag, then the premiere-day chip (TODAY glows gold).
                     Column(
@@ -521,6 +505,32 @@ private fun EngineCardBody(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+            // On focus, reveal a movie-detail line (year • rating • genres) beneath the enlarged card,
+            // built from whatever metadata badges the engine supplied. Rendered only when non-empty, so
+            // cards that carry just a title/subtitle locally show nothing extra.
+            if (focused) {
+                val detailMeta =
+                    buildList {
+                        card.badges.firstOrNull { it.kind.equals("YEAR", ignoreCase = true) }
+                            ?.text?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        card.badges.firstOrNull { it.kind.equals("RATING", ignoreCase = true) }
+                            ?.text?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        card.badges.filter { it.kind.equals("GENRE", ignoreCase = true) }
+                            .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+                            .take(2)
+                            .forEach { add(it) }
+                    }
+                if (detailMeta.isNotEmpty()) {
+                    Text(
+                        text = detailMeta.joinToString("  •  "),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    )
+                }
             }
         }
     }
@@ -593,18 +603,30 @@ private fun aspectRatioValue(aspect: CardAspectRatio): Float =
 
 /**
  * Top-right badge chips, dispatched by kind: TOP_PICK is an accent-filled pill, LIVE is a dark chip
- * with a pulsing dot (live viewer counts), and everything else (NEW, TRENDING, REQUESTED,
- * DOWNLOADING, …) renders as a glassy outlined pill per the design language.
+ * with a pulsing dot (live viewer counts), and everything else (TRENDING, …) renders as a glassy
+ * outlined pill per the design language.
+ *
+ * The availability pill leads, and is drawn from [availability] rather than from a server badge: the
+ * card carries whether a title is yours so the viewer learns it *before* committing a click, and that
+ * fact has to be right even when the engine didn't think to send a badge for it. Server badges that
+ * would restate it are filtered out by [AVAILABILITY_BADGE_KINDS] so it can never appear twice.
  */
 @Composable
 private fun CardBadges(
     badges: List<CardBadge>,
+    availability: AvailabilityState,
     modifier: Modifier = Modifier,
 ) {
+    val availabilityLabel = availabilityBadge(availability)
+    if (availabilityLabel == null && badges.isEmpty()) return
+
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier.padding(8.dp),
     ) {
+        availabilityLabel?.let { (labelRes, color) ->
+            AvailabilityBadgePill(text = stringResource(labelRes), color = color)
+        }
         badges.forEach { badge ->
             val label = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind
             when {
@@ -613,6 +635,52 @@ private fun CardBadges(
                 else -> GlassBadgePill(text = label)
             }
         }
+    }
+}
+
+/**
+ * The one-word answer to "is this mine?", and its colour.
+ *
+ * WATCH_NOW deliberately has none: owning a title is the default, so the *absence* of a badge is the
+ * signal, and badging every owned card would make the whole feed noisy to say nothing.
+ */
+private fun availabilityBadge(availability: AvailabilityState): Pair<Int, Color>? =
+    when (availability) {
+        AvailabilityState.WATCH_NOW -> null
+        AvailabilityState.REQUEST -> R.string.request to AppColors.GoldenYellow
+        AvailabilityState.REQUESTED -> R.string.requested to AvailabilityTeal
+        AvailabilityState.DOWNLOADING -> R.string.availability_adding to AvailabilityLavender
+        AvailabilityState.RECENTLY_ADDED -> R.string.availability_new to AvailabilityPink
+        AvailabilityState.UNAVAILABLE -> R.string.coming_soon to AvailabilityPeriwinkle
+    }
+
+private val AvailabilityTeal = Color(0xFF2DE0C0)
+private val AvailabilityLavender = Color(0xFFD2BCFF)
+private val AvailabilityPink = Color(0xFFF07BD2)
+private val AvailabilityPeriwinkle = Color(0xFF8B8BEC)
+
+/** A dark chip carrying the availability word in its own colour — the card's corner-of-the-eye fact. */
+@Composable
+private fun AvailabilityBadgePill(
+    text: String,
+    color: Color,
+) {
+    Box(
+        modifier =
+            Modifier
+                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                .border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = text,
+            color = color,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            letterSpacing = 0.5.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
@@ -652,38 +720,33 @@ internal fun BadgePill(
 
 /**
  * The studio / streaming-provider tag (top-left corner). Renders the engine's cached provider logo on a
- * dark chip for contrast (most brand logos are light-on-transparent); falls back to the styled text pill
- * when there's no logo URL or the image fails to load. The chip background is on the container so the
- * loading/error text sits on it without a doubled background. Outer padding is the caller's (it sits in
- * the top-left overlay stack alongside the premiere-day chips).
+ * dark chip for contrast (most brand logos are light-on-transparent). This is a LOGO-ONLY tag: when there
+ * is no logo URL (e.g. the engine is unavailable, so only the Jellyfin studio *name* is known) the tag
+ * renders nothing rather than falling back to a text wordmark — a bare studio name reads as clutter on a
+ * poster, and only the brand logo belongs here. Loading/error render nothing for the same reason. Outer
+ * padding is the caller's (it sits in the top-left overlay stack alongside the premiere-day chips).
  */
 @Composable
 private fun StudioBadge(
     badge: CardBadge,
     modifier: Modifier = Modifier,
 ) {
+    val logoUrl = LocalImageUrlService.current.engineImageUrl(badge.iconUrl) ?: return
     val label = badge.text?.takeIf { it.isNotBlank() } ?: badge.kind
-    val logoUrl = LocalImageUrlService.current.engineImageUrl(badge.iconUrl)
-    Box(modifier = modifier) {
-        if (logoUrl == null) {
-            BadgePill(text = label)
-        } else {
-            SubcomposeAsyncImage(
-                model = logoUrl,
-                contentDescription = label,
-                contentScale = ContentScale.Fit,
-                loading = { BadgeText(label) },
-                error = { BadgeText(label) },
-                modifier =
-                    Modifier
-                        .height(22.dp)
-                        .widthIn(max = 76.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(horizontal = 6.dp, vertical = 3.dp),
-            )
-        }
-    }
+    SubcomposeAsyncImage(
+        model = logoUrl,
+        contentDescription = label,
+        contentScale = ContentScale.Fit,
+        loading = {},
+        error = {},
+        modifier =
+            modifier
+                .height(22.dp)
+                .widthIn(max = 76.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+    )
 }
 
 /**
@@ -732,9 +795,11 @@ private fun TopRankedCard(
                         modifier = Modifier.fillMaxSize(),
                     )
                     val overlayBadges = card.badges.filterNot { it.kind.equals("RANK", ignoreCase = true) }
-                    if (overlayBadges.isNotEmpty()) {
-                        CardBadges(badges = overlayBadges, modifier = Modifier.align(Alignment.TopEnd))
-                    }
+                    CardBadges(
+                        badges = overlayBadges,
+                        availability = item.media.availability,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    )
                 }
             }
             // Drawn after the Card so it overlaps the poster's left edge.
@@ -1233,19 +1298,14 @@ private const val WIDE_CARD_SCALE = 0.75f
 private const val LARGE_CARD_SCALE = 1.35f
 
 /**
- * How much wider a focused 16:9 card grows (horizontal, in layout — neighbors slide aside).
- * The trailer fills the wider box via center-crop for a cinematic look. Raised from 1.45 (with the
- * height scale from 1.15) so the expanded preview reads ~35% larger overall — the old expansion was
- * too small to comfortably watch on a TV.
+ * How much a focused 16:9 card grows when its trailer plays — one uniform factor for BOTH width and
+ * height, applied as real layout so the enlarged box keeps the base 16:9 aspect and the 16:9 trailer
+ * fills it exactly (no crop, no letterbox). This is the single knob for the enlarged size: ~35% larger
+ * than the previous width expansion (1.95), now cinematic and correctly proportioned. The focused row
+ * is centred on screen (EngineHomePage) so the taller card + under-card detail have room; nudge this
+ * down toward 2.2 if it crowds neighbouring rows on smaller screens.
  */
-private const val WIDE_FOCUS_EXPAND = 1.95f
-
-/**
- * How much taller a focused 16:9 card grows, applied as a centred transform (not a layout change)
- * so it grows into the row's spacing without reflowing the row (Phase 12). Kept below the width
- * factor: as a transform it overdraws neighbouring items, so it only slightly exceeds the row gap.
- */
-private const val WIDE_FOCUS_HEIGHT_SCALE = 1.35f
+private const val WIDE_FOCUS_SCALE = 2.5f
 
 /** Sustained focus on a 16:9 card before its trailer starts loading (avoids firing while scrolling). */
 private const val TRAILER_DWELL_MS = 3_500L
@@ -1258,6 +1318,16 @@ private val EQ_BAR_STAGGER_MS = listOf(0, 150, 300, 450)
 
 /** Badge kinds with a dedicated placement — excluded from the generic top-right chip row. */
 private val PLACED_BADGE_KINDS = listOf("RANK", "STUDIO", "DAY", "TODAY", "PREMIERE", "CONTEXT", "TIMELEFT")
+
+/**
+ * Server badge kinds that restate what [AvailabilityState] already says. Dropped so the card carries
+ * exactly one availability pill, drawn client-side where the state is authoritative.
+ *
+ * The engine puts the *word* in `Text` and the constant string "AVAILABILITY" in `Kind` (see the
+ * plugin's DefaultCardSelector), so this has to match on kind — filtering on "REQUEST"/"DOWNLOADING"
+ * matches nothing and the card ends up wearing both pills.
+ */
+private val AVAILABILITY_BADGE_KINDS = listOf("AVAILABILITY", "NEW")
 
 /** Horizontal room reserved beside a ranked poster for its rank numeral (mockup: ~26% of card width). */
 private val RANK_NUMERAL_INSET = 36.dp

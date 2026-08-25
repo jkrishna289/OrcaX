@@ -47,9 +47,12 @@ private val PillPadding = PaddingValues(vertical = 4.dp, horizontal = 6.dp)
  *   [onRequest].
  * - [requestInFlight] — gold, clock, "Requesting…". Kept an enabled (focusable) button with a
  *   no-op click so D-pad focus isn't dropped mid-request; only the click path is gated.
+ * - [AvailabilityState.WATCH_NOW] — the same steady teal, "In Your Library". The one addition to an
+ *   owned title's details screen: it answers "is this mine?" without adding a second way to play it,
+ *   which is the whole point of the fast, quiet path an owned title already had.
  *
- * Other states (WatchNow/Downloading/RecentlyAdded/Unavailable) render nothing — on the in-library
- * details screen they carry no request provenance worth badging.
+ * The remaining states (Downloading/RecentlyAdded/Unavailable) render nothing here — they are card
+ * states, and on a details screen they carry no provenance worth badging.
  */
 @Composable
 fun RequestAvailabilityBadge(
@@ -106,6 +109,22 @@ fun RequestAvailabilityBadge(
                 PillContent(
                     icon = R.string.fa_check,
                     label = R.string.requested,
+                    color = RequestedTeal,
+                )
+            }
+        }
+
+        availability == AvailabilityState.WATCH_NOW -> {
+            Row(
+                modifier =
+                    modifier
+                        .background(RequestedTeal.copy(alpha = FILL_ALPHA), PillShape)
+                        .border(1.dp, RequestedTeal.copy(alpha = BORDER_ALPHA), PillShape)
+                        .padding(PillPadding),
+            ) {
+                PillContent(
+                    icon = R.string.fa_check,
+                    label = R.string.in_your_library,
                     color = RequestedTeal,
                 )
             }

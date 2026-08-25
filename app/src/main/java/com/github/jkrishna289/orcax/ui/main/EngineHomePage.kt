@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,10 +43,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.github.jkrishna289.orcax.ui.util.TopInsetBringIntoViewSpec
+import com.github.jkrishna289.orcax.ui.util.CenterFocusBringIntoViewSpec
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RowStyle
 import com.github.jkrishna289.orcax.engine.TrailerPrefetchPriority
@@ -113,7 +113,6 @@ fun EngineHomePage(
 
             // A not-yet-available (Discover/request) card opens a lightweight request landing
             // instead of a details page; null while the landing is closed (#5).
-            var requestLandingItem by remember { mutableStateOf<RenderItem?>(null) }
 
             // Long-press feedback menu (thumbs up/down → engine personalization); null when closed.
             var feedbackItem by remember { mutableStateOf<RenderItem?>(null) }
@@ -125,6 +124,27 @@ fun EngineHomePage(
             val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
             fun rowFocus(id: String): FocusRequester = rowFocusRequesters.getOrPut(id) { FocusRequester() }
             var lastFocusedRowId by rememberSaveable { mutableStateOf<String?>(null) }
+
+            // When a popup overlay (feedback menu / request landing) dismisses, focus must land back on
+            // the row the user was on. The overlay's own onDispose requestFocus() can fire a frame before
+            // the row's focus target re-attaches; that single shot then no-ops (swallowed) and focus
+            // falls to the billboard — the first focusable child — which snaps the list to the top (#F3).
+            // Drive a retrying restore from here: the parent outlives the overlay's disposal, so it can
+            // keep trying (same budget as the return-from-details path) until the row is focusable again.
+            // The overlay still requests focus on dispose too — that handles the common case with no
+            // flash; this only rescues the frames where that single shot lands too early.
+            var overlayRestoreRowId by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(overlayRestoreRowId) {
+                val rowId = overlayRestoreRowId ?: return@LaunchedEffect
+                repeat(FOCUS_RESTORE_ATTEMPTS) {
+                    if (rowFocus(rowId).tryRequestFocus()) {
+                        overlayRestoreRowId = null
+                        return@LaunchedEffect
+                    }
+                    delay(FOCUS_RESTORE_RETRY_MS)
+                }
+                overlayRestoreRowId = null
+            }
 
             // Single owner of initial focus. On return from a details page the nav entry is recreated,
             // so the focus system's own memory is gone AND the saved row often isn't composed/attached
@@ -169,20 +189,22 @@ fun EngineHomePage(
             // billboard is on screen. The VM resolves each active item's watchlist state and ambient
             // color. The billboard no longer plays trailers, so nothing can hold the rotation.
             val heroes = s.heroes
-            var activeHero by remember(s) { mutableStateOf(0) }
+            // Keyed on the heroes themselves, not the whole state: progressive loading emits a new
+            // state for every row that lands, and keying on `s` would restart the rotation each time.
+            var activeHero by remember(heroes) { mutableStateOf(0) }
             // Drive favorite/ambient for the active item — but only while the billboard is the
             // focused zone. A focused row card owns the ambient wash (via onCardFocused); without the
             // `focusedRowId == null` guard the billboard's rotation keeps overwriting the focused card's
             // colors with the hero's, because focusing the first row leaves isAtTop == true (the
             // billboard still peeks). When focus returns to the billboard (focusedRowId cleared) this
             // re-fires and restores the hero's colors.
-            LaunchedEffect(s, activeHero, isAtTop, focusedRowId) {
+            LaunchedEffect(heroes, activeHero, isAtTop, focusedRowId) {
                 if (isAtTop && focusedRowId == null && heroes.isNotEmpty()) {
                     viewModel.onHeroActive(activeHero)
                 }
             }
             // Plain artwork rotation: only with >1 hero and while the billboard is visible.
-            LaunchedEffect(s, activeHero, heroes.size, isAtTop) {
+            LaunchedEffect(heroes, activeHero, isAtTop) {
                 if (heroes.size <= 1 || !isAtTop) return@LaunchedEffect
                 delay(SPOTLIGHT_ROTATE_MS)
                 activeHero = (activeHero + 1) % heroes.size
@@ -195,9 +217,11 @@ fun EngineHomePage(
                 runCatching { billboardPlayFocus.requestFocus() }
             }
 
-            // Focused cards in scrolled rows must land BELOW the fixed top nav, not under it (#8).
-            // The default spec is restored inside the billboard + each row so their own (horizontal /
-            // full-bleed) scrolling is unaffected.
+            // A focused row is scrolled to the vertical CENTRE of the screen, so an enlarged 16:9 card
+            // (its trailer + the detail beneath it) has room above and below instead of being clipped;
+            // the centred spot is floored below the fixed top nav (#8). The default spec is restored
+            // inside the billboard + each row so their own (horizontal / full-bleed) scrolling is
+            // unaffected.
             val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
             // Measured (not assumed) bar height: TopNavBarHeight is only the first-frame estimate;
             // the real height follows font scale/density, keeping focused cards below the bar (#8).
@@ -206,7 +230,7 @@ fun EngineHomePage(
 
             Box(modifier = modifier.fillMaxSize()) {
                 CompositionLocalProvider(
-                    LocalBringIntoViewSpec provides TopInsetBringIntoViewSpec(topNavOffsetPx),
+                    LocalBringIntoViewSpec provides CenterFocusBringIntoViewSpec(topNavOffsetPx),
                     // One trailer-volume source for the billboard + every 16:9 card below (Phase 13).
                     LocalTrailerVolume provides trailerVolume,
                     // Preferred trailer audio language for every leased player's track selection.
@@ -276,7 +300,29 @@ fun EngineHomePage(
                         }
                     }
 
+                    // Rows can arrive before the spotlight does (it's derived from them). Hold the
+                    // billboard's footprint so the feed doesn't jump down once the heroes resolve.
+                    if (heroes.isEmpty()) {
+                        item(key = "billboard-skeleton") {
+                            BillboardSkeleton(
+                                modifier =
+                                    Modifier
+                                        .height(billboardHeight)
+                                        .padding(top = 8.dp, start = 14.dp, end = 14.dp),
+                            )
+                        }
+                    }
+
                     items(s.rows, key = { it.id }) { row ->
+                        // A row with no items yet is still loading (the local library home fills its
+                        // rows in place, one at a time). Hold its slot with a shimmer carrying the
+                        // real title, so content lands in the space already reserved for it — and
+                        // skip the focus machinery below, since there's nothing to focus.
+                        if (row.items.isEmpty()) {
+                            SkeletonRow(title = row.title)
+                            return@items
+                        }
+
                         // Focus-first emphasis: while a row is focused, the others recede (dim +
                         // slight shrink) so the focused content stands out; nothing focused → all
                         // rows rest at full size. Pure graphicsLayer transforms — no reflow, no
@@ -287,7 +333,7 @@ fun EngineHomePage(
                         // blur, so the showcase is the only sharp surface on screen. (RenderEffect
                         // blur needs API 31; on older devices it's a graceful no-op.)
                         val spotlightFocused =
-                            remember(focusedRowId, s) {
+                            remember(focusedRowId, s.rows) {
                                 s.rows.firstOrNull { it.id == focusedRowId }?.rowStyle == RowStyle.SPOTLIGHT
                             }
                         val rowAlpha by animateFloatAsState(
@@ -309,16 +355,29 @@ fun EngineHomePage(
                         // CARD's own bounds, so a wide card's title/subtitle — laid out BELOW the
                         // card inside the row — was left clipped off the bottom of the screen when
                         // focus entered a row at the viewport's bottom edge. Request the WHOLE row
-                        // instead (title, cards, and the under-card info text); the top-inset spec
-                        // still returns 0 when the row is already fully visible, so rows that fit
-                        // don't move.
+                        // instead (title, cards, and the under-card info text); the centring spec then
+                        // pulls the whole block to the middle of the screen.
                         val rowBringIntoView = remember { BringIntoViewRequester() }
+                        // Re-centre when a focused card enlarges for its trailer: the initial centring is
+                        // computed at the row's resting height, so once a card grows the taller row must
+                        // be re-centred or its bottom (card + detail) falls off-screen. Keyed on the
+                        // measured height so the settle delay debounces the frames of the expand animation
+                        // and fires bringIntoView once, after the row stops growing.
+                        var rowHeightPx by remember { mutableIntStateOf(0) }
+                        val isThisRowFocused = row.id == focusedRowId
+                        LaunchedEffect(rowHeightPx, isThisRowFocused) {
+                            if (isThisRowFocused && rowHeightPx > 0) {
+                                delay(ROW_RECENTER_SETTLE_MS)
+                                runCatching { rowBringIntoView.bringIntoView() }
+                            }
+                        }
                         // Restore the default spec so the row's own horizontal scroll isn't offset.
                         CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
                             Box(
                                 modifier =
                                     Modifier
                                         .bringIntoViewRequester(rowBringIntoView)
+                                        .onSizeChanged { rowHeightPx = it.height }
                                         .onFocusChanged {
                                             if (it.hasFocus) {
                                                 focusedRowId = row.id
@@ -338,15 +397,13 @@ fun EngineHomePage(
                                 row = row,
                                 focusRequester = rowFocus(row.id),
                                 onClickItem = { item ->
-                                    // Not-yet-available items have no details page — open the request
-                                    // landing instead of routing to a dead end (#5).
-                                    if (item.media.availability == AvailabilityState.REQUEST) {
-                                        requestLandingItem = item
-                                    } else {
-                                        // Opening a detail page is high trailer intent (Phase 15).
-                                        viewModel.prefetchTrailers(listOf(item), TrailerPrefetchPriority.DETAIL_PAGE)
-                                        viewModel.onItemClick(item)
-                                    }
+                                    // Every card opens details, whatever its badge says. Not-yet-available
+                                    // titles used to be diverted to a request landing because they had no
+                                    // page to open; they have one now (Destination.EngineItem), and it can
+                                    // do more than the landing could — request, or stream it this once.
+                                    // Opening a detail page is high trailer intent (Phase 15).
+                                    viewModel.prefetchTrailers(listOf(item), TrailerPrefetchPriority.DETAIL_PAGE)
+                                    viewModel.onItemClick(item)
                                 },
                                 onFocusItem = { focusedItem ->
                                     lastFocusedRowId = row.id
@@ -395,26 +452,18 @@ fun EngineHomePage(
                             },
                 )
 
-                requestLandingItem?.let { landing ->
-                    RequestLanding(
-                        item = landing,
-                        onRequest = {
-                            viewModel.onRequest(landing)
-                            requestLandingItem = null
-                        },
-                        onDismiss = { requestLandingItem = null },
-                        restoreFocusTo = lastFocusedRowId?.let { rowFocus(it) },
-                    )
-                }
-
                 feedbackItem?.let { fb ->
                     CardFeedbackMenu(
                         item = fb,
                         onFeedback = { thumbsUp ->
                             viewModel.recordFeedback(fb, thumbsUp)
+                            overlayRestoreRowId = lastFocusedRowId
                             feedbackItem = null
                         },
-                        onDismiss = { feedbackItem = null },
+                        onDismiss = {
+                            overlayRestoreRowId = lastFocusedRowId
+                            feedbackItem = null
+                        },
                         restoreFocusTo = lastFocusedRowId?.let { rowFocus(it) },
                     )
                 }
@@ -422,6 +471,13 @@ fun EngineHomePage(
         }
     }
 }
+
+/**
+ * Debounce before re-centring a focused row after its height changes (a card enlarging for its trailer).
+ * Keyed re-launch resets this each frame of the ~260ms expand animation, so bringIntoView fires once the
+ * row has stopped growing rather than chasing every intermediate frame.
+ */
+private const val ROW_RECENTER_SETTLE_MS = 120L
 
 /** How long each spotlight item stays on screen before the billboard rotates to the next. */
 private const val SPOTLIGHT_ROTATE_MS = 8_000L

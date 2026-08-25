@@ -20,10 +20,14 @@ import com.github.jkrishna289.orcax.engine.RenderRow
 import com.github.jkrishna289.orcax.engine.RowStyle
 import com.github.jkrishna289.orcax.util.HomeRowLoadingState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.lastOrNull
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
@@ -33,10 +37,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Builds a real [RenderBundle] from the signed-in user's Jellyfin library as a **fallback** for when
- * the server-side Wholphin Engine plugin is unreachable (offline, not installed, or an old build), so
- * the engine-driven home (billboard + rows) still shows actual content + artwork. When the server
- * engine responds it wins; this only fills the gap. It reuses the very same data path as the legacy home
+ * Builds a real [RenderBundle] from the signed-in user's Jellyfin library, so the engine-driven home
+ * (billboard + rows) shows actual content + artwork within about a second of launch. It runs
+ * **alongside** the server-side Orca Engine request rather than after it: the engine's personalized
+ * bundle wins whenever it arrives, but the viewer is never left watching a spinner while it builds —
+ * and if the engine is unreachable (offline, not installed, or an old build) this simply stands as
+ * the home. It reuses the very same data path as the legacy home
  * ([HomeSettingsService.fetchDataForRow]) so the rows mirror the user's configured home and every
  * item carries its Jellyfin id — which is all the cards/billboard need to resolve posters, backdrops
  * and logos via [ImageUrlService].
@@ -52,12 +58,22 @@ class LocalHomeBundleBuilder
         private val homeSettingsService: HomeSettingsService,
         private val userPreferencesService: UserPreferencesService,
     ) {
-        suspend fun build(): RenderBundle? =
-            coroutineScope {
-                val userDto = serverRepository.currentUserDto.value ?: return@coroutineScope null
+        /**
+         * Emits the home **as it materialises** rather than after the slowest row: first a bundle of
+         * empty placeholder rows in the user's configured order (the page renders an empty row as a
+         * shimmer), then the whole bundle again each time a row's items land. Content is therefore on
+         * screen in about a second instead of after every row has resolved.
+         *
+         * Rows keep their configured slot, so a late one fills in place rather than shoving its
+         * neighbours around; a row that fails or comes back empty drops out. Emits nothing at all
+         * when there's no signed-in user or no configured rows, letting the caller fall back.
+         */
+        fun progressive(): Flow<RenderBundle> =
+            channelFlow {
+                val userDto = serverRepository.currentUserDto.value ?: return@channelFlow
                 val prefs =
                     runCatching { userPreferencesService.getCurrent().appPreferences.homePagePreferences }
-                        .getOrNull() ?: return@coroutineScope null
+                        .getOrNull() ?: return@channelFlow
                 val libraries =
                     runCatching { navDrawerService.getAllUserLibraries(userDto.id, userDto.tvAccess) }
                         .getOrDefault(emptyList())
@@ -67,58 +83,92 @@ class LocalHomeBundleBuilder
                     runCatching { homeSettingsService.loadCurrentSettings(userDto.id) }
                 }
                 val settings = homeSettingsService.currentSettings.value
-                if (settings.rows.isEmpty()) return@coroutineScope null
+                if (settings.rows.isEmpty()) return@channelFlow
+
+                // One slot per configured row, held in configured order. Slots start empty (= "still
+                // loading" to the page) and are replaced or dropped as each fetch resolves.
+                val slots = LinkedHashMap<Int, RenderRow>()
+                settings.rows.forEach { display ->
+                    slots[display.id] = RenderRow(id = display.rowId(), title = display.title, rowStyle = RowStyle.STANDARD)
+                }
+                // Fetched state per row id, so the spotlight is re-derived in CONFIGURED order and
+                // doesn't depend on which row happened to finish first.
+                val fetchedById = mutableMapOf<Int, HomeRowLoadingState?>()
+
+                suspend fun emit() {
+                    val heroItems = buildHeroItems(settings.rows.map { it to fetchedById[it.id] })
+                    send(
+                        RenderBundle(
+                            contractVersion = CARD_CONTRACT_VERSION,
+                            rows =
+                                buildList {
+                                    if (heroItems.isNotEmpty()) {
+                                        add(RenderRow(id = SPOTLIGHT_ROW_ID, title = "Spotlight", rowStyle = RowStyle.HERO, items = heroItems))
+                                    }
+                                    addAll(slots.values)
+                                },
+                        ),
+                    )
+                }
+
+                // Paint the layout (billboard + shimmer rows) before a single fetch returns.
+                emit()
 
                 // Fetch every configured row in parallel (bounded), tolerating per-row failures.
+                // The mutex serialises slot updates so each emission is a consistent snapshot.
                 val semaphore = Semaphore(4)
-                val fetched =
-                    settings.rows
-                        .map { display ->
-                            async(Dispatchers.IO) {
-                                display to
-                                    semaphore.withPermit {
-                                        runCatching {
-                                            homeSettingsService.fetchDataForRow(
-                                                row = display.config,
-                                                scope = this@coroutineScope,
-                                                prefs = prefs,
-                                                userDto = userDto,
-                                                libraries = libraries,
-                                                limit = prefs.maxItemsPerRow,
-                                                isRefresh = false,
-                                            )
-                                        }.onFailure { Timber.w(it, "Local home: row '%s' failed", display.title) }
-                                            .getOrNull()
-                                    }
+                val slotLock = Mutex()
+                settings.rows
+                    .map { display ->
+                        launch(Dispatchers.IO) {
+                            val state =
+                                semaphore.withPermit {
+                                    runCatching {
+                                        homeSettingsService.fetchDataForRow(
+                                            row = display.config,
+                                            scope = this@channelFlow,
+                                            prefs = prefs,
+                                            userDto = userDto,
+                                            libraries = libraries,
+                                            limit = prefs.maxItemsPerRow,
+                                            isRefresh = false,
+                                        )
+                                    }.onFailure { Timber.w(it, "Local home: row '%s' failed", display.title) }
+                                        .getOrNull()
+                                }
+
+                            slotLock.withLock {
+                                fetchedById[display.id] = state
+                                val row = display.toRenderRow(state)
+                                if (row == null) slots.remove(display.id) else slots[display.id] = row
+                                emit()
                             }
-                        }.awaitAll()
-
-                val contentRows =
-                    fetched.mapNotNull { (display, state) ->
-                        val success = state as? HomeRowLoadingState.Success ?: return@mapNotNull null
-                        val items = success.items.filterNotNull()
-                        if (items.isEmpty()) return@mapNotNull null
-                        val resume = display.config.isWatching()
-                        val recent = display.config.isRecentlyAdded()
-                        RenderRow(
-                            id = "row_${display.id}",
-                            title = success.title.ifBlank { display.title },
-                            rowStyle = RowStyle.STANDARD,
-                            items = items.map { it.toRenderItem(resume = resume, recentlyAdded = recent) },
-                        )
-                    }
-                if (contentRows.isEmpty()) return@coroutineScope null
-
-                val heroItems = buildHeroItems(fetched)
-                val rows =
-                    buildList {
-                        if (heroItems.isNotEmpty()) {
-                            add(RenderRow(id = SPOTLIGHT_ROW_ID, title = "Spotlight", rowStyle = RowStyle.HERO, items = heroItems))
                         }
-                        addAll(contentRows)
-                    }
-                RenderBundle(contractVersion = CARD_CONTRACT_VERSION, rows = rows)
+                    }.joinAll()
             }
+
+        /**
+         * The complete local bundle, for callers that can't render progressively (the engine card
+         * preview). Null when nothing resolved — same contract as before.
+         */
+        suspend fun build(): RenderBundle? = progressive().lastOrNull()?.takeIf { it.rows.isNotEmpty() }
+
+        /** A configured row's stable render id — must be stable across emissions to keep D-pad focus. */
+        private fun HomeRowConfigDisplay.rowId(): String = "row_$id"
+
+        /** The rendered row for a completed fetch, or null when it failed / came back empty. */
+        private fun HomeRowConfigDisplay.toRenderRow(state: HomeRowLoadingState?): RenderRow? {
+            val items = (state as? HomeRowLoadingState.Success)?.items?.filterNotNull().orEmpty()
+            if (items.isEmpty()) return null
+            val resume = config.isWatching()
+            val recent = config.isRecentlyAdded()
+            return RenderRow(
+                id = rowId(),
+                title = (state as HomeRowLoadingState.Success).title.ifBlank { title },
+                rowStyle = RowStyle.STANDARD,
+                items = items.map { it.toRenderItem(resume = resume, recentlyAdded = recent) },
+            )
+        }
 
         /** Picks a few movies/series across the fetched rows to feature in the rotating spotlight. */
         private fun buildHeroItems(fetched: List<Pair<HomeRowConfigDisplay, HomeRowLoadingState?>>): List<RenderItem> =

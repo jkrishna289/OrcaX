@@ -233,7 +233,9 @@ class MainActivity : AppCompatActivity() {
                 CoilConfig(
                     prefs = appPreferences,
                     okHttpClient = okHttpClient,
-                    debugLogging = false,
+                    // Same switch that drives DebugLogTree below, so enabling debug logging also
+                    // turns on Coil's per-request timing rather than only half the diagnostics.
+                    debugLogging = appPreferences.debugLogging,
                     enableCache = true,
                 )
                 LaunchedEffect(appPreferences.debugLogging) {

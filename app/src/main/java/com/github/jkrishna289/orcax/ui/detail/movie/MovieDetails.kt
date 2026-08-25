@@ -497,25 +497,28 @@ fun MovieDetailsContent(
                                     .padding(bottom = 16.dp)
                                     .focusRequester(focusRequesters[HEADER_ROW]),
                         )
-                    }
-                }
-                state.people.letNotEmpty { people ->
-                    item {
-                        PersonRow(
-                            people = people,
-                            onClick = {
-                                position = PEOPLE_ROW
-                                onClickPerson.invoke(it)
-                            },
-                            onLongClick = { index, person ->
-                                position = PEOPLE_ROW
-                                onLongClickPerson.invoke(index, person)
-                            },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequesters[PEOPLE_ROW]),
-                        )
+                        // Cast peek row lives inside the hero block (Movie Details v2): a compact,
+                        // width-limited window with a right edge fade, hinting there are more cards
+                        // to scroll to without giving cast a full-width row of its own.
+                        state.people.letNotEmpty { people ->
+                            PersonRow(
+                                people = people,
+                                title = R.string.cast,
+                                compact = true,
+                                onClick = {
+                                    position = PEOPLE_ROW
+                                    onClickPerson.invoke(it)
+                                },
+                                onLongClick = { index, person ->
+                                    position = PEOPLE_ROW
+                                    onLongClickPerson.invoke(index, person)
+                                },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth(.3f)
+                                        .focusRequester(focusRequesters[PEOPLE_ROW]),
+                            )
+                        }
                     }
                 }
                 state.chapters.letNotEmpty { chapters ->

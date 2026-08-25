@@ -28,7 +28,6 @@
     <string name="feedback_more_like_this">More like this</string>
     <string name="feedback_not_interested">Not interested</string>
     <string name="feedback_tune_recommendations">Tune your recommendations</string>
-    <string name="request_not_yet_available">NOT YET AVAILABLE</string>
     <string name="hero_type_series">SERIES</string>
     <string name="hero_type_film">FILM</string>
     <string name="hero_type_episode">EPISODE</string>
@@ -61,13 +60,26 @@
     <string name="p1_sub">SUB</string>
     <string name="p1_cc">CC</string>
     <string name="p1_quality">QUALITY</string>
+    <!-- Replaces QUALITY while a torrent streams: there is no transcode ladder to choose from, so
+         the useful question is whether the swarm is keeping up. -->
+    <string name="p1_stream">STREAM</string>
+    <string name="stream_health_title">Stream health</string>
+    <string name="stream_health_sharing">Sharing</string>
+    <string name="stream_health_speed">Speed</string>
+    <string name="stream_health_buffer">Buffer</string>
+    <string name="stream_health_loaded">Loaded</string>
+    <string name="stream_health_file">File</string>
+    <string name="stream_health_seeds_leeches">%1$d with the full file · %2$d partial</string>
+    <string name="stream_health_buffer_seconds">%1$d seconds ahead</string>
+    <string name="stream_health_waiting">Waiting for the swarm…</string>
+    <string name="stream_health_stalled">Not receiving data</string>
+    <string name="stream_health_hint">BACK closes · playback continues</string>
     <string name="p1_skip_back_30">Back 30 seconds</string>
     <string name="p1_skip_forward_15">Forward 15 seconds</string>
     <string name="p1_season_episode">S%1$d  ·  E%2$d</string>
     <string name="minutes_left_under_one">&lt;1m left</string>
     <string name="minutes_left">%1$dm left</string>
     <string name="hours_minutes_left">%1$dh %2$dm left</string>
-    <string name="content_advisory">Content advisory</string>
 
     <!-- Grid behavior settings -->
     <string name="scroll_top_on_back">Back returns to top of grids</string>
@@ -895,25 +907,75 @@
     <string name="quality_started_reduced_toast">Started at %1$s — connection %2$s</string>
     <string name="quality_details_preview">AUTO quality: %1$s · connection %2$s</string>
 
-    <!-- Streaming sources. Wording is deliberately non-technical: a viewer should never need to
-         know what a torrent, magnet, seeder or tracker is. Technical detail appears only after
-         they open "Show details", and even then as a supporting line. -->
-    <string name="find_streaming_sources">Find Sources</string>
-    <string name="available_sources">Available Sources</string>
-    <string name="sources_searching">Looking for sources…</string>
-    <string name="sources_opening">Starting playback…</string>
-    <string name="sources_none_title">Nothing available yet</string>
-    <string name="sources_none_message">We couldn\'t find anything to play for this title right now. You can request it for the library instead, or try again later.</string>
-    <string name="sources_unavailable_message">Sources aren\'t available right now. Your server may not be set up for this yet.</string>
-    <string name="sources_failed_message">That source wouldn\'t start. Try another one.</string>
-    <string name="source_recommended">Recommended</string>
-    <string name="source_best_quality">Best Quality</string>
-    <string name="source_fastest_start">Fastest Start</string>
-    <string name="source_lowest_bandwidth">Uses Least Data</string>
-    <string name="source_4k_hdr">4K HDR</string>
-    <string name="source_show_all">Show all sources</string>
-    <string name="source_show_details">Show details</string>
-    <string name="source_hide_details">Hide details</string>
-    <!-- Advanced/technical line, shown only when details are expanded. -->
-    <string name="source_technical">%1$s · %2$d sharing · %3$s</string>
+    <!-- Streaming sources. Wording is deliberately non-technical: a viewer should never need to know
+         what a torrent, magnet, seeder, tracker, indexer or download client is, and none of those
+         words appears in any string below. The release name on the picker is the one exception, and
+         it is the server's text passed through verbatim rather than anything OrcaX writes. -->
+    <string name="find_streaming_sources">Find Streaming Sources</string>
+    <string name="find_streaming_sources_subtitle">Watch it now, this once</string>
+    <string name="request_subtitle">Add it to your library for good</string>
+    <string name="request_destination_note">Requests go to your request queue. Nothing is added without you asking.</string>
+    <string name="request_already_queued">Already on the way to your library</string>
+
+    <!-- Library status. A state of *your library*, never a state of the world: the film exists, you
+         just don't own it yet. "Coming Soon" is reserved for titles that aren't out. -->
+    <string name="in_your_library">In Your Library</string>
+    <string name="not_in_your_library">Not in your library</string>
+    <string name="coming_soon">Coming Soon</string>
+    <string name="availability_adding">Adding</string>
+    <string name="availability_new">New</string>
+
+    <!-- Finding (screen 04). "Places", never indexers. -->
+    <string name="sources_finding_title">Finding ways to watch</string>
+    <string name="sources_finding_duration">Usually a few seconds</string>
+    <string name="sources_finding_background">You can leave this — it keeps looking in the background.</string>
+
+    <!-- Choosing (screen 05). Nothing here ranks or praises a stream. -->
+    <string name="sources_picker_title">Choose a stream</string>
+    <string name="sources_picker_count">%1$d found</string>
+    <string name="sources_sorted_by_resolution">Sorted by resolution</string>
+    <string name="sources_sharing">%1$d sharing</string>
+    <string name="sources_picker_hint">OK plays · BACK returns to the film</string>
+
+    <!-- Stop screens. Each names what OrcaX will do next before what went wrong. -->
+    <string name="sources_none_title">No streams available</string>
+    <string name="sources_none_message">Nothing playable turned up for this title right now. Requesting it is the reliable route.</string>
+    <string name="sources_timeout_title">That took too long</string>
+    <string name="sources_timeout_message">Your server stopped answering partway through. This is usually temporary.</string>
+    <string name="sources_not_ready_title">Not set up for this yet</string>
+    <string name="sources_unavailable_message">Your server isn\'t set up to find streams. Requesting this title still works.</string>
+    <string name="sources_stream_failed_title">That stream stopped responding</string>
+    <string name="sources_stream_failed_message">Nothing is wrong on your end. There are other streams for this title.</string>
+    <string name="sources_try_next">Try the next stream</string>
+    <string name="sources_choose_another">Choose another</string>
+    <string name="sources_request_instead">Request instead</string>
+    <string name="sources_try_again">Try again</string>
+    <string name="sources_back_to_film">Back to the film</string>
+
+    <!-- Connecting (screen 06). The bar is genuinely indeterminate and says nothing it can't back up. -->
+    <string name="connect_preparing_title">Preparing your stream</string>
+    <string name="connect_still_preparing_title">Still preparing</string>
+    <string name="connect_building">Building a smooth start</string>
+    <string name="connect_slow">This one is slower than expected</string>
+    <string name="connect_switched">Switched to a stream that should start sooner</string>
+    <string name="connect_switch_now">Switch to Fast Start</string>
+    <string name="connect_keep_waiting">Keep waiting</string>
+    <string name="connect_starts_on_its_own">Playback begins on its own — you do not need to press anything.</string>
+    <string name="connect_back_hint">BACK · Stop and choose a different stream</string>
+    <string name="connect_finding_peers">Finding people sharing this</string>
+    <!-- Measured swarm figures, shown while waiting. Nothing here is estimated. -->
+    <string name="connect_stat_peers">Sharing</string>
+    <string name="connect_stat_seeds">%1$d with the full file</string>
+    <string name="connect_stat_speed">Speed</string>
+    <string name="connect_stat_buffered">Loaded</string>
+    <string name="connect_stat_awaiting_metadata">Reading file list</string>
+
+    <!-- Keep it? (screen 08). About the library, never about a file. -->
+    <string name="keep_stopped_at">You stopped at %1$s</string>
+    <string name="keep_title">Keep %1$s?</string>
+    <string name="keep_body">Your place is saved, so this is in Continue Watching now. The stream itself is temporary — keeping it asks your server for a permanent copy to come back to.</string>
+    <string name="keep_confirm">Keep in my library</string>
+    <string name="keep_decline">Not now</string>
+    <string name="keep_footnote">This is a request to your server, the same as any other. Nothing is stored on this TV.</string>
+    <string name="keep_time_left">%1$dm left · resumes from your server</string>
 </resources>

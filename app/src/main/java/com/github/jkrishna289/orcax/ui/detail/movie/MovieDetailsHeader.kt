@@ -2,12 +2,14 @@ package com.github.jkrishna289.orcax.ui.detail.movie
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
@@ -69,14 +71,28 @@ fun MovieDetailsHeader(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth(.60f),
         ) {
-            QuickDetails(
-                movie.ui.quickDetails,
-                movie.timeRemainingOrRuntime,
-                Modifier.padding(start = HeaderUtils.startPadding),
-            )
-
-            dto.genres?.letNotEmpty {
-                GenreText(it, Modifier.padding(start = HeaderUtils.startPadding))
+            // Single meta line per the v2 spec: ★ rating • year • runtime • genres (genres dimmed).
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = HeaderUtils.startPadding),
+            ) {
+                QuickDetails(
+                    movie.ui.quickDetails,
+                    movie.timeRemainingOrRuntime,
+                )
+                dto.genres?.letNotEmpty {
+                    Text(
+                        text = " • ",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = .42f),
+                    )
+                    GenreText(
+                        it,
+                        textStyle = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f),
+                        maxLines = 1,
+                    )
+                }
             }
 
             VideoStreamDetails(

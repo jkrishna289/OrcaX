@@ -55,7 +55,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.PersonKind
-import org.jellyfin.sdk.model.api.PlayMethod
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.intl.Locale
@@ -229,19 +228,8 @@ fun PlaybackPageContent(
     }
 
     val presentationState = rememberPresentationState(player, false)
-    // Transcoded MPEG-TS streams frequently carry incorrect SAR (pixel aspect ratio) in their
-    // container headers. ContentScale.Fit trusts the reported display dimensions, so a bad SAR
-    // (e.g. pixelWidthHeightRatio << 1.0) produces a surface much smaller than the screen.
-    // Override to Crop (RESIZE_MODE_ZOOM) for transcoded streams — it always fills the screen
-    // while preserving aspect ratio, regardless of what the TS metadata reports.
-    val effectiveContentScale =
-        if (contentScale == ContentScale.Fit && currentPlayback?.playMethod == PlayMethod.TRANSCODE) {
-            ContentScale.Crop
-        } else {
-            contentScale
-        }
     val scaledModifier =
-        Modifier.resizeWithContentScale(effectiveContentScale, presentationState.videoSizeDp)
+        Modifier.resizeWithContentScale(contentScale, presentationState.videoSizeDp)
     val focusRequester = remember { FocusRequester() }
     val playPauseState = rememberPlayPauseButtonState(player)
 
@@ -266,9 +254,9 @@ fun PlaybackPageContent(
     val isSwitchingStream by viewModel.isSwitchingStream.collectAsState()
 
     // ── Stream-switch diagnostics — log key layout state during transitions ─
-    LaunchedEffect(effectiveContentScale) {
+    LaunchedEffect(contentScale) {
         Timber.i("[STREAM-SWITCH] UI contentScale=%s method=%s",
-            effectiveContentScale, currentPlayback?.playMethod?.serialName ?: "none")
+            contentScale, currentPlayback?.playMethod?.serialName ?: "none")
     }
     LaunchedEffect(presentationState.videoSizeDp) {
         val sz = presentationState.videoSizeDp
@@ -301,6 +289,11 @@ fun PlaybackPageContent(
     val qualityRecommendation by viewModel.qualityManager.recommendation.collectAsState()
     val isMeasuring by viewModel.qualityManager.isMeasuring.collectAsState()
     val qualityLabel = qualitySelectionLabel(qualityMode, qualityRecommendation)
+
+    // A torrent stream swaps the quality control for a live swarm readout — see StreamHealthPanel
+    // for why picking a quality is meaningless when the file is served byte-for-byte.
+    val isTorrentStream by viewModel.isTorrentStream.collectAsState()
+    val streamHealth by viewModel.streamHealth.collectAsState()
 
     // ── Sync progress + playing state to PlaybackPhaseViewModel ────────────
     LaunchedEffect(currentPositionMs, currentDurationMs, currentBufferedMs) {
@@ -672,6 +665,7 @@ fun PlaybackPageContent(
             // Passive content advisory (engine/Groq): fades in briefly at playback start, never takes focus.
             ContentWarningOverlay(
                 warnings = contentWarning,
+                rating = currentPlayback?.item?.data?.officialRating ?: "",
                 modifier =
                     Modifier
                         .align(Alignment.BottomStart)
@@ -796,6 +790,9 @@ fun PlaybackPageContent(
                 },
                 qualityLabel = qualityLabel,
                 onQualityRequested = { playbackDialog = PlaybackDialogType.QUALITY },
+                isTorrentStream = isTorrentStream,
+                streamHealthLabel = streamHealthChipLabel(streamHealth),
+                onStreamHealthRequested = { playbackDialog = PlaybackDialogType.STREAM_HEALTH },
             )
 
             // ── Clock + debug overlay ────────────────────────────────────────
@@ -1015,6 +1012,17 @@ fun PlaybackPageContent(
             onChangeSubtitleDelay = { viewModel.updateSubtitleDelay(it) },
             enableSubtitleDelay = player is MpvPlayer,
             enableVideoScale = player !is MpvPlayer,
+        )
+    }
+
+    // Live swarm/buffer readout — same interception as QUALITY, which it replaces for torrents.
+    if (playbackDialog == PlaybackDialogType.STREAM_HEALTH) {
+        StreamHealthPanel(
+            status = streamHealth,
+            // What the player has actually buffered past the play head, which is the number that
+            // predicts a stall — the engine's own progress figure is about the file, not playback.
+            bufferAheadMs = (currentBufferedMs - currentPositionMs).coerceAtLeast(0L),
+            onDismiss = { playbackDialog = null },
         )
     }
 

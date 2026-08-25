@@ -13,6 +13,7 @@ import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -59,9 +60,15 @@ class PlayerFactory
         var currentPlayer: Player? = null
             private set
 
+        /**
+         * @param patientNetwork gives a torrent read a longer deadline than a library one — see
+         *   [PATIENT_READ_TIMEOUT_MS]. Off for library playback, where a server that has stopped
+         *   answering should surface as an error quickly rather than as a long freeze.
+         */
         suspend fun createVideoPlayer(
             backend: PlayerBackend,
             prefs: PlaybackPreferences,
+            patientNetwork: Boolean = false,
         ): PlayerCreation {
             withContext(Dispatchers.Main) {
                 if (currentPlayer?.isReleased == false) {
@@ -99,7 +106,22 @@ class PlayerFactory
                                 MediaExtensionStatus.MES_DISABLED -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
                                 else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
                             }
-                        val dataSourceFactory = DefaultDataSource.Factory(context)
+                        // Media3's 8s read timeout is right for a server that either answers or is
+                        // broken. A torrent read legitimately blocks while the pieces under the play
+                        // head arrive, so 8s killed streams mid-buffer. One knob covers that: a
+                        // longer read timeout. Not longer than that — the engine already prebuffers
+                        // head+tail before it reports Ready, so the player never waits from cold, and
+                        // an unbounded wait here just turns a dead source into a spinner with no way
+                        // out. The connect screen, with its live peer count, owns the real waiting.
+                        val dataSourceFactory =
+                            if (patientNetwork) {
+                                DefaultDataSource.Factory(
+                                    context,
+                                    DefaultHttpDataSource.Factory().setReadTimeoutMs(PATIENT_READ_TIMEOUT_MS),
+                                )
+                            } else {
+                                DefaultDataSource.Factory(context)
+                            }
                         val extractorsFactory = createExtractorsFactory()
                         var renderersFactory: RenderersFactory =
                             OrcaRenderersFactory(context, decodeAv1)
@@ -225,6 +247,13 @@ class PlayerFactory
                 )
             }
     }
+
+/**
+ * How long a torrent read may block before Media3 treats it as an error. Long enough to ride out a
+ * mid-playback stall while the next pieces arrive; short enough that a source which has stopped
+ * delivering fails with feedback instead of spinning. Media3's default retry count then applies.
+ */
+private const val PATIENT_READ_TIMEOUT_MS = 30_000
 
 val Player.isReleased: Boolean
     get() {

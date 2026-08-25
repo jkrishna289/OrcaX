@@ -273,7 +273,7 @@ object SampleEngineBundle {
                                 poster("loki", badges = listOf(CardBadge(kind = "TOP_PICK", text = "★ Top Pick")), size = CardSize.LARGE),
                                 wide("mouse", subtitle = "Crime · Drama", actions = listOf(CardAction.PLAY, CardAction.DETAILS)),
                                 poster("ember", badges = listOf(CardBadge(kind = "NEW_EPISODE", text = "New Episode"))),
-                                poster("nocturne", badges = listOf(CardBadge(kind = "CONTEXT", text = "Based on Project Loki"))),
+                                poster("nocturne"),
                                 poster("verdict", badges = listOf(CardBadge(kind = "TRENDING", text = "▲ Trending"))),
                                 poster("gumball"),
                                 poster("dhindora"),

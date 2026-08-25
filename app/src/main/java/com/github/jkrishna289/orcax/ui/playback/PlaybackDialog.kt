@@ -48,6 +48,9 @@ enum class PlaybackDialogType {
     VIDEO_SCALE,
     SUBTITLE_DELAY,
     QUALITY,
+    // Live swarm/buffer readout for a torrent stream. Like QUALITY, rendered by PlaybackPage rather
+    // than PlaybackDialog — it is informational, with nothing to select.
+    STREAM_HEALTH,
     // Combined Audio+Subtitle floating panel (opened from toolbar button)
     AUDIO_SUBTITLE,
 }
@@ -278,6 +281,8 @@ fun PlaybackDialog(
         // QUALITY and AUDIO_SUBTITLE are handled directly in PlaybackPage as floating panel overlays.
         // Nothing is rendered here — PlaybackPage intercepts both types.
         PlaybackDialogType.QUALITY -> Unit
+        // Both rendered by PlaybackPage instead, which owns the state they read.
+        PlaybackDialogType.STREAM_HEALTH -> Unit
         PlaybackDialogType.AUDIO_SUBTITLE -> Unit
     }
 }

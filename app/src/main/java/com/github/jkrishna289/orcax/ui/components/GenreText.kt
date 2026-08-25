@@ -22,6 +22,7 @@ fun GenreText(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.bodyMedium,
     color: Color = MaterialTheme.colorScheme.onSurface,
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     val text =
         remember(genres) {
@@ -37,6 +38,7 @@ fun GenreText(
         text = text,
         style = textStyle,
         color = color,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier,
     )

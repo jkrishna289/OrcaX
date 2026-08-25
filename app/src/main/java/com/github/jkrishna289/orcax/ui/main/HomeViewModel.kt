@@ -29,9 +29,10 @@ import com.github.jkrishna289.orcax.util.HomeRowLoadingState
 import com.github.jkrishna289.orcax.util.LoadingState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -66,52 +67,65 @@ class HomeViewModel
         private val _state = MutableStateFlow(HomeState.EMPTY)
         val state: StateFlow<HomeState> = _state
 
+        /** The in-flight home load, cancelled and replaced on each [init] so rows never fight over the list. */
+        private var loadJob: Job? = null
+
         init {
             datePlayedService.invalidateAll()
 //            init()
         }
 
         fun init() {
-            viewModelScope.launchIO {
-                Timber.d("init HomeViewModel")
-                try {
-                    val preferences = userPreferencesService.getCurrent()
-                    val prefs = preferences.appPreferences.homePagePreferences
+            // Cancel any in-flight load so a rapid re-entry doesn't leave two loads writing rows.
+            loadJob?.cancel()
+            loadJob =
+                viewModelScope.launchIO {
+                    Timber.d("init HomeViewModel")
+                    try {
+                        val preferences = userPreferencesService.getCurrent()
+                        val prefs = preferences.appPreferences.homePagePreferences
 
-                    serverRepository.currentUserDto.value?.let { userDto ->
+                        val userDto = serverRepository.currentUserDto.value ?: return@launchIO
                         val libraries =
                             navDrawerService.getAllUserLibraries(userDto.id, userDto.tvAccess)
                         val settings =
                             homeSettingsService.currentSettings.first { it != HomePageResolvedSettings.EMPTY }
-                        val state = state.value
+                        val previous = state.value
 
                         // Refreshing if a load has already occurred and the rows haven't significantly changed
                         val refresh =
-                            state.loadingState == LoadingState.Success && state.settings == settings
-                        Timber.v("refresh=$refresh, state.loadingState=${state.loadingState}")
+                            previous.loadingState == LoadingState.Success && previous.settings == settings
+                        Timber.v("refresh=$refresh, loadingState=${previous.loadingState}")
+
+                        // Load (and show) the watching rows first.
+                        val orderedRows =
+                            settings.rows.sortedByDescending { isWatchingRow(it.config) }
+
+                        // Seed the list with per-row placeholders and mark the page ready immediately so the
+                        // LazyColumn renders right away; each row then streams into its slot as it resolves.
+                        // On a refresh keep the rows already on screen instead of flashing placeholders.
+                        val seededRows: List<HomeRowLoadingState> =
+                            if (refresh && previous.homeRows.size == orderedRows.size) {
+                                previous.homeRows
+                            } else {
+                                orderedRows.map { HomeRowLoadingState.Loading(it.title) }
+                            }
                         _state.update {
                             it.copy(
-                                loadingState = if (refresh) LoadingState.Success else LoadingState.Loading,
+                                loadingState = LoadingState.Success,
                                 refreshState = LoadingState.Loading,
                                 settings = settings,
+                                homeRows = seededRows,
                             )
                         }
 
                         val semaphore = Semaphore(4)
-
-                        val watchingRowIndexes =
-                            settings.rows
-                                .mapIndexedNotNull { index, row ->
-                                    if (isWatchingRow(row.config)) index else null
-                                }
-                        val deferred =
-                            settings.rows
-                                // Load the watching rows first
-                                .sortedByDescending { isWatchingRow(it.config) }
-                                .map { row ->
-                                    viewModelScope.async(Dispatchers.IO) {
-                                        semaphore.withPermit {
-                                            Timber.v("Fetching row: %s", row)
+                        coroutineScope {
+                            orderedRows.forEachIndexed { index, row ->
+                                launch(Dispatchers.IO) {
+                                    semaphore.withPermit {
+                                        Timber.v("Fetching row: %s", row)
+                                        val result =
                                             try {
                                                 homeSettingsService.fetchDataForRow(
                                                     row = row.config,
@@ -125,72 +139,50 @@ class HomeViewModel
                                             } catch (ex: InvalidStatusException) {
                                                 if (ex.status == 404) {
                                                     Timber.w(ex, "404 on row %s", row)
-                                                    HomeRowLoadingState.Success(
-                                                        row.title,
-                                                        emptyList(),
-                                                    )
+                                                    HomeRowLoadingState.Success(row.title, emptyList())
                                                 } else {
-                                                    Timber.e(
-                                                        ex,
-                                                        "Error %s on row %s",
-                                                        ex.status,
-                                                        row,
-                                                    )
-                                                    HomeRowLoadingState.Error(
-                                                        row.title,
-                                                        exception = ex,
-                                                    )
+                                                    Timber.e(ex, "Error %s on row %s", ex.status, row)
+                                                    HomeRowLoadingState.Error(row.title, exception = ex)
                                                 }
+                                            } catch (ex: CancellationException) {
+                                                throw ex
                                             } catch (ex: Exception) {
                                                 Timber.e(ex, "Error on row %s", row)
                                                 HomeRowLoadingState.Error(row.title, exception = ex)
                                             }
+                                        // Publish this row the moment it is ready (row-by-row loading).
+                                        _state.update { s ->
+                                            if (index >= s.homeRows.size) {
+                                                s
+                                            } else {
+                                                s.copy(
+                                                    homeRows =
+                                                        s.homeRows.toMutableList().also {
+                                                            it[index] = result
+                                                        },
+                                                )
+                                            }
                                         }
                                     }
                                 }
-
-                        if (refresh && state.homeRows.isNotEmpty() && watchingRowIndexes.isNotEmpty()) {
-                            // Replace watching rows first
-                            Timber.v("Refreshing rows: %s", watchingRowIndexes)
-                            val rows =
-                                deferred
-                                    .filterIndexed { index, _ -> index in watchingRowIndexes }
-                                    .awaitAll()
-                            _state.update {
-                                val newRows =
-                                    it.homeRows.toMutableList().apply {
-                                        rows.forEachIndexed { index, row ->
-                                            set(watchingRowIndexes[index], row)
-                                        }
-                                    }
-                                it.copy(
-                                    loadingState = LoadingState.Success,
-                                    homeRows = newRows,
-                                )
                             }
                         }
-                        val rows = deferred.awaitAll()
                         Timber.v("Got all rows")
-                        _state.update {
-                            it.copy(
-                                loadingState = LoadingState.Success,
-                                refreshState = LoadingState.Success,
-                                homeRows = rows,
-                            )
-                        }
-                    }
-                } catch (ex: Exception) {
-                    Timber.e(ex, "Exception during home page loading")
-                    if (state.value.loadingState == LoadingState.Success) {
-                        showToast(context, "Error refreshing home: ${ex.localizedMessage}")
-                        _state.update { it.copy(refreshState = LoadingState.Error(ex)) }
-                    } else {
-                        _state.update {
-                            it.copy(loadingState = LoadingState.Error(ex))
+                        _state.update { it.copy(refreshState = LoadingState.Success) }
+                    } catch (ex: CancellationException) {
+                        throw ex
+                    } catch (ex: Exception) {
+                        Timber.e(ex, "Exception during home page loading")
+                        if (state.value.loadingState == LoadingState.Success) {
+                            showToast(context, "Error refreshing home: ${ex.localizedMessage}")
+                            _state.update { it.copy(refreshState = LoadingState.Error(ex)) }
+                        } else {
+                            _state.update {
+                                it.copy(loadingState = LoadingState.Error(ex))
+                            }
                         }
                     }
                 }
-            }
         }
 
         fun setWatched(
