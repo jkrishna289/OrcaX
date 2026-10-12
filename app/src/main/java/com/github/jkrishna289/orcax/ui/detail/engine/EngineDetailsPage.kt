@@ -63,6 +63,9 @@ fun EngineDetailsPage(
     val item = viewModel.item
     val card = item.card
     val availability by viewModel.availability.collectAsState()
+    val libraryItemId by viewModel.libraryItemId.collectAsState()
+    val playbackProgress by viewModel.playbackProgress.collectAsState()
+    val canResume = playbackProgress?.let { !it.completed && it.positionMs > 0 } == true
     val requesting by viewModel.requesting.collectAsState()
     val sourceSearch by viewModel.sources.state.collectAsState()
     val canFindSources by viewModel.sources.enabled.collectAsState()
@@ -142,10 +145,11 @@ fun EngineDetailsPage(
                     // Already yours — the fork is over, and the only useful action is to go watch it.
                     availability == AvailabilityState.WATCH_NOW ->
                         DecisionCard(
-                            title = R.string.play,
+                            title = if (canResume) R.string.resume else R.string.play,
                             subtitle = R.string.in_your_library,
                             iconStringRes = R.string.fa_play,
                             onClick = viewModel::navigateToLibraryItem,
+                            enabled = libraryItemId != null,
                             modifier = Modifier.focusRequester(firstFocus),
                         )
 
@@ -179,10 +183,10 @@ fun EngineDetailsPage(
 
                 // Streaming is offered whenever the server does it and the title isn't already yours.
                 // When the operator hasn't enabled it, the viewer never learns it exists.
-                if (canFindSources && availability != AvailabilityState.WATCH_NOW) {
+                if (canFindSources && libraryItemId == null) {
                     DecisionCard(
-                        title = R.string.find_streaming_sources,
-                        subtitle = R.string.find_streaming_sources_subtitle,
+                        title = if (canResume) R.string.resume else R.string.find_streaming_sources,
+                        subtitle = if (canResume) R.string.sources_picker_title else R.string.find_streaming_sources_subtitle,
                         iconStringRes = null,
                         onClick = viewModel.sources::findSources,
                     )

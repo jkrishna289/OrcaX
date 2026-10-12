@@ -2,6 +2,10 @@ package com.github.jkrishna289.orcax.services.torrent
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,6 +21,8 @@ data class StreamWatch(
     val title: String,
     val token: String,
     val positionMs: Long,
+    val playbackSessionId: String? = null,
+    val savedPositionMs: Long? = null,
 )
 
 /**
@@ -40,14 +46,25 @@ class StreamWatchTracker
     @Inject
     constructor() {
         private val pending = MutableStateFlow<StreamWatch?>(null)
-        private val answered = mutableSetOf<String>()
+        private val answered = ConcurrentHashMap.newKeySet<String>()
+        private val _progressSaved = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val progressSaved = _progressSaved.asSharedFlow()
 
         /** Armed when a streamed playback is launched. Position is filled in when the player stops. */
         fun begin(
             title: String,
             token: String,
+            playbackSessionId: String? = null,
         ) {
-            pending.update { StreamWatch(title = title, token = token, positionMs = 0) }
+            pending.update { StreamWatch(title = title, token = token, positionMs = 0, playbackSessionId = playbackSessionId) }
+        }
+
+        /** Only an acknowledged server write can make the return prompt say progress was saved. */
+        fun markProgressSaved(playbackSessionId: String, positionMs: Long) {
+            pending.update { watch ->
+                if (watch?.playbackSessionId == playbackSessionId) watch.copy(savedPositionMs = positionMs) else watch
+            }
+            _progressSaved.tryEmit(Unit)
         }
 
         /** Called by the player as it tears down a torrent stream. No-op if nothing was armed. */
@@ -60,8 +77,7 @@ class StreamWatchTracker
          * from the player and never reappears on a later visit to the same page.
          */
         fun consume(): StreamWatch? {
-            val watch = pending.value ?: return null
-            pending.update { null }
+            val watch = pending.getAndUpdate { null } ?: return null
             return watch.takeIf { it.title !in answered }
         }
 

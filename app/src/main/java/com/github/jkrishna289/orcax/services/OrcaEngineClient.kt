@@ -2,6 +2,10 @@ package com.github.jkrishna289.orcax.services
 
 import android.os.SystemClock
 import com.github.jkrishna289.orcax.engine.AvailabilityStatusResponse
+import com.github.jkrishna289.orcax.engine.PlaybackIdentity
+import com.github.jkrishna289.orcax.engine.PlaybackProgressBody
+import com.github.jkrishna289.orcax.engine.ProgressReportResult
+import com.github.jkrishna289.orcax.engine.ServerPlaybackProgress
 import com.github.jkrishna289.orcax.engine.BootstrapResponse
 import com.github.jkrishna289.orcax.engine.ContentWarningsResponse
 import com.github.jkrishna289.orcax.engine.EngineJson
@@ -26,11 +30,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -388,12 +394,13 @@ class OrcaEngineClient
         ): TorrentStream? {
             if (sourceId.isNullOrBlank() && magnet.isNullOrBlank()) return null
             val base = baseUrl() ?: return null
+            val leaseId = java.util.UUID.randomUUID().toString()
             val body =
                 EngineJson.encodeToString(
-                    StreamSessionBody(sourceId = sourceId, magnet = magnet, season = season, episode = episode),
+                    StreamSessionBody(sourceId = sourceId, magnet = magnet, season = season, episode = episode, leaseId = leaseId),
                 )
             val result =
-                post("/Stream/Sessions", body, streamHttpClient) {
+                post("/Stream/Sessions", body, sessionHttpClient) {
                     EngineJson.decodeFromString<StreamSessionResult>(it)
                 } ?: return null
 
@@ -401,6 +408,7 @@ class OrcaEngineClient
             return TorrentStream(
                 url = base + result.path,
                 token = result.token,
+                leaseId = leaseId,
                 fileName = result.fileName,
                 sizeBytes = result.length.takeIf { it > 0 },
                 mediaInfo = result.mediaInfo,
@@ -434,11 +442,73 @@ class OrcaEngineClient
             return post("/Stream/Sessions/$token/keep", "{}") { true } ?: false
         }
 
-        // ponytail: no explicit session close yet — that needs a DELETE verb in the shared
-        // get/post plumbing below, and touching that risks every existing engine call for a
-        // behaviour the server's idle sweep already covers. The engine tears a session down after
-        // StreamSessionIdleMinutes, so nothing leaks; it just keeps seeding a little longer than
-        // necessary. Wire DELETE /Stream/{token} up when playback teardown has a real UI path.
+        suspend fun beginPlayback(identity: PlaybackIdentity): ServerPlaybackProgress? =
+            post("/Playback/Sessions", EngineJson.encodeToString(identity)) {
+                EngineJson.decodeFromString<ServerPlaybackProgress>(it)
+            }
+
+        suspend fun getPlaybackProgress(identity: PlaybackIdentity): ServerPlaybackProgress? {
+            val query = buildString {
+                append("/Playback/Progress?tmdbId=${identity.tmdbId}&mediaType=${identity.mediaType}")
+                identity.season?.let { append("&season=$it") }
+                identity.episode?.let { append("&episode=$it") }
+            }
+            return get(query) { EngineJson.decodeFromString<ServerPlaybackProgress?>(it) }
+        }
+
+        // Small, bounded requests: teardown gets a chance to flush without retaining a player or
+        // waiting behind the multi-minute network budgets used for torrent discovery.
+        private val progressHttpClient: OkHttpClient by lazy {
+            okHttpClient.newBuilder().callTimeout(5, TimeUnit.SECONDS).build()
+        }
+
+        suspend fun reportPlaybackProgress(
+            sessionId: String,
+            progress: PlaybackProgressBody,
+        ): ProgressReportResult = withContext(Dispatchers.IO) {
+            // The lease is a UUID, not a URL component supplied by a torrent source.
+            // Jellyfin's host serializer emits compact (32-character) GUIDs.
+            val id = sessionId.toUUIDOrNull()
+                ?: return@withContext ProgressReportResult.SUPERSEDED
+            val base = baseUrl() ?: return@withContext ProgressReportResult.RETRY
+            val path = resolvedPath ?: ENGINE_PATHS.first()
+            val request = Request.Builder()
+                .url("$base$path/Playback/Sessions/$id/Progress")
+                .post(EngineJson.encodeToString(progress).toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+            try {
+                progressHttpClient.newCall(request).execute().use { response ->
+                    when {
+                        response.isSuccessful -> ProgressReportResult.SAVED
+                        response.code in listOf(400, 401, 403, 404, 409) -> ProgressReportResult.SUPERSEDED
+                        else -> ProgressReportResult.RETRY
+                    }
+                }
+            } catch (ex: java.io.IOException) {
+                ProgressReportResult.RETRY
+            }
+        }
+
+        // Creating a session returns before torrent preparation; bound cancellation cleanup.
+        private val sessionHttpClient: OkHttpClient by lazy {
+            okHttpClient.newBuilder().callTimeout(15, TimeUnit.SECONDS).build()
+        }
+
+        /** Release only this opening attempt, never the shared torrent's bare token. */
+        suspend fun releaseStreamSession(stream: TorrentStream): Boolean = withContext(Dispatchers.IO) {
+            val lease = stream.leaseId?.toUUIDOrNull() ?: return@withContext true
+            val base = baseUrl() ?: return@withContext false
+            val path = resolvedPath ?: ENGINE_PATHS.first()
+            val url = ("$base$path/Stream").toHttpUrl().newBuilder()
+                .addPathSegment(stream.token).addPathSegment("Leases").addPathSegment(lease.toString()).build()
+            try {
+                progressHttpClient.newCall(Request.Builder().url(url).delete().build()).execute().use {
+                    it.isSuccessful || it.code == 404
+                }
+            } catch (_: java.io.IOException) {
+                false
+            }
+        }
 
         /** Returns true if the engine plugin responds on this server (for graceful degradation). */
         suspend fun isEngineAvailable(): Boolean = get("/Health") { true } ?: false

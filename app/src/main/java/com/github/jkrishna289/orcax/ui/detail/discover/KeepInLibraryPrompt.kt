@@ -93,7 +93,7 @@ fun KeepInLibraryPrompt(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = stringResource(R.string.keep_body),
+                    text = stringResource(if (watch.savedPositionMs != null) R.string.keep_body else R.string.keep_body_without_saved_progress),
                     color = OnStage.copy(alpha = 0.72f),
                     fontSize = 15.sp,
                 )
@@ -119,7 +119,7 @@ fun KeepInLibraryPrompt(
                 )
             }
 
-            ContinueWatchingCard(
+            if (watch.savedPositionMs != null) ContinueWatchingCard(
                 watch = watch,
                 runtimeMinutes = runtimeMinutes,
                 modifier =

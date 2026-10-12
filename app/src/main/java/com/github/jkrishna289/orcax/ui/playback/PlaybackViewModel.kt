@@ -56,6 +56,8 @@ import com.github.jkrishna289.orcax.services.ScreensaverService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.UserPreferencesService
 import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
+import com.github.jkrishna289.orcax.services.torrent.StreamProgressReporter
+import com.github.jkrishna289.orcax.services.torrent.StreamProgressPlaybackListener
 import com.github.jkrishna289.orcax.services.torrent.TorrentMediaSource
 import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.R
@@ -233,6 +235,10 @@ constructor(
      * reporting, resume persistence and next-up.
      */
     private var torrentPlayback: TorrentPlaybackArgs? = null
+    private var streamProgressReporter: StreamProgressReporter? = null
+    private var streamProgressListener: StreamProgressPlaybackListener? = null
+    private var streamResumeApplied = false
+    private var playerReleased = false
     private val jobs = mutableListOf<Job>()
 
     /**
@@ -355,10 +361,16 @@ constructor(
             }
     }
 
-    private fun disconnectPlayer() {
+    private fun disconnectPlayer(finalStop: Boolean = true) {
         positionPollingJob?.cancel()
         positionPollingJob = null
-        if (this@PlaybackViewModel::player.isInitialized) {
+        streamProgressListener?.release(stopped = finalStop)
+        streamProgressListener = null
+        if (finalStop) {
+            streamProgressReporter?.close()
+            streamProgressReporter = null
+        }
+        if (this@PlaybackViewModel::player.isInitialized && !playerReleased) {
             // A torrent stream has no Jellyfin item to report progress against, so where the viewer
             // stopped would otherwise be lost the moment the player goes away. The Keep prompt needs
             // it to tell someone who watched the film from someone who bounced off the first minute.
@@ -373,9 +385,11 @@ constructor(
                 player.removeListener(it)
             }
             player.release()
+            playerReleased = true
             mediaSession?.release()
         }
         jobs.forEach { it.cancel() }
+        jobs.clear()
     }
 
     private suspend fun createPlayer(
@@ -401,7 +415,7 @@ constructor(
         if (currentPlayer.value?.backend != playerBackend) {
             Timber.i("Switching player backend to %s", playerBackend)
             withContext(Dispatchers.Main) {
-                disconnectPlayer()
+                disconnectPlayer(finalStop = false)
             }
 
             val playerCreation =
@@ -412,11 +426,14 @@ constructor(
                     // before the item is loaded, so the field isn't set yet at this point.
                     patientNetwork = (destination as? Destination.Playback)?.torrent != null,
                 )
-            this.player = playerCreation.player
-            currentPlayer.update {
-                PlayerState(playerCreation.player, playerBackend, playerCreation.assHandler)
+            withContext(Dispatchers.Main) {
+                this@PlaybackViewModel.player = playerCreation.player
+                playerReleased = false
+                currentPlayer.update {
+                    PlayerState(playerCreation.player, playerBackend, playerCreation.assHandler)
+                }
+                configurePlayer()
             }
-            configurePlayer()
         }
     }
 
@@ -434,6 +451,24 @@ constructor(
             MediaSession
                 .Builder(context, sessionPlayer)
                 .build()
+        torrentPlayback?.let { args ->
+            pollStreamHealth(args.token)
+            args.playbackSessionId?.takeIf { it.isNotBlank() }?.let { sessionId ->
+                val client = engineClient
+                val tracker = streamWatchTracker
+                val reporter = streamProgressReporter ?: StreamProgressReporter(
+                    send = { client.reportPlaybackProgress(sessionId, it) },
+                    onSaved = { tracker.markProgressSaved(sessionId, it) },
+                ).also { streamProgressReporter = it }
+                streamProgressListener = StreamProgressPlaybackListener(
+                    player = player,
+                    reporter = reporter,
+                    resumePositionMs = if (streamResumeApplied) 0 else args.resumePositionMs,
+                    resumeDurationMs = args.resumeDurationMs,
+                    onResumeApplied = { streamResumeApplied = true },
+                )
+            }
+        }
     }
 
     /**
@@ -482,7 +517,6 @@ constructor(
         (destination as? Destination.Playback)?.torrent?.let { args ->
             this.torrentPlayback = args
             isTorrentStream.value = true
-            pollStreamHealth(args.token)
             viewModelScope.launch(ExceptionHandler()) { controllerViewState.observe() }
             play(
                 item = TorrentMediaSource.baseItem(

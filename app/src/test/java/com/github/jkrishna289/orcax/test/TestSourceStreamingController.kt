@@ -2,6 +2,8 @@ package com.github.jkrishna289.orcax.test
 
 import com.github.jkrishna289.orcax.engine.FeatureFlags
 import com.github.jkrishna289.orcax.engine.MediaType
+import com.github.jkrishna289.orcax.engine.PlaybackIdentity
+import com.github.jkrishna289.orcax.engine.ServerPlaybackProgress
 import com.github.jkrishna289.orcax.engine.StreamSessionStatus
 import com.github.jkrishna289.orcax.engine.TorrentSourceDto
 import com.github.jkrishna289.orcax.services.NavigationManager
@@ -12,6 +14,7 @@ import com.github.jkrishna289.orcax.ui.detail.discover.SourceSearchState
 import com.github.jkrishna289.orcax.ui.detail.discover.SourceStreamingController
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +32,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * The connect-and-hand-over state machine, which is the part of the source flow that runs unattended.
@@ -59,6 +64,7 @@ class TestSourceStreamingController {
         scope = CoroutineScope(SupervisorJob())
         controller = SourceStreamingController(engine, navigation, watchTracker)
         coEvery { engine.getFeatures() } returns FeatureFlags(sourceStreaming = true)
+        coEvery { engine.beginPlayback(any()) } returns null
         coEvery { engine.openStreamSession(any(), any(), any(), any()) } returns
             TorrentStream(url = "http://server/stream/tok", token = "tok", fileName = "", sizeBytes = null)
     }
@@ -128,6 +134,81 @@ class TestSourceStreamingController {
         assertEquals(1_234L, torrent.sizeBytes)
         assertEquals(SourceSearchState.Idle, controller.state.value)
         assertEquals("Sintel", watchTracker.consume()?.title)
+    }
+
+    @Test
+    fun `a ready stream carries the stable identity and saved fraction into playback`() {
+        val identity = PlaybackIdentity(tmdbId = 45745, title = "Sintel", year = 2010)
+        coEvery { engine.getStreamStatus("tok") } returns StreamSessionStatus(state = "Ready")
+        coEvery { engine.beginPlayback(identity) } returns
+            ServerPlaybackProgress(sessionId = "progress-session", positionMs = 480_000, durationMs = 1_200_000)
+
+        controller.attach(scope, title = "Sintel", year = 2010, tmdbId = 45745)
+        controller.playSource(source)
+        awaitTrue("the saved stream never reached the player") { navigation.backStack.size > 1 }
+
+        val playback = navigation.backStack.last() as Destination.Playback
+        val torrent = playback.torrent!!
+        assertEquals(identity, torrent.playbackIdentity)
+        assertEquals("progress-session", torrent.playbackSessionId)
+        assertEquals(480_000L, torrent.resumePositionMs)
+        assertEquals(1_200_000L, torrent.resumeDurationMs)
+        assertEquals(480_000L, playback.positionMs)
+        coVerify(exactly = 1) { engine.beginPlayback(identity) }
+    }
+
+    @Test
+    fun `a completed stream starts from the beginning`() {
+        coEvery { engine.getStreamStatus("tok") } returns StreamSessionStatus(state = "Ready")
+        coEvery { engine.beginPlayback(any()) } returns
+            ServerPlaybackProgress(sessionId = "replay", positionMs = 1_200_000, durationMs = 1_200_000, completed = true)
+
+        controller.attach(scope, title = "Sintel", year = 2010, tmdbId = 45745)
+        controller.playSource(source)
+        awaitTrue("the replay never reached the player") { navigation.backStack.size > 1 }
+
+        val playback = navigation.backStack.last() as Destination.Playback
+        assertEquals(0L, playback.positionMs)
+        assertEquals(0L, playback.torrent!!.resumePositionMs)
+    }
+
+    @Test
+    fun `an older engine without progress support still opens the selected stream`() {
+        coEvery { engine.getStreamStatus("tok") } returns StreamSessionStatus(state = "Ready")
+        controller.attach(scope, title = "Sintel", year = 2010, tmdbId = 45745)
+        controller.playSource(source)
+        awaitTrue("the compatible stream never reached the player") { navigation.backStack.size > 1 }
+
+        val playback = navigation.backStack.last() as Destination.Playback
+        assertNull(playback.torrent!!.playbackSessionId)
+        assertEquals(0L, playback.positionMs)
+    }
+
+    @Test
+    fun `back during a blocking progress lookup cannot open a player after it returns`() {
+        val lookupStarted = CountDownLatch(1)
+        val releaseLookup = CountDownLatch(1)
+        val lookupReturned = CountDownLatch(1)
+        coEvery { engine.getStreamStatus("tok") } returns StreamSessionStatus(state = "Ready")
+        coEvery { engine.beginPlayback(any()) } answers {
+            // Mimics a synchronous HTTP call that has already started when BACK cancels its job.
+            lookupStarted.countDown()
+            releaseLookup.await(5, TimeUnit.SECONDS)
+            lookupReturned.countDown()
+            ServerPlaybackProgress(sessionId = "late", positionMs = 480_000, durationMs = 1_200_000)
+        }
+
+        controller.attach(scope, title = "Sintel", year = 2010, tmdbId = 45745)
+        controller.playSource(source)
+        assertTrue("the progress lookup never started", lookupStarted.await(5, TimeUnit.SECONDS))
+        controller.dismiss()
+        releaseLookup.countDown()
+        assertTrue("the progress lookup never returned", lookupReturned.await(5, TimeUnit.SECONDS))
+        Thread.sleep(250)
+
+        assertEquals(SourceSearchState.Idle, controller.state.value)
+        assertEquals(1, navigation.backStack.size)
+        assertNull("the abandoned playback armed a Keep prompt", watchTracker.consume())
     }
 
     /**
