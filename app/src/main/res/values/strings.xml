@@ -974,6 +974,7 @@
     <string name="keep_stopped_at">You stopped at %1$s</string>
     <string name="keep_title">Keep %1$s?</string>
     <string name="keep_body">Your place is saved, so this is in Continue Watching now. The stream itself is temporary — keeping it asks your server for a permanent copy to come back to.</string>
+    <string name="keep_body_without_saved_progress">The stream is temporary. Keeping it asks your server for a permanent copy to come back to.</string>
     <string name="keep_confirm">Keep in my library</string>
     <string name="keep_decline">Not now</string>
     <string name="keep_footnote">This is a request to your server, the same as any other. Nothing is stored on this TV.</string>

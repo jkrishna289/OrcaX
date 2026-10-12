@@ -106,6 +106,7 @@ data class SourceGroups(
  */
 @Serializable
 data class StreamSessionBody(
+    @SerialName("LeaseId") val leaseId: String? = null,
     @SerialName("SourceId") val sourceId: String? = null,
     @SerialName("Magnet") val magnet: String? = null,
     @SerialName("Season") val season: Int? = null,

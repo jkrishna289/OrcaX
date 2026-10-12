@@ -18,4 +18,5 @@ data class TorrentStream(
     val fileName: String,
     val sizeBytes: Long?,
     val mediaInfo: StreamMediaInfo? = null,
+    val leaseId: String? = null,
 )

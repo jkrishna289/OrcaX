@@ -2,15 +2,18 @@ package com.github.jkrishna289.orcax.ui.detail.discover
 
 import android.os.SystemClock
 import com.github.jkrishna289.orcax.engine.MediaType
+import com.github.jkrishna289.orcax.engine.PlaybackIdentity
 import com.github.jkrishna289.orcax.engine.TorrentSourceDto
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
+import com.github.jkrishna289.orcax.services.torrent.TorrentStream
 import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.ui.launchIO
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -55,6 +58,8 @@ class SourceStreamingController
 
         private var year: Int? = null
 
+        private var playbackIdentity: PlaybackIdentity? = null
+
         /**
          * What kind of thing is being searched for. Sent to the engine, which searches `tv` and
          * `movie` differently — a series searched as a movie reliably returns nothing at all.
@@ -91,11 +96,16 @@ class SourceStreamingController
             title: String,
             year: Int?,
             mediaType: MediaType = MediaType.MOVIE,
+            tmdbId: Int? = null,
         ) {
             this.scope = scope
             this.title = title
             this.year = year
             this.mediaType = mediaType
+            playbackIdentity =
+                tmdbId?.takeIf { it > 0 && mediaType == MediaType.MOVIE }?.let {
+                    PlaybackIdentity(tmdbId = it, title = title, year = year)
+                }
             scope.launchIO {
                 // Series stay hidden. Nothing on a details page has picked an episode, and the
                 // engine's file selector needs one — handed a season pack without it, it plays
@@ -161,7 +171,8 @@ class SourceStreamingController
             source: TorrentSourceDto,
             autoSwitched: Boolean = false,
         ) {
-            job?.cancel()
+            val previousJob = job
+            previousJob?.cancel()
             triedSourceIds += source.id
             state.update {
                 SourceSearchState.Opening(
@@ -171,8 +182,18 @@ class SourceStreamingController
                 )
             }
             job = scope.launchIO {
-                val stream = orcaEngineClient.openStreamSession(sourceId = source.id)
+                // Let a cancelled attempt release its slot before requesting the next one.
+                previousJob?.join()
+                var opened: TorrentStream? = null
+                var handedToPlayer = false
+                try {
+                // Keep the response even if BACK arrives during the bounded HTTP call, so
+                // finally can release the lease instead of losing the returned token.
+                withContext(NonCancellable) {
+                    opened = orcaEngineClient.openStreamSession(sourceId = source.id)
+                }
                 ensureActive()
+                val stream = opened
                 if (stream == null) {
                     // Creating the session is now fast — it no longer waits on the swarm — so a null
                     // here means the source itself was unusable, not that it was slow.
@@ -229,6 +250,14 @@ class SourceStreamingController
                     delay(STATUS_POLL_INTERVAL_MS)
                 }
 
+                // A source token belongs to this temporary download; watch progress belongs to the
+                // title and signed-in user. Begin only once the source is ready, so a slow or
+                // abandoned connection cannot supersede another device's active playback.
+                val identity = playbackIdentity
+                val progress = identity?.let { orcaEngineClient.beginPlayback(it) }
+                ensureActive()
+                val resumePositionMs = progress?.takeUnless { it.completed }?.positionMs?.coerceAtLeast(0) ?: 0L
+
                 // Closing the dialog, arming the prompt and navigating are one indivisible step, and
                 // they sit behind a cancellation check together: withContext won't enter after a
                 // cancel, so a viewer who left can't have the flow dismissed, a Keep prompt armed or
@@ -238,13 +267,17 @@ class SourceStreamingController
                     // What the player is about to show is a temporary stream, so the Keep prompt has
                     // to know it was asked for before the film starts — the player itself only
                     // reports back where the viewer stopped.
-                    streamWatchTracker.begin(title = title.ifBlank { source.title }, token = ready.token)
+                    streamWatchTracker.begin(
+                        title = title.ifBlank { source.title },
+                        token = ready.token,
+                        playbackSessionId = progress?.sessionId,
+                    )
                     navigationManager.navigateTo(
                         Destination.Playback(
                             // No Jellyfin item exists for this; a fresh id per session also keeps it
                             // out of the resume and next-up tables, which are keyed on real ids.
                             itemId = UUID.randomUUID(),
-                            positionMs = 0,
+                            positionMs = resumePositionMs,
                             torrent =
                                 TorrentPlaybackArgs(
                                     url = ready.url,
@@ -253,9 +286,23 @@ class SourceStreamingController
                                     sizeBytes = ready.sizeBytes,
                                     mediaInfo = ready.mediaInfo,
                                     token = ready.token,
+                                    playbackIdentity = identity,
+                                    playbackSessionId = progress?.sessionId?.takeIf { it.isNotBlank() },
+                                    resumePositionMs = resumePositionMs,
+                                    resumeDurationMs = progress?.durationMs?.coerceAtLeast(0) ?: 0L,
                                 ),
                         ),
                     )
+                    handedToPlayer = true
+                }
+                } finally {
+                    if (!handedToPlayer) opened?.let { abandoned ->
+                        withContext(NonCancellable) {
+                            if (!orcaEngineClient.releaseStreamSession(abandoned)) {
+                                orcaEngineClient.releaseStreamSession(abandoned)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -316,15 +363,7 @@ class SourceStreamingController
             findSources()
         }
 
-        /**
-         * BACK out of the flow. Cancels whatever was running — an abandoned session is left for the
-         * engine's idle sweep to reclaim, which is why this doesn't have to wait for anything.
-         *
-         * ponytail: no `DELETE /Stream/{token}` on the way out. Now that leaving actually cancels,
-         * abandoning sessions is routine rather than rare, and the server's cap is 8 per client —
-         * enough candidates tried in one sitting and the next one is refused. Wire the DELETE up if
-         * that turns out to be reachable in practice; the sweep covers it at 20 minutes either way.
-         */
+        /** BACK cancels the attempt; its finally block releases its viewer lease. */
         fun dismiss() {
             job?.cancel()
             state.update { SourceSearchState.Idle }

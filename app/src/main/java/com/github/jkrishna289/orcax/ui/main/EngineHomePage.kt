@@ -46,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import com.github.jkrishna289.orcax.ui.util.CenterFocusBringIntoViewSpec
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RowStyle
 import com.github.jkrishna289.orcax.engine.TrailerPrefetchPriority
@@ -74,6 +78,17 @@ fun EngineHomePage(
     val viewModel: EngineHomeViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val heroFavorite by viewModel.heroFavorite.collectAsStateWithLifecycle()
+
+    LifecycleResumeEffect(viewModel) {
+        viewModel.onHomeResumed()
+        onPauseOrDispose { viewModel.onHomePaused() }
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.progressSaved.collect { viewModel.refreshContinueWatching() }
+        }
+    }
 
     // Surface one-shot engine messages (e.g. request results) as toasts.
     val context = LocalContext.current

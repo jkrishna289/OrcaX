@@ -100,6 +100,7 @@ class DiscoverMovieViewModel
                 scope = viewModelScope,
                 title = item.title.orEmpty(),
                 year = item.releaseDate?.year,
+                tmdbId = item.id,
             )
         }
 

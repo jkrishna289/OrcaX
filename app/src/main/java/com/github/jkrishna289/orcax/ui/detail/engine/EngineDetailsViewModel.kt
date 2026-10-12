@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.MediaType
+import com.github.jkrishna289.orcax.engine.PlaybackIdentity
 import com.github.jkrishna289.orcax.engine.RenderItem
+import com.github.jkrishna289.orcax.engine.ServerPlaybackProgress
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
@@ -18,9 +20,13 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 
 /**
@@ -54,6 +60,16 @@ class EngineDetailsViewModel
          */
         val availability = MutableStateFlow(item.media.availability)
 
+        /** The card may predate an import, so the resolved library id must be refreshable too. */
+        val libraryItemId = MutableStateFlow(item.media.jellyfinId?.toUUIDOrNull())
+        val playbackProgress = MutableStateFlow<ServerPlaybackProgress?>(null)
+
+        private val playbackIdentity =
+            item.media.tmdbId?.takeIf { it > 0 && item.media.mediaType == MediaType.MOVIE }?.let {
+                PlaybackIdentity(tmdbId = it, title = item.card.title, year = item.yearBadge())
+            }
+        private var refreshJob: Job? = null
+
         /** True while a request is in flight, so the button can say so instead of looking dead. */
         val requesting = MutableStateFlow(false)
 
@@ -66,6 +82,7 @@ class EngineDetailsViewModel
                 title = item.card.title.orEmpty(),
                 year = item.yearBadge(),
                 mediaType = item.media.mediaType,
+                tmdbId = item.media.tmdbId,
             )
             refreshAvailability()
         }
@@ -78,9 +95,23 @@ class EngineDetailsViewModel
 
         private fun refreshAvailability() {
             val tmdbId = item.media.tmdbId ?: return
-            viewModelScope.launchIO {
+            refreshJob?.cancel()
+            refreshJob = viewModelScope.launchIO {
                 val status = engineClient.getRequestStatus(tmdbId, item.media.mediaType)
+                val progress = playbackIdentity?.let { engineClient.getPlaybackProgress(it) }
+                ensureActive()
                 status?.availability?.let { fresh -> availability.update { fresh } }
+                updateProgress(progress)
+            }
+        }
+
+        private fun updateProgress(progress: ServerPlaybackProgress?) {
+            // A transient failure must not erase a successfully resolved id or saved position.
+            if (progress == null) return
+            playbackProgress.update { progress }
+            progress.jellyfinItemId?.toUUIDOrNull()?.let { id ->
+                libraryItemId.update { id }
+                availability.update { AvailabilityState.WATCH_NOW }
             }
         }
 
@@ -157,10 +188,21 @@ class EngineDetailsViewModel
         }
 
         fun navigateToLibraryItem() {
-            val id = item.media.jellyfinId?.toUUIDOrNull() ?: return
-            navigationManager.navigateTo(
-                Destination.MediaItem(itemId = id, type = org.jellyfin.sdk.model.api.BaseItemKind.MOVIE),
-            )
+            viewModelScope.launchIO {
+                // Reading progress also reconciles an imported copy with Jellyfin. Its own details
+                // page then reads the current resume time, adjusted for the local file's duration.
+                updateProgress(playbackIdentity?.let { engineClient.getPlaybackProgress(it) })
+                val id = libraryItemId.value ?: return@launchIO
+                withContext(Dispatchers.Main) {
+                    val destination =
+                        if (item.media.mediaType == MediaType.SERIES) {
+                            Destination.SeriesOverview(itemId = id, type = org.jellyfin.sdk.model.api.BaseItemKind.SERIES)
+                        } else {
+                            Destination.MediaItem(itemId = id, type = org.jellyfin.sdk.model.api.BaseItemKind.MOVIE)
+                        }
+                    navigationManager.navigateTo(destination)
+                }
+            }
         }
     }
 

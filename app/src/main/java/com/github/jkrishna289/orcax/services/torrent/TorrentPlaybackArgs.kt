@@ -1,6 +1,7 @@
 package com.github.jkrishna289.orcax.services.torrent
 
 import com.github.jkrishna289.orcax.engine.StreamMediaInfo
+import com.github.jkrishna289.orcax.engine.PlaybackIdentity
 import kotlinx.serialization.Serializable
 
 /**
@@ -32,4 +33,8 @@ data class TorrentPlaybackArgs(
      * exactly the kind of quiet breakage that took a day to find last time.
      */
     val token: String = "",
+    val playbackIdentity: PlaybackIdentity? = null,
+    val playbackSessionId: String? = null,
+    val resumePositionMs: Long = 0,
+    val resumeDurationMs: Long = 0,
 )

@@ -17,6 +17,7 @@ import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.services.LocalHomeBundleBuilder
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
+import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
 import com.github.jkrishna289.orcax.ui.DEFAULT_TRAILER_PREVIEW_VOLUME
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.ui.toTrailerVolume
@@ -33,6 +34,9 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.update
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -60,6 +64,7 @@ class EngineHomeViewModel
         private val imageUrlService: ImageUrlService,
         private val api: ApiClient,
         private val favoriteWatchManager: FavoriteWatchManager,
+        streamWatchTracker: StreamWatchTracker,
         // Shared, reusable inline-trailer players (Phase 10) — provided to the UI via LocalTrailerPlayerPool.
         val trailerPlayerPool: com.github.jkrishna289.orcax.services.trailer.TrailerPlayerPool,
     ) : ViewModel() {
@@ -102,6 +107,12 @@ class EngineHomeViewModel
 
         // The signed-in user id, resolved on load; needed to attribute engine-proxied requests.
         private var currentUserId: UUID? = null
+
+        private var hasResumedHome = false
+        private var continueRefreshJob: Job? = null
+        private var continueRefreshPending = false
+
+        val progressSaved = streamWatchTracker.progressSaved
 
         // One-shot user-facing messages (e.g. request results), surfaced as a toast by the page.
         private val _message = MutableSharedFlow<String>(extraBufferCapacity = 4)
@@ -214,6 +225,15 @@ class EngineHomeViewModel
                             // focus. Cache it instead — the next visit to Home paints it instantly — and
                             // leave the local build running so its remaining rows still fill in.
                             Timber.i("Orca Engine: bundle arrived while browsing; deferring to next home entry.")
+                            // Progress is current user state, so it must still catch up even when
+                            // recommendations are deferred to avoid moving the rows under focus.
+                            _state.update { current ->
+                                if (current is EngineHomeState.Success) {
+                                    current.copy(rows = replaceContinueWatchingRow(current.rows, serverBundle.rows))
+                                } else {
+                                    current
+                                }
+                            }
                         } else {
                             claimScreenForEngine()
                             applyBundle(serverBundle)
@@ -222,6 +242,52 @@ class EngineHomeViewModel
                     }
                 }
             }
+        }
+
+        /** Refresh progress when coming back from details/player without rebuilding the home UI. */
+        fun onHomeResumed() {
+            // Initial entry already has load() in flight. Subsequent entries reuse this ViewModel,
+            // so neither its cache nor its last successful state has seen the playback just ended.
+            if (!hasResumedHome) {
+                hasResumedHome = true
+                return
+            }
+            refreshContinueWatching()
+        }
+
+        fun refreshContinueWatching() {
+            if (_state.value !is EngineHomeState.Success) return
+            if (continueRefreshJob?.isActive == true) {
+                // A final save can land after a request started. Queue one follow-up so it cannot
+                // leave an earlier progress snapshot on screen, without issuing parallel fetches.
+                continueRefreshPending = true
+                return
+            }
+            continueRefreshJob = viewModelScope.launch {
+                do {
+                    continueRefreshPending = false
+                    val userId = currentUserId ?: return@launch
+                    val fresh = client.getHome(userId = userId, inlineVideo = true)
+                    ensureActive()
+                    if (fresh != null) {
+                        _state.update { current ->
+                            if (current is EngineHomeState.Success) {
+                                current.copy(rows = replaceContinueWatchingRow(current.rows, fresh.rows))
+                            } else {
+                                current
+                            }
+                        }
+                        // Keep the complete response for next launch; only Continue Watching is
+                        // replaced on-screen so the other rows, hero and D-pad focus stay put.
+                        homeBundleCache.write(userId, fresh)
+                    }
+                } while (continueRefreshPending)
+            }
+        }
+
+        fun onHomePaused() {
+            continueRefreshJob?.cancel()
+            continueRefreshPending = false
         }
 
         /**
@@ -572,6 +638,16 @@ class EngineHomeViewModel
             private const val TELEMETRY_FLUSH_MS = 10_000L
         }
     }
+
+/** Keep existing row positions; a first watch adds Continue Watching at the front of the feed. */
+internal fun replaceContinueWatchingRow(current: List<RenderRow>, fresh: List<RenderRow>): List<RenderRow> {
+    val refreshed = fresh.firstOrNull { it.id == "continue" }?.takeIf { it.items.isNotEmpty() }
+    val existingIndex = current.indexOfFirst { it.id == "continue" }
+    if (existingIndex < 0) return if (refreshed == null) current else listOf(refreshed) + current
+    return current.toMutableList().apply {
+        if (refreshed == null) removeAt(existingIndex) else set(existingIndex, refreshed)
+    }
+}
 
 /** UI state for the engine-driven home. */
 sealed interface EngineHomeState {
