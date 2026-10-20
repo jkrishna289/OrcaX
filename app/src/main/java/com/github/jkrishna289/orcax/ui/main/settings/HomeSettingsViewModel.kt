@@ -28,7 +28,6 @@ import com.github.jkrishna289.orcax.services.HomePageResolvedSettings
 import com.github.jkrishna289.orcax.services.HomeRowConfigDisplay
 import com.github.jkrishna289.orcax.services.HomeSettingsService
 import com.github.jkrishna289.orcax.services.NavDrawerService
-import com.github.jkrishna289.orcax.services.SeerrServerRepository
 import com.github.jkrishna289.orcax.services.UnsupportedHomeSettingsVersionException
 import com.github.jkrishna289.orcax.services.UserPreferencesService
 import com.github.jkrishna289.orcax.services.hilt.IoCoroutineScope
@@ -73,7 +72,6 @@ class HomeSettingsViewModel
         private val userPreferencesService: UserPreferencesService,
         private val navDrawerService: NavDrawerService,
         private val backdropService: BackdropService,
-        private val seerrServerRepository: SeerrServerRepository,
         val preferencesDataStore: DataStore<AppPreferences>,
         @param:IoCoroutineScope private val ioScope: CoroutineScope,
     ) : ViewModel() {
@@ -81,8 +79,6 @@ class HomeSettingsViewModel
         val state: StateFlow<HomePageSettingsState> = _state
 
         private var idCounter by Delegates.notNull<Int>()
-
-        val discoverEnabled = seerrServerRepository.active
 
         private var originalLocalSettings: HomePageSettings? = null
         private var originalRemoteSettings: HomePageSettings? = null
@@ -248,10 +244,6 @@ class HomeSettingsViewModel
                         MetaRowType.PLAYLIST,
                         -> {
                             throw IllegalArgumentException("Should use a different addRow() instead")
-                        }
-
-                        MetaRowType.DISCOVER -> {
-                            TODO()
                         }
                     }
                 updateState {

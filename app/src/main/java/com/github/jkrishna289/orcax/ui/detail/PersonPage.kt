@@ -41,11 +41,9 @@ import androidx.tv.material3.surfaceColorAtElevation
 import coil3.compose.AsyncImage
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.FavoriteWatchManager
 import com.github.jkrishna289.orcax.services.NavigationManager
-import com.github.jkrishna289.orcax.services.SeerrService
 import com.github.jkrishna289.orcax.ui.Cards
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.OneTimeLaunchedEffect
@@ -60,8 +58,6 @@ import com.github.jkrishna289.orcax.ui.components.OverviewText
 import com.github.jkrishna289.orcax.ui.data.ItemDetailsDialog
 import com.github.jkrishna289.orcax.ui.data.ItemDetailsDialogInfo
 import com.github.jkrishna289.orcax.ui.data.RowColumn
-import com.github.jkrishna289.orcax.ui.discover.DiscoverRow
-import com.github.jkrishna289.orcax.ui.discover.DiscoverRowData
 import com.github.jkrishna289.orcax.ui.formatDate
 import com.github.jkrishna289.orcax.ui.ifElse
 import com.github.jkrishna289.orcax.ui.isNotNullOrBlank
@@ -73,7 +69,6 @@ import com.github.jkrishna289.orcax.ui.theme.OrcaTheme
 import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import com.github.jkrishna289.orcax.util.ApiRequestPager
 import com.github.jkrishna289.orcax.util.DataLoadingState
-import com.github.jkrishna289.orcax.util.DiscoverRequestType
 import com.github.jkrishna289.orcax.util.GetItemsRequestHandler
 import com.github.jkrishna289.orcax.util.LoadingExceptionHandler
 import com.github.jkrishna289.orcax.util.LoadingState
@@ -99,12 +94,10 @@ class PersonViewModel
         api: ApiClient,
         val navigationManager: NavigationManager,
         private val favoriteWatchManager: FavoriteWatchManager,
-        private val seerrService: SeerrService,
     ) : LoadingItemViewModel(api) {
         val movies = MutableLiveData<RowLoadingState>(RowLoadingState.Pending)
         val series = MutableLiveData<RowLoadingState>(RowLoadingState.Pending)
         val episodes = MutableLiveData<RowLoadingState>(RowLoadingState.Pending)
-        val discovered = MutableStateFlow<List<DiscoverItem>>(listOf())
 
         fun init(itemId: UUID) {
             viewModelScope.launchIO(
@@ -129,10 +122,6 @@ class PersonViewModel
                         fetchRow(person.id, BaseItemKind.EPISODE, episodes)
                     } else {
                         episodes.setValueOnMain(RowLoadingState.Success(listOf()))
-                    }
-                    viewModelScope.launchIO {
-                        val results = seerrService.similar(person).orEmpty()
-                        discovered.update { results }
                     }
                 }
             }
@@ -196,7 +185,6 @@ fun PersonPage(
     val movies by viewModel.movies.observeAsState(RowLoadingState.Pending)
     val series by viewModel.series.observeAsState(RowLoadingState.Pending)
     val episodes by viewModel.episodes.observeAsState(RowLoadingState.Pending)
-    val discovered by viewModel.discovered.collectAsState()
 
     val loading by viewModel.loading.observeAsState(LoadingState.Loading)
     when (val state = loading) {
@@ -235,10 +223,6 @@ fun PersonPage(
                     favoriteOnClick = {
                         viewModel.setFavorite(!person.favorite)
                     },
-                    discovered = discovered,
-                    onClickDiscover = { index, item ->
-                        viewModel.navigationManager.navigateTo(item.destination)
-                    },
                     modifier = modifier,
                 )
                 AnimatedVisibility(showOverviewDialog) {
@@ -263,7 +247,6 @@ private const val HEADER_ROW = 0
 private const val MOVIE_ROW = 1
 private const val SERIES_ROW = 2
 private const val EPISODE_ROW = 3
-private const val DISCOVER_ROW = EPISODE_ROW + 1
 
 @Composable
 fun PersonPageContent(
@@ -278,11 +261,9 @@ fun PersonPageContent(
     movies: RowLoadingState,
     series: RowLoadingState,
     episodes: RowLoadingState,
-    discovered: List<DiscoverItem>,
     onClickItem: (Int, BaseItem) -> Unit,
     overviewOnClick: () -> Unit,
     favoriteOnClick: () -> Unit,
-    onClickDiscover: (Int, DiscoverItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -379,25 +360,6 @@ fun PersonPageContent(
                     )
                 },
             )
-        }
-        if (discovered.isNotEmpty()) {
-            item {
-                DiscoverRow(
-                    row =
-                        DiscoverRowData(
-                            stringResource(R.string.discover),
-                            DataLoadingState.Success(discovered),
-                            DiscoverRequestType.UNKNOWN,
-                        ),
-                    onClickItem = { index: Int, item: DiscoverItem ->
-                        position = RowColumn(DISCOVER_ROW, index)
-                        onClickDiscover.invoke(index, item)
-                    },
-                    onLongClickItem = { _, _ -> },
-                    onCardFocus = {},
-                    focusRequester = focusRequester,
-                )
-            }
         }
     }
 }

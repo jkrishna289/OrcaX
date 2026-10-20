@@ -193,13 +193,6 @@ fun SearchForContent(
                 )
             }
 
-            is SearchResult.SuccessSeerr -> {
-                Text(
-                    text = "Not supported",
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-
             is SearchResult.Success -> {
                 if (st.items.isEmpty()) {
                     Text(

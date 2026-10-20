@@ -46,15 +46,11 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
-import com.github.jkrishna289.orcax.data.model.SeerrItemType
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.NavigationManager
-import com.github.jkrishna289.orcax.services.SeerrService
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.Cards
 import com.github.jkrishna289.orcax.ui.SlimItemFields
-import com.github.jkrishna289.orcax.ui.cards.DiscoverItemCard
 import com.github.jkrishna289.orcax.ui.cards.EpisodeCard
 import com.github.jkrishna289.orcax.ui.cards.ItemRow
 import com.github.jkrishna289.orcax.ui.cards.SeasonCard
@@ -92,7 +88,6 @@ class SearchViewModel
     constructor(
         val api: ApiClient,
         val navigationManager: NavigationManager,
-        private val seerrService: SeerrService,
         val voiceInputManager: VoiceInputManager,
     ) : ViewModel() {
         val voiceState = voiceInputManager.state
@@ -106,7 +101,6 @@ class SearchViewModel
         val albums = MutableLiveData<SearchResult>(SearchResult.NoQuery)
         val artists = MutableLiveData<SearchResult>(SearchResult.NoQuery)
         val songs = MutableLiveData<SearchResult>(SearchResult.NoQuery)
-        val seerrResults = MutableLiveData<SearchResult>(SearchResult.NoQuery)
 
         private var currentQuery: String? = null
 
@@ -129,13 +123,11 @@ class SearchViewModel
                 searchInternal(query, BaseItemKind.MUSIC_ARTIST, artists)
                 searchInternal(query, BaseItemKind.AUDIO, songs)
                 searchInternal(query, BaseItemKind.BOX_SET, collections)
-                searchSeerr(query)
             } else {
                 movies.value = SearchResult.NoQuery
                 series.value = SearchResult.NoQuery
                 episodes.value = SearchResult.NoQuery
                 collections.value = SearchResult.NoQuery
-                seerrResults.value = SearchResult.NoQuery
             }
         }
 
@@ -171,20 +163,6 @@ class SearchViewModel
             }
         }
 
-        private fun searchSeerr(query: String) {
-            viewModelScope.launchIO {
-                if (seerrService.active.first()) {
-                    seerrResults.setValueOnMain(SearchResult.Searching)
-                    val results =
-                        seerrService
-                            .search(query)
-                            .map { seerrService.createDiscoverItem(it) }
-                            .filter { it.type == SeerrItemType.MOVIE || it.type == SeerrItemType.TV }
-                    seerrResults.setValueOnMain(SearchResult.SuccessSeerr(results))
-                }
-            }
-        }
-
         init {
             addCloseable(voiceInputManager)
         }
@@ -207,10 +185,6 @@ sealed interface SearchResult {
     data class Success(
         val items: List<BaseItem?>,
     ) : SearchResult
-
-    data class SuccessSeerr(
-        val items: List<DiscoverItem>,
-    ) : SearchResult
 }
 
 private const val SEARCH_ROW = 0
@@ -221,7 +195,6 @@ private const val ALBUM_ROW = EPISODE_ROW + 1
 private const val ARTIST_ROW = ALBUM_ROW + 1
 private const val SONG_ROW = ARTIST_ROW + 1
 private const val COLLECTION_ROW = SONG_ROW + 1
-private const val SEERR_ROW = COLLECTION_ROW + 1
 
 /** Delay for focus to settle after voice search dialog dismisses. */
 private const val VOICE_RESULT_FOCUS_DELAY_MS = 350L
@@ -241,11 +214,10 @@ fun SearchPage(
     val albums by viewModel.albums.observeAsState(SearchResult.NoQuery)
     val artists by viewModel.artists.observeAsState(SearchResult.NoQuery)
     val songs by viewModel.songs.observeAsState(SearchResult.NoQuery)
-    val seerrResults by viewModel.seerrResults.observeAsState(SearchResult.NoQuery)
 
 //    val query = rememberTextFieldState()
     var query by rememberSaveable { mutableStateOf("") }
-    val focusRequesters = remember { List(SEERR_ROW + 1) { FocusRequester() } }
+    val focusRequesters = remember { List(COLLECTION_ROW + 1) { FocusRequester() } }
 
     var position by rememberPosition(0, 0)
     var searchClicked by rememberSaveable { mutableStateOf(false) }
@@ -282,14 +254,14 @@ fun SearchPage(
         viewModel.navigationManager.navigateTo(item.destination())
     }
 
-    LaunchedEffect(searchClicked, movies, collections, series, episodes, seerrResults) {
+    LaunchedEffect(searchClicked, movies, collections, series, episodes) {
         if (!searchClicked) return@LaunchedEffect
 
         withContext(Dispatchers.IO) {
             // Want to focus on the first successful row after all of the ones before it are finished searching
-            val results = listOf(movies, collections, series, episodes, seerrResults)
+            val results = listOf(movies, collections, series, episodes)
             val firstSuccess =
-                results.indexOfFirst { it is SearchResult.Success || it is SearchResult.SuccessSeerr }
+                results.indexOfFirst { it is SearchResult.Success }
             if (firstSuccess >= 0) {
                 val anyBeforeSearching =
                     results.subList(0, firstSuccess).any { it is SearchResult.Searching }
@@ -500,30 +472,6 @@ fun SearchPage(
             onClickPosition = { position = it },
             modifier = Modifier.fillMaxWidth(),
         )
-        searchResultRow(
-            title = R.string.discover,
-            result = seerrResults,
-            rowIndex = SEERR_ROW,
-            position = position,
-            focusRequester = focusRequesters[SEERR_ROW],
-            onClickItem = { _, _ ->
-                // no-op
-            },
-            onClickDiscover = { _, item ->
-                val dest =
-                    if (item.jellyfinItemId != null && item.type.baseItemKind != null) {
-                        Destination.MediaItem(
-                            itemId = item.jellyfinItemId,
-                            type = item.type.baseItemKind,
-                        )
-                    } else {
-                        Destination.DiscoveredItem(item)
-                    }
-                viewModel.navigationManager.navigateTo(dest)
-            },
-            onClickPosition = { position = it },
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -536,7 +484,6 @@ fun LazyListScope.searchResultRow(
     onClickItem: (Int, BaseItem) -> Unit,
     onClickPosition: (RowColumn) -> Unit,
     modifier: Modifier = Modifier,
-    onClickDiscover: ((Int, DiscoverItem) -> Unit)? = null,
     cardContent: @Composable (
         index: Int,
         item: BaseItem?,
@@ -595,36 +542,6 @@ fun LazyListScope.searchResultRow(
                         onLongClickItem = { _, _ -> },
                         modifier = modifier.focusRequester(focusRequester),
                         cardContent = cardContent,
-                    )
-                }
-            }
-
-            is SearchResult.SuccessSeerr -> {
-                if (r.items.isEmpty()) {
-                    SearchResultPlaceholder(
-                        title = stringResource(title),
-                        message = stringResource(R.string.no_results),
-                        modifier = modifier,
-                    )
-                } else {
-                    ItemRow(
-                        title = stringResource(title),
-                        items = r.items,
-                        onClickItem = { index, item ->
-                            onClickPosition.invoke(RowColumn(rowIndex, index))
-                            onClickDiscover?.invoke(index, item)
-                        },
-                        onLongClickItem = { _, _ -> },
-                        modifier = modifier.focusRequester(focusRequester),
-                        cardContent = { index: Int, item: DiscoverItem?, mod: Modifier, onClick: () -> Unit, onLongClick: () -> Unit ->
-                            DiscoverItemCard(
-                                item = item,
-                                onClick = onClick,
-                                onLongClick = onLongClick,
-                                showOverlay = true,
-                                modifier = mod,
-                            )
-                        },
                     )
                 }
             }

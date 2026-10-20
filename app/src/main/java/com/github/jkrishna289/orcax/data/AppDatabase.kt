@@ -1,10 +1,12 @@
 package com.github.jkrishna289.orcax.data
 
 import androidx.room.AutoMigration
+import androidx.room.DeleteTable
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.github.jkrishna289.orcax.data.model.GetItemsFilter
@@ -17,8 +19,6 @@ import com.github.jkrishna289.orcax.data.model.NavDrawerPinnedItem
 import com.github.jkrishna289.orcax.data.model.PlaybackEffect
 import com.github.jkrishna289.orcax.data.model.PlaybackLanguageChoice
 import com.github.jkrishna289.orcax.data.model.QualityPreference
-import com.github.jkrishna289.orcax.data.model.SeerrServer
-import com.github.jkrishna289.orcax.data.model.SeerrUser
 import com.github.jkrishna289.orcax.ui.components.ViewOptions
 import kotlinx.serialization.json.Json
 import org.jellyfin.sdk.model.api.ItemSortBy
@@ -37,12 +37,10 @@ import java.util.UUID
         PlaybackEffect::class,
         PlaybackLanguageChoice::class,
         ItemTrackModification::class,
-        SeerrServer::class,
-        SeerrUser::class,
         QualityPreference::class,
 
     ],
-    version = 32,
+    version = 33,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(3, 4),
@@ -58,6 +56,7 @@ import java.util.UUID
         AutoMigration(20, 30),
         AutoMigration(30, 31),
         AutoMigration(31, 32),
+        AutoMigration(32, 33, spec = DropSeerrTables::class),
     ],
 )
 @TypeConverters(Converters::class)
@@ -72,12 +71,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun playbackLanguageChoiceDao(): PlaybackLanguageChoiceDao
 
-    abstract fun seerrServerDao(): SeerrServerDao
-
     abstract fun playbackEffectDao(): PlaybackEffectDao
 
     abstract fun qualityPreferenceDao(): QualityPreferenceDao
 }
+
+@DeleteTable(tableName = "seerr_users")
+@DeleteTable(tableName = "seerr_servers")
+class DropSeerrTables : AutoMigrationSpec
 
 class Converters {
     @TypeConverter

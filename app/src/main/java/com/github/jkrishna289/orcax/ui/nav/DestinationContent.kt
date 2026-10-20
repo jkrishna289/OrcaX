@@ -7,7 +7,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.data.filter.DefaultForGenresFilterOptions
 import com.github.jkrishna289.orcax.data.filter.DefaultForStudiosFilterOptions
-import com.github.jkrishna289.orcax.data.model.SeerrItemType
 import com.github.jkrishna289.orcax.preferences.PlayerBackend
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.ui.components.ItemGrid
@@ -26,10 +25,7 @@ import com.github.jkrishna289.orcax.ui.detail.FavoritesPage
 import com.github.jkrishna289.orcax.ui.detail.PersonPage
 import com.github.jkrishna289.orcax.ui.detail.PlaylistDetails
 import com.github.jkrishna289.orcax.ui.detail.collection.CollectionDetails
-import com.github.jkrishna289.orcax.ui.detail.discover.DiscoverMovieDetails
 import com.github.jkrishna289.orcax.ui.detail.engine.EngineDetailsPage
-import com.github.jkrishna289.orcax.ui.detail.discover.DiscoverPersonPage
-import com.github.jkrishna289.orcax.ui.detail.discover.DiscoverSeriesDetails
 import com.github.jkrishna289.orcax.ui.detail.episode.EpisodeDetails
 import com.github.jkrishna289.orcax.ui.detail.movie.MovieDetails
 import com.github.jkrishna289.orcax.ui.detail.music.AlbumDetailsPage
@@ -37,8 +33,6 @@ import com.github.jkrishna289.orcax.ui.detail.music.ArtistDetailsPage
 import com.github.jkrishna289.orcax.ui.detail.music.NowPlayingPage
 import com.github.jkrishna289.orcax.ui.detail.series.SeriesDetails
 import com.github.jkrishna289.orcax.ui.detail.series.SeriesOverview
-import com.github.jkrishna289.orcax.ui.discover.DiscoverPage
-import com.github.jkrishna289.orcax.ui.discover.DiscoverRequestGrid
 import com.github.jkrishna289.orcax.ui.main.HomePage
 import com.github.jkrishna289.orcax.ui.main.SearchPage
 import com.github.jkrishna289.orcax.ui.main.settings.HomeSettingsPage
@@ -347,58 +341,8 @@ fun DestinationContent(
             com.github.jkrishna289.orcax.ui.engine.EngineCardPreviewScreen(modifier = modifier)
         }
 
-        Destination.Discover -> {
-            DiscoverPage(
-                preferences = preferences,
-                modifier = modifier,
-            )
-        }
-
         is Destination.EngineItem -> {
             EngineDetailsPage(
-                destination = destination,
-                modifier = modifier,
-            )
-        }
-
-        is Destination.DiscoveredItem -> {
-            when (destination.item.type) {
-                SeerrItemType.MOVIE -> {
-                    DiscoverMovieDetails(
-                        preferences = preferences,
-                        destination = destination,
-                        modifier = modifier,
-                    )
-                }
-
-                SeerrItemType.TV -> {
-                    DiscoverSeriesDetails(
-                        preferences = preferences,
-                        destination = destination,
-                        modifier = modifier,
-                    )
-                }
-
-                SeerrItemType.PERSON -> {
-                    LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-                    DiscoverPersonPage(
-                        person = destination.item,
-                        modifier = modifier,
-                    )
-                }
-
-                SeerrItemType.UNKNOWN -> {
-                    Text(
-                        text = "Unknown discover type",
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-        }
-
-        is Destination.DiscoverMoreResult -> {
-            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            DiscoverRequestGrid(
                 destination = destination,
                 modifier = modifier,
             )

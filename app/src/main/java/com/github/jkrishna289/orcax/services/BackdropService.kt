@@ -15,7 +15,6 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.request.bitmapConfig
 import com.github.jkrishna289.orcax.data.model.BaseItem
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.BackdropStyle
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -87,11 +86,6 @@ class BackdropService
                 if (it.itemId == itemId) it.copy(trailerUrl = trailerUrl) else it
             }
         }
-
-        /**
-         * Update the backdrop to use the specified discovered item
-         */
-        suspend fun submit(item: DiscoverItem) = submit("discover_${item.id}", item.backDropUrl)
 
         /**
          * Update the backdrop to use the specified URL

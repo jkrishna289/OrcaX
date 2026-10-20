@@ -9,7 +9,6 @@ import com.github.jkrishna289.orcax.data.ExtrasItem
 import com.github.jkrishna289.orcax.data.ItemPlaybackRepository
 import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.data.model.BaseItem
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.data.model.Person
 import com.github.jkrishna289.orcax.data.model.Trailer
@@ -21,7 +20,6 @@ import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.PeopleFavorites
-import com.github.jkrishna289.orcax.services.SeerrService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.ThemeSongPlayer
 import com.github.jkrishna289.orcax.services.TrailerService
@@ -97,7 +95,6 @@ class SeriesViewModel
         val mediaReportService: MediaReportService,
         private val userPreferencesService: UserPreferencesService,
         private val backdropService: BackdropService,
-        private val seerrService: SeerrService,
         private val mediaManagementService: MediaManagementService,
         @Assisted val seriesId: UUID,
         @Assisted val seasonEpisodeIds: SeasonEpisodeIds?,
@@ -123,8 +120,6 @@ class SeriesViewModel
         val canDeleteSeries = MutableStateFlow(false)
 
         val peopleInEpisode = MutableLiveData<PeopleInItem>(PeopleInItem())
-        val discovered = MutableStateFlow<List<DiscoverItem>>(listOf())
-        val discoverSeries = MutableStateFlow<DiscoverItem?>(null)
 
         val position = MutableStateFlow(SeriesOverviewPosition(0, 0))
 
@@ -228,28 +223,6 @@ class SeriesViewModel
                                     ).content.items
                                     .map { BaseItem.from(it, api, true) }
                             this@SeriesViewModel.similar.setValueOnMain(similar)
-                        }
-                    }
-                    viewModelScope.launchIO {
-                        val results = seerrService.similar(item).orEmpty()
-                        discovered.update { results }
-                    }
-                    viewModelScope.launchIO {
-                        seerrService.active.collectLatest { active ->
-                            val tv =
-                                if (active) {
-                                    try {
-                                        seerrService
-                                            .getTvSeries(item)
-                                            ?.let { seerrService.createDiscoverItem(it) }
-                                    } catch (ex: Exception) {
-                                        Timber.e(ex)
-                                        null
-                                    }
-                                } else {
-                                    null
-                                }
-                            discoverSeries.update { tv }
                         }
                     }
                 }

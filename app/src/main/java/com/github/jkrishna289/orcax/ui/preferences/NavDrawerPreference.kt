@@ -46,7 +46,6 @@ import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.NavDrawerItemState
 import com.github.jkrishna289.orcax.services.NavDrawerService
 import com.github.jkrishna289.orcax.services.NavigationManager
-import com.github.jkrishna289.orcax.services.SeerrServerRepository
 import com.github.jkrishna289.orcax.ui.FontAwesome
 import com.github.jkrishna289.orcax.ui.PreviewTvSpec
 import com.github.jkrishna289.orcax.ui.components.BasicDialog
@@ -290,7 +289,6 @@ class NavDrawerPreferencesViewModel
         private val serverRepository: ServerRepository,
         private val navDrawerService: NavDrawerService,
         private val serverPreferencesDao: ServerPreferencesDao,
-        private val seerrServerRepository: SeerrServerRepository,
     ) : ViewModel() {
         val state = MutableStateFlow<List<NavDrawerPin>>(listOf())
 
@@ -298,8 +296,7 @@ class NavDrawerPreferencesViewModel
             viewModelScope.launchDefault {
                 val state = navDrawerService.state.value
                 val user = serverRepository.currentUser.value
-                val seerr = seerrServerRepository.active.firstOrNull()
-                if (state == NavDrawerItemState.EMPTY || user == null || seerr == null) {
+                if (state == NavDrawerItemState.EMPTY || user == null) {
                     return@launchDefault
                 }
                 val navDrawerPins =
@@ -313,19 +310,15 @@ class NavDrawerPreferencesViewModel
                     allItems
                         .sortedBy {
                             navDrawerPins[it.id]?.order?.takeIf { it >= 0 } ?: Int.MAX_VALUE
-                        }.mapNotNull {
-                            if (!seerr && it is NavDrawerItem.Discover) {
-                                null
-                            } else {
-                                // Assume pinned if unknown
-                                val pinned = navDrawerPins[it.id]?.type ?: NavPinType.PINNED
-                                NavDrawerPin(
-                                    it.id,
-                                    it.name(context),
-                                    pinned == NavPinType.PINNED,
-                                    it,
-                                )
-                            }
+                        }.map {
+                            // Assume pinned if unknown
+                            val pinned = navDrawerPins[it.id]?.type ?: NavPinType.PINNED
+                            NavDrawerPin(
+                                it.id,
+                                it.name(context),
+                                pinned == NavPinType.PINNED,
+                                it,
+                            )
                         }
                 this@NavDrawerPreferencesViewModel.state.value = pins
             }

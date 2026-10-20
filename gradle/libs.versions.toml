@@ -43,7 +43,6 @@ paletteKtx = "1.0.0"
 assMedia = "0.4.0"
 kotlinxCoroutinesTest = "1.11.0"
 coreTesting = "2.2.0"
-openapi-generator = "7.22.0"
 runner = "1.7.0"
 wholphin-extensions = "0.1.3"
 
@@ -153,4 +152,3 @@ protobuf = { id = "com.google.protobuf", version.ref = "protobuf" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 room = { id = "androidx.room", version.ref = "room" }
 aboutLibraries = { id = "com.mikepenz.aboutlibraries.plugin.android", version.ref = "aboutLibraries" }
-openapi-generator = { id = "org.openapi.generator", version.ref = "openapi-generator" }

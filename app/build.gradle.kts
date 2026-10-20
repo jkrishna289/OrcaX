@@ -15,7 +15,6 @@ plugins {
     alias(libs.plugins.protobuf)
     alias(libs.plugins.kotlin.plugin.serialization)
     alias(libs.plugins.aboutLibraries)
-    alias(libs.plugins.openapi.generator)
 }
 
 val isCI = if (System.getenv("CI") != null) System.getenv("CI").toBoolean() else false
@@ -150,7 +149,6 @@ android {
     productFlavors {
         val featureLeanback = "leanback"
         val featureUpdate = "UPDATING_ENABLED"
-        val featureDiscover = "DISCOVER_ENABLED"
 
         fun ProductFlavor.setFeatureFlag(
             name: String,
@@ -163,19 +161,16 @@ android {
             isDefault = true
             manifestPlaceholders += mapOf(featureLeanback to false)
             setFeatureFlag(featureUpdate, true)
-            setFeatureFlag(featureDiscover, true)
         }
         create("appstore") {
             dimension = "version"
             manifestPlaceholders += mapOf(featureLeanback to true)
             setFeatureFlag(featureUpdate, false)
-            setFeatureFlag(featureDiscover, true)
         }
         create("firetv") {
             dimension = "version"
             manifestPlaceholders += mapOf(featureLeanback to true)
             setFeatureFlag(featureUpdate, false)
-            setFeatureFlag(featureDiscover, false)
         }
     }
     compileOptions {
@@ -212,12 +207,6 @@ android {
         jniLibs {
             // Work around because libass-android & wholphin-mpv both (incorrectly) package libc++_shared.so
             pickFirsts += "lib/*/libc++_shared.so"
-        }
-    }
-
-    sourceSets {
-        getByName("main") {
-            kotlin.directories += "$buildDir/generated/seerr_api/src/main/kotlin"
         }
     }
 
@@ -262,33 +251,6 @@ aboutLibraries {
         duplicationMode = DuplicateMode.MERGE
         duplicationRule = DuplicateRule.SIMPLE
     }
-}
-
-openApiGenerate {
-    generatorName.set("kotlin")
-    inputSpec.set("$projectDir/src/main/seerr/seerr-api.yml")
-    templateDir.set("$projectDir/src/main/seerr/templates")
-    outputDir.set("$buildDir/generated/seerr_api")
-    apiPackage.set("com.github.jkrishna289.orcax.api.seerr")
-    modelPackage.set("com.github.jkrishna289.orcax.api.seerr.model")
-    groupId.set("com.github.jkrishna289.orcax.api.seerr")
-    id.set("seerr-api")
-    packageName.set("com.github.jkrishna289.orcax.api.seerr")
-    additionalProperties.apply {
-        put("serializationLibrary", "kotlinx_serialization")
-        put("sortModelPropertiesByRequiredFlag", true)
-        put("sortParamsByRequiredFlag", true)
-        put("useCoroutines", true)
-        put("enumPropertyNaming", "UPPERCASE")
-        put("modelMutable", false)
-
-        // Note: this is only for downloading files, so it's not necessary to enable
-        put("supportAndroidApiLevel25AndBelow", false)
-    }
-}
-
-tasks.named("preBuild") {
-    dependsOn.add(tasks.named("openApiGenerate"))
 }
 
 dependencies {

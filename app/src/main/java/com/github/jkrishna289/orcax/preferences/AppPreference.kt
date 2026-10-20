@@ -1037,13 +1037,6 @@ sealed interface AppPreference<Pref, T> {
                 summaryOff = R.string.disabled,
             )
 
-        val SeerrIntegration =
-            AppClickablePreference<AppPreferences>(
-                title = R.string.seerr_integration,
-                getter = { },
-                setter = { prefs, _ -> prefs },
-            )
-
         val QuickConnect =
             AppClickablePreference<AppPreferences>(
                 title = R.string.quick_connect,
@@ -1161,9 +1154,6 @@ val basicPreferences =
             title = R.string.more,
             preferences =
                 buildList {
-                    if (BuildConfig.DISCOVER_ENABLED) {
-                        add(AppPreference.SeerrIntegration)
-                    }
                     add(AppPreference.AdvancedSettings)
                 },
         ),

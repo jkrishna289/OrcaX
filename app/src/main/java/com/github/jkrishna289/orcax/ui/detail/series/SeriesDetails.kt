@@ -45,7 +45,6 @@ import androidx.tv.material3.MaterialTheme
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.ExtrasItem
 import com.github.jkrishna289.orcax.data.model.BaseItem
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.Person
 import com.github.jkrishna289.orcax.data.model.Trailer
 import com.github.jkrishna289.orcax.data.model.studioNames
@@ -82,14 +81,11 @@ import com.github.jkrishna289.orcax.ui.detail.PlaylistDialog
 import com.github.jkrishna289.orcax.ui.detail.PlaylistLoadingState
 import com.github.jkrishna289.orcax.ui.detail.buildMoreDialogItemsForHome
 import com.github.jkrishna289.orcax.ui.detail.buildMoreDialogItemsForPerson
-import com.github.jkrishna289.orcax.ui.discover.DiscoverRow
-import com.github.jkrishna289.orcax.ui.discover.DiscoverRowData
 import com.github.jkrishna289.orcax.ui.launchDefault
 import com.github.jkrishna289.orcax.ui.letNotEmpty
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.ui.rememberInt
 import com.github.jkrishna289.orcax.util.DataLoadingState
-import com.github.jkrishna289.orcax.util.DiscoverRequestType
 import com.github.jkrishna289.orcax.util.ExceptionHandler
 import com.github.jkrishna289.orcax.util.LoadingState
 import kotlinx.coroutines.launch
@@ -123,8 +119,6 @@ fun SeriesDetails(
     val extras by viewModel.extras.observeAsState(listOf())
     val people by viewModel.people.observeAsState(listOf())
     val similar by viewModel.similar.observeAsState(listOf())
-    val discovered by viewModel.discovered.collectAsState()
-    val discoverSeries by viewModel.discoverSeries.collectAsState()
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
 
     var overviewDialog by remember { mutableStateOf<ItemDetailsDialogInfo?>(null) }
@@ -235,16 +229,6 @@ fun SeriesDetails(
                     onClickExtra = { _, extra ->
                         viewModel.navigateTo(extra.destination)
                     },
-                    discoverSeries = discoverSeries,
-                    onClickDiscoverSeries = {
-                        discoverSeries?.let {
-                            viewModel.navigateTo(Destination.DiscoveredItem(it))
-                        }
-                    },
-                    discovered = discovered,
-                    onClickDiscover = { index, item ->
-                        viewModel.navigateTo(item.destination)
-                    },
                     moreActions =
                         MoreDialogActions(
                             navigateTo = { viewModel.navigateTo(it) },
@@ -335,7 +319,6 @@ private const val PEOPLE_ROW = SEASONS_ROW + 1
 private const val TRAILER_ROW = PEOPLE_ROW + 1
 private const val EXTRAS_ROW = TRAILER_ROW + 1
 private const val SIMILAR_ROW = EXTRAS_ROW + 1
-private const val DISCOVER_ROW = SIMILAR_ROW + 1
 
 @Composable
 fun SeriesDetailsContent(
@@ -346,7 +329,6 @@ fun SeriesDetailsContent(
     trailers: List<Trailer>,
     extras: List<ExtrasItem>,
     people: List<Person>,
-    discovered: List<DiscoverItem>,
     played: Boolean,
     favorite: Boolean,
     canDelete: Boolean,
@@ -360,9 +342,6 @@ fun SeriesDetailsContent(
     trailerOnClick: (Trailer) -> Unit,
     onClickExtra: (Int, ExtrasItem) -> Unit,
     moreActions: MoreDialogActions,
-    onClickDiscover: (Int, DiscoverItem) -> Unit,
-    discoverSeries: DiscoverItem?,
-    onClickDiscoverSeries: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -370,7 +349,7 @@ fun SeriesDetailsContent(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
     var position by rememberInt()
-    val focusRequesters = remember { List(DISCOVER_ROW + 1) { FocusRequester() } }
+    val focusRequesters = remember { List(SIMILAR_ROW + 1) { FocusRequester() } }
     val playFocusRequester = remember { FocusRequester() }
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
     var moreDialog by remember { mutableStateOf<DialogParams?>(null) }
@@ -501,25 +480,6 @@ fun SeriesDetailsContent(
                                         },
                             )
                         }
-                        AnimatedVisibility(
-                            visible = discoverSeries != null,
-                            enter = fadeIn(),
-                            exit = fadeOut(),
-                        ) {
-                            ExpandableFaButton(
-                                title = R.string.discover,
-                                iconStringRes = R.string.fa_magnifying_glass_plus,
-                                onClick = onClickDiscoverSeries,
-                                modifier =
-                                    Modifier.onFocusChanged {
-                                        if (it.isFocused) {
-                                            scope.launch(ExceptionHandler()) {
-                                                bringIntoViewRequester.bringIntoView()
-                                            }
-                                        }
-                                    },
-                            )
-                        }
                     }
                 }
                 item {
@@ -641,25 +601,6 @@ fun SeriesDetailsContent(
                                 Modifier
                                     .fillMaxWidth()
                                     .focusRequester(focusRequesters[SIMILAR_ROW]),
-                        )
-                    }
-                }
-                if (discovered.isNotEmpty()) {
-                    item {
-                        DiscoverRow(
-                            row =
-                                DiscoverRowData(
-                                    stringResource(R.string.discover),
-                                    DataLoadingState.Success(discovered),
-                                    type = DiscoverRequestType.UNKNOWN,
-                                ),
-                            onClickItem = { index: Int, item: DiscoverItem ->
-                                position = DISCOVER_ROW
-                                onClickDiscover.invoke(index, item)
-                            },
-                            onLongClickItem = { _, _ -> },
-                            onCardFocus = {},
-                            focusRequester = focusRequesters[DISCOVER_ROW],
                         )
                     }
                 }

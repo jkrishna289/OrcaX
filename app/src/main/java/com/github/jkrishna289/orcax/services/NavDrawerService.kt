@@ -50,7 +50,6 @@ class NavDrawerService
         private val api: ApiClient,
         private val serverRepository: ServerRepository,
         private val serverPreferencesDao: ServerPreferencesDao,
-        private val seerrServerRepository: SeerrServerRepository,
         private val musicService: MusicService,
     ) {
         private val _state = MutableStateFlow(NavDrawerItemState.EMPTY)
@@ -76,12 +75,6 @@ class NavDrawerService
                 }.catch { ex ->
                     Timber.e(ex, "Error updating nav drawer")
                     showToast(context, "Error fetching user's views")
-                }.launchIn(coroutineScope)
-
-            // Handle when the user has logged into a Seerr server
-            seerrServerRepository.active
-                .onEach { discoverActive ->
-                    _state.update { it.copy(discoverEnabled = discoverActive) }
                 }.launchIn(coroutineScope)
 
             // Handle when music is actively playing or not
@@ -181,7 +174,7 @@ class NavDrawerService
             user: JellyfinUser,
             userDto: UserDto,
         ) {
-            val builtins = listOf(NavDrawerItem.Favorites, NavDrawerItem.Discover)
+            val builtins = listOf(NavDrawerItem.Favorites)
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =
                 allLibraries
@@ -239,12 +232,11 @@ class NavDrawerService
 data class NavDrawerItemState(
     val items: List<NavDrawerItem>,
     val moreItems: List<NavDrawerItem>,
-    val discoverEnabled: Boolean,
     val nowPlayingEnabled: Boolean,
     val nowPlayingTitle: String?,
 ) {
     companion object {
-        val EMPTY = NavDrawerItemState(emptyList(), emptyList(), false, false, null)
+        val EMPTY = NavDrawerItemState(emptyList(), emptyList(), false, null)
     }
 }
 

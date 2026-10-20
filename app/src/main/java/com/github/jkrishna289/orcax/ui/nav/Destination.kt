@@ -6,7 +6,6 @@ import androidx.annotation.StringRes
 import androidx.navigation3.runtime.NavKey
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.data.model.CollectionFolderFilter
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.GetItemsFilter
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.engine.RenderItem
@@ -14,8 +13,6 @@ import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
 import com.github.jkrishna289.orcax.ui.data.SortAndDirection
 import com.github.jkrishna289.orcax.ui.detail.series.SeasonEpisodeIds
 import com.github.jkrishna289.orcax.ui.preferences.PreferenceScreenOption
-import com.github.jkrishna289.orcax.util.DiscoverRequestType
-import com.github.jkrishna289.orcax.util.SEERR_PAGE_SIZE
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -132,32 +129,16 @@ sealed class Destination(
     @Serializable
     data object Categories : Destination(false)
 
-    @Serializable
-    data object Discover : Destination(false)
-
-    @Serializable
-    data class DiscoveredItem(
-        val item: DiscoverItem,
-    ) : Destination(false)
-
     /**
      * Details for a title the engine knows about but the library doesn't hold.
      *
      * Carries the whole [RenderItem] rather than an id: the card already has the title, synopsis,
      * artwork and badges, so the page paints immediately with no second fetch — and, more to the
-     * point, there is no Jellyfin item to fetch. Distinct from [DiscoveredItem], which is the
-     * Jellyseerr-backed page; this one asks only the engine, so it works on a server with no
-     * Jellyseerr configured on the client.
+     * point, there is no Jellyfin item to fetch.
      */
     @Serializable
     data class EngineItem(
         val item: RenderItem,
-    ) : Destination(false)
-
-    @Serializable
-    data class DiscoverMoreResult(
-        val type: DiscoverRequestType,
-        val startIndex: Int = SEERR_PAGE_SIZE,
     ) : Destination(false)
 
     @Serializable

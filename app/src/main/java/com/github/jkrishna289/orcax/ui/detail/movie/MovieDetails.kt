@@ -34,7 +34,6 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.ExtrasItem
 import com.github.jkrishna289.orcax.data.model.BaseItem
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.Person
 import com.github.jkrishna289.orcax.data.model.Trailer
 import com.github.jkrishna289.orcax.data.model.aspectRatioFloat
@@ -66,13 +65,10 @@ import com.github.jkrishna289.orcax.ui.detail.PlaylistLoadingState
 import com.github.jkrishna289.orcax.ui.detail.buildMoreDialogItems
 import com.github.jkrishna289.orcax.ui.detail.buildMoreDialogItemsForHome
 import com.github.jkrishna289.orcax.ui.detail.buildMoreDialogItemsForPerson
-import com.github.jkrishna289.orcax.ui.discover.DiscoverRow
-import com.github.jkrishna289.orcax.ui.discover.DiscoverRowData
 import com.github.jkrishna289.orcax.ui.letNotEmpty
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.ui.rememberInt
 import com.github.jkrishna289.orcax.util.DataLoadingState
-import com.github.jkrishna289.orcax.util.DiscoverRequestType
 import com.github.jkrishna289.orcax.util.ExceptionHandler
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -298,9 +294,6 @@ fun MovieDetails(
                 onClickExtra = { index, extra ->
                     viewModel.navigateTo(extra.destination)
                 },
-                onClickDiscover = { index, item ->
-                    viewModel.navigateTo(item.destination)
-                },
                 canDelete = state.canDelete,
                 deleteOnClick = { showDeleteDialog = state.movie },
                 requestOnClick = viewModel::requestMedia,
@@ -373,7 +366,6 @@ private const val TRAILER_ROW = PEOPLE_ROW + 1
 private const val CHAPTER_ROW = TRAILER_ROW + 1
 private const val EXTRAS_ROW = CHAPTER_ROW + 1
 private const val SIMILAR_ROW = EXTRAS_ROW + 1
-private const val DISCOVER_ROW = SIMILAR_ROW + 1
 
 private const val DETAILS_ROW_PARENT_FRACTION = 0.18f
 
@@ -417,7 +409,6 @@ fun MovieDetailsContent(
     onLongClickPerson: (Int, Person) -> Unit,
     onLongClickSimilar: (Int, BaseItem) -> Unit,
     onClickExtra: (Int, ExtrasItem) -> Unit,
-    onClickDiscover: (Int, DiscoverItem) -> Unit,
     canDelete: Boolean,
     deleteOnClick: () -> Unit,
     requestOnClick: () -> Unit,
@@ -426,7 +417,7 @@ fun MovieDetailsContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var position by rememberInt(0)
-    val focusRequesters = remember { List(DISCOVER_ROW + 1) { FocusRequester() } }
+    val focusRequesters = remember { List(SIMILAR_ROW + 1) { FocusRequester() } }
     val dto = movie.data
     val resumePosition = dto.userData?.playbackPositionTicks?.ticks ?: Duration.ZERO
 
@@ -562,25 +553,6 @@ fun MovieDetailsContent(
                         itemId = movie.id,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                }
-                state.discovered.letNotEmpty { discovered ->
-                    item {
-                        DiscoverRow(
-                            row =
-                                DiscoverRowData(
-                                    stringResource(R.string.discover),
-                                    DataLoadingState.Success(discovered),
-                                    type = DiscoverRequestType.UNKNOWN,
-                                ),
-                            onClickItem = { index: Int, item: DiscoverItem ->
-                                position = DISCOVER_ROW
-                                onClickDiscover.invoke(index, item)
-                            },
-                            onLongClickItem = { _, _ -> },
-                            onCardFocus = {},
-                            focusRequester = focusRequesters[DISCOVER_ROW],
-                        )
-                    }
                 }
             }
         }

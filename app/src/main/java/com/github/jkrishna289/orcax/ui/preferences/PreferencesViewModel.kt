@@ -21,7 +21,6 @@ import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.Release
 import com.github.jkrishna289.orcax.services.ScreensaverService
-import com.github.jkrishna289.orcax.services.SeerrServerRepository
 import com.github.jkrishna289.orcax.services.UpdateChecker
 import com.github.jkrishna289.orcax.ui.detail.DebugViewModel.Companion.sendAppLogs
 import com.github.jkrishna289.orcax.ui.launchIO
@@ -52,15 +51,12 @@ class PreferencesViewModel
         val screensaverService: ScreensaverService,
         private val rememberTabManager: RememberTabManager,
         private val serverRepository: ServerRepository,
-        private val seerrServerRepository: SeerrServerRepository,
         private val deviceInfo: DeviceInfo,
         private val clientInfo: ClientInfo,
         private val updateChecker: UpdateChecker,
     ) : ViewModel(),
         RememberTabManager by rememberTabManager {
         val currentUser get() = serverRepository.currentUser
-
-        val seerrConnection = seerrServerRepository.connection
 
         private val _quickConnectStatus = MutableStateFlow<LoadingState>(LoadingState.Pending)
         val quickConnectStatus: StateFlow<LoadingState> = _quickConnectStatus

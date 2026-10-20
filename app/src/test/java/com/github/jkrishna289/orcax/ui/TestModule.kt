@@ -20,12 +20,10 @@ import com.github.jkrishna289.orcax.data.Migrations
 import com.github.jkrishna289.orcax.data.PlaybackEffectDao
 import com.github.jkrishna289.orcax.data.PlaybackLanguageChoiceDao
 import com.github.jkrishna289.orcax.data.QualityPreferenceDao
-import com.github.jkrishna289.orcax.data.SeerrServerDao
 import com.github.jkrishna289.orcax.data.ServerPreferencesDao
 import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.AppPreferencesSerializer
-import com.github.jkrishna289.orcax.services.SeerrApi
 import com.github.jkrishna289.orcax.services.hilt.AppModule
 import com.github.jkrishna289.orcax.services.hilt.AuthOkHttpClient
 import com.github.jkrishna289.orcax.services.hilt.DatabaseModule
@@ -207,12 +205,6 @@ object TestModule {
     fun workManager(
         @ApplicationContext context: Context,
     ): WorkManager = mockk()
-
-    @Provides
-    @Singleton
-    fun seerrApi(
-        @StandardOkHttpClient okHttpClient: OkHttpClient,
-    ): SeerrApi = mockk()
 }
 
 @Module
@@ -259,10 +251,6 @@ object TestDatabaseModule {
         @Provides
         @Singleton
         fun playbackLanguageChoiceDao(db: AppDatabase): PlaybackLanguageChoiceDao = db.playbackLanguageChoiceDao()
-
-        @Provides
-        @Singleton
-        fun seerrServerDao(db: AppDatabase): SeerrServerDao = db.seerrServerDao()
 
         @Provides
         @Singleton

@@ -6,7 +6,6 @@ import android.os.Build
 import androidx.core.content.edit
 import androidx.datastore.core.DataStore
 import androidx.preference.PreferenceManager
-import com.github.jkrishna289.orcax.data.SeerrServerDao
 import com.github.jkrishna289.orcax.preferences.AppPreference
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.ScreensaverPreference
@@ -23,7 +22,6 @@ import com.github.jkrishna289.orcax.preferences.updateScreensaverPreferences
 import com.github.jkrishna289.orcax.preferences.updateSubtitlePreferences
 import com.github.jkrishna289.orcax.ui.preferences.PreferencesViewModel
 import com.github.jkrishna289.orcax.ui.preferences.subtitle.SubtitleSettings
-import com.github.jkrishna289.orcax.ui.setup.seerr.migrateSeerrUrl
 import com.github.jkrishna289.orcax.util.Version
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.jellyfin.sdk.model.api.BaseItemKind
@@ -41,7 +39,6 @@ class AppUpgradeHandler
     constructor(
         @param:ApplicationContext private val context: Context,
         private val appPreferences: DataStore<AppPreferences>,
-        private val seerrServerDao: SeerrServerDao,
     ) {
         val pkgInfo: PackageInfo get() = context.packageManager.getPackageInfo(context.packageName, 0)
         val currentVersion: Version get() = Version.fromString(pkgInfo.versionName!!)
@@ -290,15 +287,6 @@ class AppUpgradeHandler
                         addItemTypes(BaseItemKind.MOVIE.serialName)
                         addItemTypes(BaseItemKind.SERIES.serialName)
                     }
-                }
-            }
-
-            if (previous.isEqualOrBefore(Version.fromString("0.5.4-0-g0"))) {
-                seerrServerDao.getServers().forEach {
-                    val server = it.server
-                    seerrServerDao.updateServer(
-                        server.copy(url = migrateSeerrUrl(server.url)),
-                    )
                 }
             }
 

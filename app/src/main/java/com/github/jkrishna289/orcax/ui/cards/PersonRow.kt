@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.R
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.Person
 import com.github.jkrishna289.orcax.ui.ifElse
 import com.github.jkrishna289.orcax.ui.rememberInt
@@ -116,53 +115,6 @@ private fun Modifier.fadeRightEdge(): Modifier =
                 blendMode = BlendMode.DstIn,
             )
         }
-
-@Composable
-fun DiscoverPersonRow(
-    people: List<DiscoverItem>,
-    onClick: (DiscoverItem) -> Unit,
-    modifier: Modifier = Modifier,
-    @StringRes title: Int = R.string.people,
-    onLongClick: ((Int, DiscoverItem) -> Unit)? = null,
-) {
-    val firstFocus = remember { FocusRequester() }
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier,
-    ) {
-        Text(
-            text = stringResource(title),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        LazyRow(
-            state = rememberLazyListState(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(8.dp),
-            modifier =
-                Modifier
-                    .padding(start = 16.dp)
-                    .fillMaxWidth()
-                    .focusRestorer(firstFocus),
-        ) {
-            itemsIndexed(people) { index, person ->
-                PersonCard(
-                    name = person.title,
-                    role = person.subtitle,
-                    imageUrl = person.posterUrl,
-                    favorite = false,
-                    onClick = { onClick.invoke(person) },
-                    onLongClick = { onLongClick?.invoke(index, person) },
-                    modifier =
-                        Modifier
-                            .width(personRowCardWidth)
-                            .ifElse(index == 0, Modifier.focusRequester(firstFocus))
-                            .animateItem(),
-                )
-            }
-        }
-    }
-}
 
 val personRowCardWidth = 108.dp
 

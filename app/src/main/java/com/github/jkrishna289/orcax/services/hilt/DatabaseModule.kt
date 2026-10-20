@@ -17,7 +17,6 @@ import com.github.jkrishna289.orcax.data.Migrations
 import com.github.jkrishna289.orcax.data.PlaybackEffectDao
 import com.github.jkrishna289.orcax.data.PlaybackLanguageChoiceDao
 import com.github.jkrishna289.orcax.data.QualityPreferenceDao
-import com.github.jkrishna289.orcax.data.SeerrServerDao
 import com.github.jkrishna289.orcax.data.ServerPreferencesDao
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.AppPreferencesSerializer
@@ -66,10 +65,6 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun playbackLanguageChoiceDao(db: AppDatabase): PlaybackLanguageChoiceDao = db.playbackLanguageChoiceDao()
-
-    @Provides
-    @Singleton
-    fun seerrServerDao(db: AppDatabase): SeerrServerDao = db.seerrServerDao()
 
     @Provides
     @Singleton

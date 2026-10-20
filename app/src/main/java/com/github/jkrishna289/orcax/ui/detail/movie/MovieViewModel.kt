@@ -10,7 +10,6 @@ import com.github.jkrishna289.orcax.data.ItemPlaybackRepository
 import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.data.model.Chapter
-import com.github.jkrishna289.orcax.data.model.DiscoverItem
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.data.model.Person
 import com.github.jkrishna289.orcax.data.model.Trailer
@@ -24,7 +23,6 @@ import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.PeopleFavorites
-import com.github.jkrishna289.orcax.services.SeerrService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.ThemeSongPlayer
 import com.github.jkrishna289.orcax.services.TrailerService
@@ -67,7 +65,6 @@ class MovieViewModel
     @AssistedInject
     constructor(
         private val api: ApiClient,
-        private val seerrService: SeerrService,
         @param:ApplicationContext private val context: Context,
         private val navigationManager: NavigationManager,
         val serverRepository: ServerRepository,
@@ -216,14 +213,6 @@ class MovieViewModel
                     _state.update {
                         it.copy(
                             extras = extras,
-                        )
-                    }
-                }
-                viewModelScope.launchIO {
-                    val results = seerrService.similar(movie).orEmpty()
-                    _state.update {
-                        it.copy(
-                            discovered = results,
                         )
                     }
                 }
@@ -407,7 +396,6 @@ data class MovieState(
     val chapters: List<Chapter> = emptyList(),
     val extras: List<ExtrasItem> = emptyList(),
     val similar: List<BaseItem> = emptyList(),
-    val discovered: List<DiscoverItem> = emptyList(),
     val chosenStreams: ChosenStreams? = null,
     val canDelete: Boolean = false,
     /** Orca-Engine request status for this title; null = engine disabled / no TMDB match. */

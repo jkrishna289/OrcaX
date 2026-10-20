@@ -58,7 +58,6 @@ import com.github.jkrishna289.orcax.preferences.basicPreferences
 import com.github.jkrishna289.orcax.preferences.screensaverPreferences
 import com.github.jkrishna289.orcax.preferences.updatePlaybackPreferences
 import com.github.jkrishna289.orcax.services.Release
-import com.github.jkrishna289.orcax.services.SeerrConnectionStatus
 import com.github.jkrishna289.orcax.services.UpdateChecker
 import com.github.jkrishna289.orcax.ui.components.ConfirmDialog
 import com.github.jkrishna289.orcax.ui.components.ErrorMessage
@@ -73,8 +72,6 @@ import com.github.jkrishna289.orcax.ui.playSoundOnFocus
 import com.github.jkrishna289.orcax.ui.preferences.subtitle.SubtitleSettings
 import com.github.jkrishna289.orcax.ui.setup.ReleaseNotes
 import com.github.jkrishna289.orcax.ui.setup.UpdateViewModel
-import com.github.jkrishna289.orcax.ui.setup.seerr.AddSeerServerDialog
-import com.github.jkrishna289.orcax.ui.setup.seerr.SwitchSeerrViewModel
 import com.github.jkrishna289.orcax.ui.showToast
 import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import com.github.jkrishna289.orcax.util.DataLoadingState
@@ -90,7 +87,6 @@ fun PreferencesContent(
     modifier: Modifier = Modifier,
     viewModel: PreferencesViewModel = hiltViewModel(),
     updateVM: UpdateViewModel = hiltViewModel(),
-    seerrVm: SwitchSeerrViewModel = hiltViewModel(),
     onFocus: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
@@ -100,14 +96,11 @@ fun PreferencesContent(
     val state = rememberLazyListState()
     var preferences by remember { mutableStateOf(initialPreferences) }
     val currentUser by viewModel.currentUser.observeAsState()
-    val currentServer by seerrVm.currentSeerrServer.collectAsState(null)
     var showPinFlow by remember { mutableStateOf(false) }
     var showVersionDialog by remember { mutableStateOf(false) }
     val players by viewModel.externalPlayers.collectAsState()
 
     var cacheUsage by remember { mutableStateOf(CacheUsage(0, 0, 0)) }
-    val seerrConnection by viewModel.seerrConnection.collectAsState()
-    var seerrDialogMode by remember { mutableStateOf<SeerrDialogMode>(SeerrDialogMode.None) }
     var showQuickConnectDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -401,52 +394,6 @@ fun PreferencesContent(
                                     )
                                 }
 
-                                AppPreference.SeerrIntegration -> {
-                                    ClickPreference(
-                                        title = stringResource(pref.title),
-                                        onClick = {
-                                            seerrDialogMode =
-                                                when (val conn = seerrConnection) {
-                                                    is SeerrConnectionStatus.Error -> {
-                                                        SeerrDialogMode.Error(
-                                                            conn.server.url,
-                                                            conn.ex,
-                                                        )
-                                                    }
-
-                                                    SeerrConnectionStatus.NotConfigured -> {
-                                                        SeerrDialogMode.Add
-                                                    }
-
-                                                    is SeerrConnectionStatus.Success -> {
-                                                        SeerrDialogMode.Remove(
-                                                            conn.current.server.url,
-                                                        )
-                                                    }
-                                                }
-                                        },
-                                        modifier = Modifier,
-                                        summary =
-                                            when (seerrConnection) {
-                                                is SeerrConnectionStatus.Error -> {
-                                                    stringResource(R.string.voice_error_server)
-                                                }
-
-                                                SeerrConnectionStatus.NotConfigured -> {
-                                                    stringResource(
-                                                        R.string.add_server,
-                                                    )
-                                                }
-
-                                                is SeerrConnectionStatus.Success -> {
-                                                    stringResource(R.string.enabled)
-                                                }
-                                            },
-                                        onLongClick = {},
-                                        interactionSource = interactionSource,
-                                    )
-                                }
-
                                 AppPreference.QuickConnect -> {
                                     ClickPreference(
                                         title = stringResource(pref.title),
@@ -575,62 +522,6 @@ fun PreferencesContent(
                 )
             }
         }
-        when (val mode = seerrDialogMode) {
-            is SeerrDialogMode.Remove -> {
-                ConfirmDialog(
-                    title = stringResource(R.string.remove_seerr_server),
-                    body = mode.serverUrl,
-                    onCancel = { seerrDialogMode = SeerrDialogMode.None },
-                    onConfirm = {
-                        seerrVm.removeServer()
-                        seerrDialogMode = SeerrDialogMode.None
-                    },
-                )
-            }
-
-            SeerrDialogMode.Add -> {
-                val currentUser by seerrVm.currentUser.observeAsState()
-                val status by seerrVm.serverConnectionStatus.collectAsState(LoadingState.Pending)
-                val serverAddedMessage = stringResource(R.string.seerr_server_added)
-                LaunchedEffect(status) {
-                    if (status == LoadingState.Success) {
-                        Toast.makeText(context, serverAddedMessage, Toast.LENGTH_SHORT).show()
-                        seerrDialogMode = SeerrDialogMode.None
-                    }
-                }
-                AddSeerServerDialog(
-                    currentUsername = currentUser?.name,
-                    status = status,
-                    onSubmit = seerrVm::submitServer,
-                    onResetStatus = seerrVm::resetStatus,
-                    onDismissRequest = { seerrDialogMode = SeerrDialogMode.None },
-                )
-            }
-
-            is SeerrDialogMode.Error -> {
-                val errorStr = stringResource(R.string.voice_error_server)
-                val body =
-                    remember(mode) {
-                        """
-                        ${mode.serverUrl}
-
-                        $errorStr: ${mode.ex.localizedMessage}
-                        """.trimIndent()
-                    }
-                ConfirmDialog(
-                    title = stringResource(R.string.remove_seerr_server),
-                    body = body,
-                    onCancel = { seerrDialogMode = SeerrDialogMode.None },
-                    onConfirm = {
-                        seerrVm.removeServer()
-                        seerrDialogMode = SeerrDialogMode.None
-                    },
-                    bodyColor = MaterialTheme.colorScheme.error,
-                )
-            }
-
-            SeerrDialogMode.None -> {}
-        }
     }
 
     if (showQuickConnectDialog) {
@@ -726,18 +617,3 @@ data class CacheUsage(
     val imageMemoryMax: Long,
     val imageDiskUsed: Long,
 )
-
-private sealed interface SeerrDialogMode {
-    data object None : SeerrDialogMode
-
-    data object Add : SeerrDialogMode
-
-    data class Remove(
-        val serverUrl: String,
-    ) : SeerrDialogMode
-
-    data class Error(
-        val serverUrl: String,
-        val ex: Exception,
-    ) : SeerrDialogMode
-}

@@ -22,7 +22,6 @@ import com.github.jkrishna289.orcax.ui.ifElse
 @Composable
 fun HomeSettingsAddRow(
     libraries: List<Library>,
-    showDiscover: Boolean,
     onClick: (Library) -> Unit,
     onClickMeta: (MetaRowType) -> Unit,
     modifier: Modifier,
@@ -83,16 +82,6 @@ fun HomeSettingsAddRow(
                     modifier = Modifier,
                 )
             }
-            if (showDiscover) {
-                item {
-                    HomeSettingsListItem(
-                        selected = false,
-                        headlineText = stringResource(MetaRowType.DISCOVER.stringId),
-                        onClick = { onClickMeta.invoke(MetaRowType.DISCOVER) },
-                        modifier = Modifier,
-                    )
-                }
-            }
         }
     }
 }
@@ -104,7 +93,6 @@ enum class MetaRowType(
     NEXT_UP(R.string.next_up),
     COMBINED_CONTINUE_WATCHING(R.string.combine_continue_next),
     FAVORITES(R.string.favorites),
-    DISCOVER(R.string.discover),
     COLLECTION(R.string.collection),
     PLAYLIST(R.string.playlist),
 }

@@ -9,7 +9,6 @@ import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.preferences.updateInterfacePreferences
-import com.github.jkrishna289.orcax.services.SeerrApi
 import com.github.jkrishna289.orcax.util.CoroutineContextApiClientFactory
 import com.github.jkrishna289.orcax.util.ExceptionHandler
 import com.github.jkrishna289.orcax.util.RememberTabManager
@@ -94,7 +93,7 @@ object AppModule {
             version = BuildConfig.VERSION_NAME,
         )
 
-    // ── StandardOkHttpClient: no auth headers, used for speed tests & Seerr ──
+    // ── StandardOkHttpClient: no auth headers, used for speed tests ──
     @StandardOkHttpClient
     @Provides
     @Singleton
@@ -238,12 +237,6 @@ object AppModule {
     fun workManager(
         @ApplicationContext context: Context,
     ): WorkManager = WorkManager.getInstance(context)
-
-    @Provides
-    @Singleton
-    fun seerrApi(
-        @StandardOkHttpClient okHttpClient: OkHttpClient,
-    ) = SeerrApi(okHttpClient)
 }
 
 @Module
