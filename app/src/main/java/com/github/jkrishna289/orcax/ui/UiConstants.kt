@@ -32,13 +32,6 @@ object AppColors {
     val DarkPurple = Color(0xFF261370)
 
     val GoldenYellow = Color(0xFFDAB440)
-
-    object Discover {
-        val Blue = Color(37, 99, 235)
-        val Purple = Color(147, 51, 234)
-        val Green = Color(74, 222, 128)
-        val Yellow = Color(234, 179, 8)
-    }
 }
 
 const val DEFAULT_PAGE_SIZE = 100

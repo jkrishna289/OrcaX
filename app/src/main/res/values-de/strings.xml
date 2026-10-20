@@ -357,8 +357,6 @@
     <string name="discover">Entdecke</string>
     <string name="request">Anfrage</string>
     <string name="pending">Ausstehend</string>
-    <string name="seerr_integration">Seerr Integration</string>
-    <string name="seerr_server_added">Seerr server hinzugefügt</string>
     <string name="password">Passwort</string>
     <string name="username">Benutzername</string>
     <string name="url">URL</string>
@@ -394,7 +392,6 @@
     <string name="video_range_type">Video-Bereichstyp</string>
     <string name="color_code_programs">Farbkorrektur-Software</string>
     <string name="clear_track_choices">Spur-Auswahl löschen</string>
-    <string name="remove_seerr_server">Seerr-Server entfernen</string>
     <string name="software_decoding_av1">AV1 Software-Dekodierung</string>
     <string name="anamorphic">anamorph</string>
     <string name="color_space">Farbraum</string>
@@ -459,8 +456,6 @@
     <string name="start_after">Starte anschließend</string>
     <string name="display_preset_series_thumb">Serien Vorschaubilder</string>
     <string name="display_preset_episode_thumbnails">Episoden Vorschaubilder</string>
-    <string name="seerr_login">Einloggen zum Seerr Server</string>
-    <string name="seerr_jellyfin_user">Jellyfin User</string>
     <string name="show_media_management">Zeige Media Management Optionen</string>
     <string name="decrease_all_cards_size">Größe für alle Karten reduzieren</string>
     <string name="settings_saved">Einstellungen gespeichert</string>
@@ -503,7 +498,6 @@
     <string name="image_type_primary">Primär</string>
     <string name="backdrop_style_dynamic">Bild mit dynamischen Farben</string>
     <string name="api_key">API Schlüssel</string>
-    <string name="seerr_local_user">Lokaler Benutzer</string>
     <string name="search_for">Suche %s</string>
     <string name="display_presets">Design-Vorlagen</string>
     <string name="animate">Animieren</string>

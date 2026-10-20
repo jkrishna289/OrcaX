@@ -541,9 +541,6 @@
     <string name="requested">Requested</string>
     <string name="requesting">Requesting…</string>
     <string name="pending">Pending</string>
-    <string name="seerr_integration">Seerr integration</string>
-    <string name="remove_seerr_server">Remove Seerr Server</string>
-    <string name="seerr_server_added">Seerr server added</string>
     <string name="quick_connect">Quick Connect</string>
     <string name="quick_connect_summary">Authorize another device to log in to your account</string>
     <string name="quick_connect_code">Enter Quick Connect code</string>
@@ -808,9 +805,6 @@
     <string name="backdrop_style_image">Image only</string>
     <string name="enter_url_api_key"><![CDATA[Enter URL & API Key]]></string>
     <string name="api_key">API Key</string>
-    <string name="seerr_login">Login to Seerr server</string>
-    <string name="seerr_jellyfin_user">Jellyfin user</string>
-    <string name="seerr_local_user">Local user</string>
     <string name="search_and_download_subtitles"><![CDATA[Search & download subtitles]]></string>
     <string name="no_subtitles_found">No remote subtitles were found</string>
     <string name="series_continueing">Present</string>

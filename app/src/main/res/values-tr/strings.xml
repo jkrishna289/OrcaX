@@ -404,9 +404,6 @@
     <string name="discover">Keşfet</string>
     <string name="request">İstek</string>
     <string name="pending">Beklemede</string>
-    <string name="seerr_integration">Seerr entegrasyonu</string>
-    <string name="remove_seerr_server">Seerr Sunucusunu Kaldır</string>
-    <string name="seerr_server_added">Seerr sunucusu eklendi</string>
     <string name="password">Şifre</string>
     <string name="username">Kullanıcı adı</string>
     <string name="url">URL</string>
@@ -521,9 +518,6 @@
     <string name="backdrop_style_image">Sadece görsel</string>
     <string name="enter_url_api_key"><![CDATA[URL ve API Anahtarını Girin]]></string>
     <string name="api_key">API Anahtarı</string>
-    <string name="seerr_login">Seerr sunucusuna giriş yap</string>
-    <string name="seerr_jellyfin_user">Jellyfin kullanıcısı</string>
-    <string name="seerr_local_user">Yerel kullanıcı</string>
     <string name="search_and_download_subtitles"><![CDATA[Altyazı ara ve indir]]></string>
     <string name="no_subtitles_found">Uzak altyazı bulunamadı</string>
     <string name="series_continueing">Günümüz</string>

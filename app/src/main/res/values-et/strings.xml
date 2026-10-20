@@ -377,8 +377,6 @@
     <string name="discover">Otsi ja leia</string>
     <string name="request">Päring</string>
     <string name="pending">Ootel</string>
-    <string name="seerr_integration">Seerri lõiming</string>
-    <string name="remove_seerr_server">Eemalda Seerri server</string>
     <string name="password">Salasõna</string>
     <string name="username">Kasutajanimi</string>
     <string name="url">Võrguaadress</string>
@@ -386,7 +384,6 @@
     <string name="upcoming_movies">Lähiajal avaldatavad filmid</string>
     <string name="upcoming_tv">Lähiajal avaldatavad telesarjad ja -saated</string>
     <string name="request_4k">Küsi 4K versiooni</string>
-    <string name="seerr_server_added">Seerri server on lisatud</string>
     <string name="voice_search">Häälotsing</string>
     <string name="voice_starting">Alustan</string>
     <string name="voice_search_prompt">Otsimiseks kõnele</string>
@@ -500,9 +497,6 @@
     <string name="backdrop_style_image">Ainult pilt</string>
     <string name="enter_url_api_key"><![CDATA[Sisesta võrguaadress ja API võti]]></string>
     <string name="api_key">API võti</string>
-    <string name="seerr_login">Logi sisse Seerri serverisse</string>
-    <string name="seerr_jellyfin_user">Jellyfini kasutaja</string>
-    <string name="seerr_local_user">Kohalik kasutaja</string>
     <string name="search_and_download_subtitles"><![CDATA[Subtiitrite otsing ja allalaadimine]]></string>
     <string name="no_subtitles_found">Kaugseadmest ei leidnunud subtiitreid</string>
     <string name="in_app_screensaver">Kasuta rakendusesisest ekraanisäästjat</string>

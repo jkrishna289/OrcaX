@@ -396,9 +396,6 @@
     <string name="discover">Oppdag</string>
     <string name="request">Be om</string>
     <string name="pending">Ventar</string>
-    <string name="seerr_integration">Seerr-integrasjon</string>
-    <string name="remove_seerr_server">Fjern Seerr-tenar</string>
-    <string name="seerr_server_added">Seerr-tenar lagt til</string>
     <string name="quick_connect">Hurtigkopling</string>
     <string name="quick_connect_summary">Gi ei anna eining tilgang til å logge inn på kontoen din</string>
     <string name="quick_connect_code">Skriv inn hurtigkoplingskode</string>
@@ -520,9 +517,6 @@
     <string name="backdrop_style_image">Berre bilete</string>
     <string name="enter_url_api_key"><![CDATA[Skriv inn URL og API-nøkkel]]></string>
     <string name="api_key">API-nøkkel</string>
-    <string name="seerr_login">Logg inn på Seerr-tenar</string>
-    <string name="seerr_jellyfin_user">Jellyfin-brukar</string>
-    <string name="seerr_local_user">Lokal brukar</string>
     <string name="search_and_download_subtitles"><![CDATA[Søk og last ned undertekstar]]></string>
     <string name="no_subtitles_found">Fann ingen eksterne undertekstar</string>
     <string name="series_continueing">No</string>

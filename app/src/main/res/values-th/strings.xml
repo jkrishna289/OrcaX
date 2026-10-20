@@ -371,9 +371,6 @@
     <string name="discover">ค้นพบ</string>
     <string name="request">คำขอ</string>
     <string name="pending">รอดำเนินการ</string>
-    <string name="seerr_integration">การผสานรวม Seerr</string>
-    <string name="remove_seerr_server">ลบเซิร์ฟเวอร์ Seerr</string>
-    <string name="seerr_server_added">เพิ่มเซิร์ฟเวอร์ Seerr แล้ว</string>
     <string name="quick_connect">เชื่อมต่อด่วน</string>
     <string name="quick_connect_summary">อนุญาตให้อุปกรณ์อื่นเข้าสู่ระบบบัญชีของคุณ</string>
     <string name="quick_connect_code">ป้อนรหัสการเชื่อมต่อด่วน</string>
@@ -507,9 +504,6 @@
     <string name="backdrop_style_image">รูปภาพเท่านั้น</string>
     <string name="enter_url_api_key"><![CDATA[ป้อน URL และ API Key]]></string>
     <string name="api_key">คีย์ API</string>
-    <string name="seerr_login">เข้าสู่ระบบเซิร์ฟเวอร์ Seerr</string>
-    <string name="seerr_jellyfin_user">Jellyfin ผู้ใช้</string>
-    <string name="seerr_local_user">ผู้ใช้ท้องถิ่น</string>
     <string name="search_and_download_subtitles"><![CDATA[ค้นหาและดาวน์โหลดคำบรรยาย]]></string>
     <string name="no_subtitles_found">ไม่พบคำบรรยายระยะไกล</string>
     <string name="series_continueing">ปัจจุบัน</string>

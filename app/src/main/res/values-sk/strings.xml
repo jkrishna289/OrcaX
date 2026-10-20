@@ -443,9 +443,6 @@
     <string name="force_dovi_profile_7_summary">Ignorovať kontrolu kompatibility zariadenia</string>
     <string name="request">Žiadosť</string>
     <string name="pending">Čaká</string>
-    <string name="seerr_integration">Integrácia Seerr</string>
-    <string name="remove_seerr_server">Odstrániť Seerr server</string>
-    <string name="seerr_server_added">Seerr server pridaný</string>
     <string name="quick_connect">Rýchle pripojenie</string>
     <string name="writer">Scenár</string>
     <string name="guest_star">Hosťujúca hviezda</string>
@@ -577,9 +574,6 @@
     <string name="backdrop_style_image">Iba obrázok</string>
     <string name="enter_url_api_key"><![CDATA[Zadajte URL a API kľúč]]></string>
     <string name="api_key">API kľúč</string>
-    <string name="seerr_login">Prihlásenie na Seerr server</string>
-    <string name="seerr_jellyfin_user">Jellyfin používateľ</string>
-    <string name="seerr_local_user">Lokálny používateľ</string>
     <string name="search_and_download_subtitles"><![CDATA[Vyhľadať a stiahnuť titulky]]></string>
     <string name="no_subtitles_found">Nenašli sa žiadne vzdialené titulky</string>
     <string name="series_continueing">Prebieha</string>

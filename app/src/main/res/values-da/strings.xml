@@ -407,9 +407,6 @@
     <string name="discover">Opdag</string>
     <string name="request">Anmod</string>
     <string name="pending">Afventer</string>
-    <string name="seerr_integration">Seerr integration</string>
-    <string name="remove_seerr_server">Fjern Seerr server</string>
-    <string name="seerr_server_added">Seerr server tilføjet</string>
     <string name="quick_connect">Quick Connect</string>
     <string name="quick_connect_summary">Godkend en anden enhed til at logge ind på din konto</string>
     <string name="quick_connect_code">Indtast Quick Connect-kode</string>

@@ -393,8 +393,6 @@
     <string name="discover">Scopri</string>
     <string name="request">Richiedi</string>
     <string name="pending">In attesa</string>
-    <string name="seerr_integration">Integrazione Seerr</string>
-    <string name="remove_seerr_server">Rimuovi server Seerr</string>
     <string name="password">Password</string>
     <string name="username">Nome utente</string>
     <string name="url">URL</string>
@@ -402,7 +400,6 @@
     <string name="upcoming_movies">Film in arrivo</string>
     <string name="upcoming_tv">Serie TV in arrivo</string>
     <string name="request_4k">Richiedi in 4K</string>
-    <string name="seerr_server_added">Server Seerr aggiunto</string>
     <string name="voice_search">Ricerca vocale</string>
     <string name="voice_starting">Avvio in corso</string>
     <string name="voice_search_prompt">Parla per cercare</string>
@@ -529,9 +526,6 @@
     <string name="backdrop_style_image">Solo immagine</string>
     <string name="enter_url_api_key"><![CDATA[Inserisci URL e chiave API]]></string>
     <string name="api_key">Chiave API</string>
-    <string name="seerr_login">Accedi al server Seerr</string>
-    <string name="seerr_jellyfin_user">Utente Jellyfin</string>
-    <string name="seerr_local_user">Utente locale</string>
     <string name="search_and_download_subtitles"><![CDATA[Cerca e scarica sottotitoli]]></string>
     <string name="no_subtitles_found">Nessun sottotitolo remoto trovato</string>
     <string name="series_continueing">In corso</string>

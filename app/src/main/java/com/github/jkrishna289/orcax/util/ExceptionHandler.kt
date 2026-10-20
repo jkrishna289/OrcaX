@@ -1,11 +1,11 @@
 package com.github.jkrishna289.orcax.util
 
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import com.github.jkrishna289.orcax.OrcaApplication
-import com.github.jkrishna289.orcax.ui.showToast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 import kotlin.coroutines.CoroutineContext
 
@@ -31,13 +31,17 @@ class ExceptionHandler(
         Timber.e(exception, "Exception in coroutine")
 
         if (autoToast) {
-            runBlocking {
-                showToast(
-                    OrcaApplication.instance,
-                    "Error: ${exception.message}",
-                    Toast.LENGTH_LONG,
-                )
-            }
+            postErrorToast(exception)
         }
+    }
+}
+
+/**
+ * Posts rather than blocks: this runs on whichever thread threw, often Main, where waiting on a
+ * Main dispatch would deadlock.
+ */
+internal fun postErrorToast(exception: Throwable) {
+    Handler(Looper.getMainLooper()).post {
+        Toast.makeText(OrcaApplication.instance, "Error: ${exception.message}", Toast.LENGTH_LONG).show()
     }
 }

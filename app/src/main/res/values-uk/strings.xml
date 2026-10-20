@@ -442,9 +442,6 @@
     <string name="discover">Відкрийте для себе</string>
     <string name="request">Запит</string>
     <string name="pending">В очікувані</string>
-    <string name="seerr_integration">Seerr інтеграція</string>
-    <string name="remove_seerr_server">Видалити Seerr Server</string>
-    <string name="seerr_server_added">Seerr сервер додано</string>
     <string name="password">Пароль</string>
     <string name="username">Нік</string>
     <string name="url">URL</string>

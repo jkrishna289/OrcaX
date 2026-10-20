@@ -14,7 +14,7 @@ import com.github.jkrishna289.orcax.ui.launchIO
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.util.ApiRequestPager
 import com.github.jkrishna289.orcax.util.BlockingList
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineStart
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.model.api.BaseItemKind
 import timber.log.Timber
@@ -84,15 +84,12 @@ abstract class MusicViewModel(
     ) = addToQueue(api, musicService, item, index)
 
     fun startInstantMix(itemId: UUID) {
-        viewModelScope.launchIO {
-            Timber.v("Starting instant mix for %s", itemId)
+        Timber.v("Starting instant mix for %s", itemId)
+        // Undispatched so the loading state is set before we navigate
+        viewModelScope.launchIO(start = CoroutineStart.UNDISPATCHED) {
             musicService.startInstantMix(itemId)
         }
-        viewModelScope.launchDefault {
-            // TODO better way to wait for query above to start
-            delay(250)
-            navigationManager.navigateTo(Destination.NowPlaying)
-        }
+        navigationManager.navigateTo(Destination.NowPlaying)
     }
 
     fun canDelete(

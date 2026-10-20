@@ -377,9 +377,6 @@
     <string name="force_dovi_profile_7">Putar langsung Dolby Vision Profil 7</string>
     <string name="force_dovi_profile_7_summary">Abaikan pemeriksaan kompatibilitas perangkat</string>
     <string name="discover">Jelajahi</string>
-    <string name="seerr_integration">Integrasi Seerr</string>
-    <string name="remove_seerr_server">Hapus Server Seerr</string>
-    <string name="seerr_server_added">Server Seerr ditambahkan</string>
     <string name="password">Kata sandi</string>
     <string name="username">Nama pengguna</string>
     <string name="url">URL</string>
@@ -504,9 +501,6 @@
     <string name="backdrop_style_image">Hanya gambar</string>
     <string name="enter_url_api_key"><![CDATA[Masukkan URL &amp; Kunci API]]></string>
     <string name="api_key">API Key</string>
-    <string name="seerr_login">Masuk ke server Seerr</string>
-    <string name="seerr_jellyfin_user">Pengguna Jellyfin</string>
-    <string name="seerr_local_user">Pengguna lokal</string>
     <string name="search_and_download_subtitles"><![CDATA[Cari &amp; unduh subtitel]]></string>
     <string name="no_subtitles_found">Subtitel remote tidak ditemukan</string>
     <string name="series_continueing">Tayang</string>

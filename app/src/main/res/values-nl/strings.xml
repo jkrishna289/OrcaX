@@ -371,7 +371,6 @@
     <string name="saturation">Verzadiging</string>
     <string name="guest_star">Gast hoofdrol</string>
     <string name="remove_from_queue">Verwijder uit wachtrij</string>
-    <string name="seerr_login">Login bij Seerr server</string>
     <string name="search_for">Zoek %s</string>
     <string name="actor">Acteur</string>
     <string name="clear_track_choices">Afspeelvoorkeuren wissen</string>
@@ -423,9 +422,6 @@
     <string name="voice_error_unknown">Onbekende fout</string>
     <string name="voice_error_start_failed">Fout bij starten spraakherkenning</string>
     <string name="voice_error_timeout">Spraakherkenning timed out</string>
-    <string name="seerr_integration">Seerr integratie</string>
-    <string name="remove_seerr_server">Verwijder Seerr server</string>
-    <string name="seerr_server_added">Seerr server toegevoegd</string>
     <string name="hdr_subtitle_style">HDR ondertitelstijl</string>
     <string name="image_subtitle_opacity">Dekking ondertitelbeeld</string>
     <string name="zoom_in">Zoom in</string>
@@ -508,8 +504,6 @@
     <string name="image_type_thumb">Miniatuur</string>
     <string name="backdrop_style_dynamic">Afbeelding met dynamische kleuren</string>
     <string name="backdrop_style_image">Alleen afbeelding</string>
-    <string name="seerr_jellyfin_user">Jellyfin gebruiker</string>
-    <string name="seerr_local_user">Lokale gebruiker</string>
     <string name="no_subtitles_found">Geen externe ondertiteling gevonden</string>
     <string name="series_continueing">Huidig</string>
     <string name="in_app_screensaver">In-app schermbeveiliging gebruiken</string>

@@ -378,13 +378,6 @@ internal fun ConnectingScreen(
 }
 
 /**
- * The title carrying the wait, breathing rather than blinking.
- *
- * The design hangs this on the title's own clearlogo. Seerr's movie payload has no clearlogo field,
- * so the release title takes the hero position under the same breathe; the shine pass is dropped with
- * it, since a light band sweeping across text lights the whole box rather than just the artwork.
- */
-/**
  * The measured state of the swarm, printed plainly.
  *
  * This is the one place OrcaX shows its machinery, and it earns it: a viewer staring at a wait with

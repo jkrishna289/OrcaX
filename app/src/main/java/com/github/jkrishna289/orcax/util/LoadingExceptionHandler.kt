@@ -1,14 +1,8 @@
 package com.github.jkrishna289.orcax.util
 
-import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
-import com.github.jkrishna289.orcax.OrcaApplication
-import com.github.jkrishna289.orcax.ui.showToast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import timber.log.Timber
 import kotlin.coroutines.CoroutineContext
 
@@ -32,21 +26,14 @@ class LoadingExceptionHandler(
             return
         }
         Timber.e(exception, "Exception in coroutine")
-        runBlocking {
-            withContext(Dispatchers.Main) {
-                loadingState.value =
-                    LoadingState.Error(
-                        message = errorMessage,
-                        exception = exception,
-                    )
-            }
-            if (autoToast) {
-                showToast(
-                    OrcaApplication.instance,
-                    "Error: ${exception.message}",
-                    Toast.LENGTH_LONG,
-                )
-            }
+        loadingState.postValue(
+            LoadingState.Error(
+                message = errorMessage,
+                exception = exception,
+            ),
+        )
+        if (autoToast) {
+            postErrorToast(exception)
         }
     }
 }

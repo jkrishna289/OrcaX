@@ -337,7 +337,6 @@
     <string name="green">Grön</string>
     <string name="profile">Profil</string>
     <string name="quick_connect">Snabbanslutning</string>
-    <string name="remove_seerr_server">Ta bort Seerr-server</string>
     <string name="request_4k">Begär i 4K</string>
     <string name="request">Begär</string>
     <string name="remember_selected_tab">Kom ihåg vald flik</string>
@@ -358,13 +357,8 @@
     <string name="pin_too_short">PIN måste vara minst 4 tecken</string>
     <string name="overwrite_server_settings">Skriv över inställningar på servern?</string>
     <string name="overwrite_local_settings">Skriv över lokala inställningar?</string>
-    <string name="seerr_integration">Seerr-integration</string>
     <string name="send_app_logs">Skicka apploggar till aktuell server</string>
     <string name="select_all">Markera alla</string>
-    <string name="seerr_server_added">Seerr-server tillagd</string>
-    <string name="seerr_login">Logga in på Seerr-server</string>
-    <string name="seerr_local_user">Lokal användare</string>
-    <string name="seerr_jellyfin_user">Jellyfin användare</string>
     <string name="seek_bar_steps">Steg för sökreglage</string>
     <string name="search_for">Sök %s</string>
     <string name="send_media_info_log_to_server">Skicka medieinformationslogg till server</string>

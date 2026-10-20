@@ -359,9 +359,6 @@
     <string name="discover">探索</string>
     <string name="request">請求</string>
     <string name="pending">待處理</string>
-    <string name="seerr_integration">Seerr 整合</string>
-    <string name="remove_seerr_server">移除 Seerr 伺服器</string>
-    <string name="seerr_server_added">已新增 Seerr 伺服器</string>
     <string name="password">密碼</string>
     <string name="username">帳號</string>
     <string name="url">URL</string>
@@ -495,9 +492,6 @@
     <string name="backdrop_style_image">僅背景圖</string>
     <string name="enter_url_api_key"><![CDATA[輸入 URL 及 API 金鑰]]></string>
     <string name="api_key">API 金鑰</string>
-    <string name="seerr_login">登入 Seerr 伺服器</string>
-    <string name="seerr_jellyfin_user">Jellyfin 帳號</string>
-    <string name="seerr_local_user">Seerr 帳號</string>
     <string name="search_and_download_subtitles"><![CDATA[搜尋和下載字幕]]></string>
     <string name="no_subtitles_found">未找到遠端字幕</string>
     <string name="series_continueing">至今</string>

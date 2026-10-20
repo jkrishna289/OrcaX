@@ -430,9 +430,6 @@
     <string name="backdrop_style_dynamic">Zdjęcie z dynamicznym kolorem</string>
     <string name="backdrop_style_image">Tylko zdjęcie</string>
     <string name="api_key">Klucz API</string>
-    <string name="seerr_login">Zaloguj się do Seerr</string>
-    <string name="seerr_jellyfin_user">Użytkownik Jellyfin</string>
-    <string name="seerr_local_user">Użytkownik lokalny</string>
     <string name="favorite_items">Ulubione %s</string>
     <plurals name="days">
         <item quantity="one">%s dzień</item>
@@ -461,9 +458,6 @@
     <string name="discover">Odkryj</string>
     <string name="request">Prośby</string>
     <string name="pending">Oczekujące</string>
-    <string name="seerr_integration">Integracja z Seerr</string>
-    <string name="remove_seerr_server">Usuń serwer Seerr</string>
-    <string name="seerr_server_added">Serwer Seerr dodany</string>
     <string name="quick_connect">Szybkie łączenie</string>
     <string name="quick_connect_summary">Autoryzuj inne urządzenie do logowania się na Twoje konto</string>
     <string name="quick_connect_code">Wprowadź kod szybkiego łączenia</string>

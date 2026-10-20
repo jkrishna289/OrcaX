@@ -406,9 +406,6 @@
     <string name="discover">גלה</string>
     <string name="request">בקש</string>
     <string name="pending">ממתין</string>
-    <string name="seerr_integration">אינטגרציה עם Seerr</string>
-    <string name="remove_seerr_server">מחק שרת Seerr</string>
-    <string name="seerr_server_added">נוסף שרת Seerr</string>
     <string name="quick_connect">חיבור־מהיר</string>
     <string name="quick_connect_summary">מתן הרשאה למכשיר נוסף להיכנס למשתמש שלך</string>
     <string name="quick_connect_code">הכנס קוד לחיבור־מהיר</string>
@@ -528,9 +525,6 @@
     <string name="backdrop_style_image">תמונה בלבד</string>
     <string name="enter_url_api_key"><![CDATA[הכנס כתובת ומפתח API]]></string>
     <string name="api_key">מפתח API</string>
-    <string name="seerr_login">היכנס לשרת Seerr</string>
-    <string name="seerr_jellyfin_user">משתמש Jellyfin</string>
-    <string name="seerr_local_user">משתמש מקומי</string>
     <string name="search_and_download_subtitles"><![CDATA[חפש והורד כתוביות]]></string>
     <string name="no_subtitles_found">לא נמצאו כתוביות מקוונות</string>
     <string name="series_continueing">היום</string>

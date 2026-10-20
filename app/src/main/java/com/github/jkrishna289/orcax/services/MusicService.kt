@@ -154,18 +154,24 @@ class MusicService
         /**
          * Fetches instant mix items, replaces the queue, and begins playback
          */
+        /**
+         * Marks the queue as loading before its first suspension, so a caller that starts this
+         * undispatched can navigate to Now Playing straight after and never see an empty queue.
+         */
         suspend fun startInstantMix(itemId: UUID) =
             loading {
-                val items =
-                    api.instantMixApi
-                        .getInstantMixFromItem(
-                            userId = serverRepository.currentUser.value?.id,
-                            itemId = itemId,
-                            limit = 200,
-                            fields = DefaultItemFields,
-                        ).content.items
-                        .map { BaseItem(it, false) }
-                setQueue(items, false)
+                withContext(Dispatchers.IO) {
+                    val items =
+                        api.instantMixApi
+                            .getInstantMixFromItem(
+                                userId = serverRepository.currentUser.value?.id,
+                                itemId = itemId,
+                                limit = 200,
+                                fields = DefaultItemFields,
+                            ).content.items
+                            .map { BaseItem(it, false) }
+                    setQueue(items, false)
+                }
             }
 
         /**

@@ -408,9 +408,6 @@
     <string name="discover">Odkrij</string>
     <string name="request">Zahteva</string>
     <string name="pending">V postopku</string>
-    <string name="seerr_integration">Integracija Seerr</string>
-    <string name="remove_seerr_server">Odstrani strežnik Seerr</string>
-    <string name="seerr_server_added">Dodan strežnik Seerr</string>
     <string name="quick_connect">Hitro povezava</string>
     <string name="quick_connect_summary">Dovoli drugi napravi, da se prijavi v tvoj račun</string>
     <string name="quick_connect_code">Vnesite kodo za hitro povezavo</string>
@@ -543,9 +540,6 @@
     <string name="backdrop_style_image">Samo slika</string>
     <string name="enter_url_api_key"><![CDATA[Vnesite URL in API ključ]]></string>
     <string name="api_key">API ključ</string>
-    <string name="seerr_login">Prijava na strežnik Seerr</string>
-    <string name="seerr_jellyfin_user">Jellyfin uporabnik</string>
-    <string name="seerr_local_user">Lokalni uporabnik</string>
     <string name="search_and_download_subtitles"><![CDATA[Išči in prenesi podnapise]]></string>
     <string name="no_subtitles_found">Ni bilo najdenih podnapisov</string>
     <string name="series_continueing">danes</string>

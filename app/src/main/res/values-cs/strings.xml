@@ -411,9 +411,6 @@
     <string name="discover">Najít</string>
     <string name="request">Žádost</string>
     <string name="pending">Čeká na vyřízení</string>
-    <string name="seerr_integration">Seerr integrace</string>
-    <string name="remove_seerr_server">Odstranit Seerr Server</string>
-    <string name="seerr_server_added">Seerr server přidán</string>
     <string name="password">Heslo</string>
     <string name="username">Uživatelské jméno</string>
     <string name="url">URL</string>
@@ -561,9 +558,6 @@
     <string name="backdrop_style_image">Pouze obrázek</string>
     <string name="enter_url_api_key"><![CDATA[Zadejte adresu a klíč API]]></string>
     <string name="api_key">Klíč API</string>
-    <string name="seerr_login">Přihlásit se k serveru Seerr</string>
-    <string name="seerr_jellyfin_user">Uživatel Jellyfin</string>
-    <string name="seerr_local_user">Lokální uživatel</string>
     <string name="search_and_download_subtitles"><![CDATA[Hledat a stáhnout titulky]]></string>
     <string name="no_subtitles_found">Nenalezeny žádné vzdálené titulky</string>
     <string name="series_continueing">Současnost</string>

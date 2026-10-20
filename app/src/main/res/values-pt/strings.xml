@@ -393,9 +393,6 @@
     <string name="discover">Descobrir</string>
     <string name="request">Pedir</string>
     <string name="pending">Pendente</string>
-    <string name="seerr_integration">Integração com Seerr</string>
-    <string name="remove_seerr_server">Remover Servidor Seerr</string>
-    <string name="seerr_server_added">Servidor Seerr adicionado</string>
     <string name="url">URL</string>
     <string name="trending">Popular</string>
     <string name="upcoming_movies">Filmes em Breve</string>
@@ -547,9 +544,6 @@
     <string name="backdrop_style_image">Apenas imagem</string>
     <string name="enter_url_api_key"><![CDATA[Inserir URL e Chave API]]></string>
     <string name="api_key">Chave API</string>
-    <string name="seerr_login">Iniciar sessão no servidor Seerr</string>
-    <string name="seerr_jellyfin_user">Utilizador Jellyfin</string>
-    <string name="seerr_local_user">Utilizador local</string>
     <string name="search_and_download_subtitles"><![CDATA[Procurar e transferir legendas]]></string>
     <string name="no_subtitles_found">Não foram encontradas legendas remotas</string>
     <string name="series_continueing">Em curso</string>

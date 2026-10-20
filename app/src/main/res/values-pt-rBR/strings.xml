@@ -415,9 +415,6 @@
     <string name="discover">Descobrir</string>
     <string name="request">Solicitar</string>
     <string name="pending">Pendente</string>
-    <string name="seerr_integration">Integração com o Seerr</string>
-    <string name="remove_seerr_server">Remover Servidor Seerr</string>
-    <string name="seerr_server_added">Servidor Seerr adicionado</string>
     <string name="quick_connect">Conexão Rápida</string>
     <string name="quick_connect_summary">Autorizar outro dispositivo a se autenticar com sua conta</string>
     <string name="quick_connect_code">Insira o código de conexão rápida</string>
@@ -544,9 +541,6 @@
     <string name="backdrop_style_dynamic">Imagem com cor dinâmica</string>
     <string name="backdrop_style_image">Apenas imagem</string>
     <string name="api_key">Chave de API</string>
-    <string name="seerr_login">Autenticar no servidor Seerr</string>
-    <string name="seerr_jellyfin_user">Usuário Jellyfin</string>
-    <string name="seerr_local_user">Usuário local</string>
     <string name="no_subtitles_found">Nenhuma legenda remota encontrada</string>
     <string name="series_continueing">Presente</string>
     <string name="in_app_screensaver">Usar protetor de tela do aplicativo</string>

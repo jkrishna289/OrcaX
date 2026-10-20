@@ -107,9 +107,6 @@
     <string name="discover">Descoperă</string>
     <string name="play_trailer">Redă trailer</string>
     <string name="no_trailers">Fără trailere</string>
-    <string name="seerr_integration">Integrare Seerr</string>
-    <string name="remove_seerr_server">Elimină serverul Seerr</string>
-    <string name="seerr_server_added">Serverul Seer adăugat</string>
     <string name="quick_connect">Conectare rapidă</string>
     <string name="quick_connect_summary">Autorizează un alt dispozitiv să se conecteze la contul tău</string>
     <string name="quick_connect_code">Introdu codul de conectare rapidă</string>
@@ -171,7 +168,6 @@
     <string name="player_backend_options_subtitles_prefer_mpv">Folosește ExoPlayer pentru redare HDR</string>
     <string name="aspect_ratios_square">Pătrat (1:1)</string>
     <string name="api_key">Cheie API</string>
-    <string name="seerr_login">Conectează-te la serverul Seerr</string>
     <string name="discovered_servers">Servere descoperite</string>
     <string name="download_and_update"><![CDATA[Descarcă & Actualizează]]></string>
     <string name="commercial">Reclamă</string>
@@ -295,8 +291,6 @@
     <string name="screensaver_settings">Setări economizor de ecran</string>
     <string name="skip_automatically">Sări automat</string>
     <string name="skip_ask">Cere să sari peste</string>
-    <string name="seerr_jellyfin_user">Utilizator Jellyfin</string>
-    <string name="seerr_local_user">Utilizator local</string>
     <string name="search_and_download_subtitles"><![CDATA[Caută & descarcă subtitrări]]></string>
     <string name="composer">Compozitor</string>
     <string name="writer">Scriitor</string>

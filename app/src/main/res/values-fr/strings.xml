@@ -410,9 +410,6 @@
     <string name="discover">Découvrir</string>
     <string name="request">Demande</string>
     <string name="pending">En attente</string>
-    <string name="seerr_integration">Intégration Seerr</string>
-    <string name="remove_seerr_server">Supprimer le serveur Seerr</string>
-    <string name="seerr_server_added">Serveur Seerr ajouté</string>
     <string name="password">Mot de passe</string>
     <string name="username">Nom d\'utilisateur</string>
     <string name="url">URL</string>
@@ -546,9 +543,6 @@
     <string name="backdrop_style_image">Image uniquement</string>
     <string name="enter_url_api_key"><![CDATA[Saisir l\'URL et la clé API]]></string>
     <string name="api_key">Clé API</string>
-    <string name="seerr_login">Se connecter au serveur Seerr</string>
-    <string name="seerr_jellyfin_user">Utilisateur Jellyfin</string>
-    <string name="seerr_local_user">Utilisateur local</string>
     <string name="search_and_download_subtitles"><![CDATA[Rechercher et télécharger des sous-titres]]></string>
     <string name="no_subtitles_found">Aucun sous-titre distant n\'a été trouvé</string>
     <string name="series_continueing">En cours</string>

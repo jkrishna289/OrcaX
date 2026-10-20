@@ -151,8 +151,8 @@ class EngineDetailsViewModel
         }
 
         // ── Keep it? ────────────────────────────────────────────────────────
-        // Same rules as the Jellyseerr-backed page: asked once, on the way back from a streamed film,
-        // and only when the answer could plausibly be yes.
+        // Asked once, on the way back from a streamed film, and only when the answer could plausibly
+        // be yes.
 
         private fun checkKeepPrompt() {
             val watch = streamWatchTracker.consume() ?: return

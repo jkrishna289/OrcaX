@@ -27,10 +27,8 @@ import javax.inject.Inject
 /**
  * The whole find-a-stream-and-play-it flow: search, pick, connect, escalate, hand to the player.
  *
- * Deliberately knows nothing about Jellyseerr. The flow has no request-service dependency of its own —
- * it only ever appeared to, because the one screen that could host its entry point happened to be
- * Seerr-backed. Keeping it separate means the state machine can be driven from anywhere that has a
- * title and a year, which is what makes it testable at all.
+ * Deliberately has no request-service dependency, so the state machine can be driven from anywhere
+ * that has a title and a year, which is what makes it testable at all.
  *
  * [scope] is the owner's lifecycle: everything started here dies with it.
  */
