@@ -131,7 +131,13 @@ fun TvGuideGrid(
                 modifier = modifier,
             ) {
                 if (channels.isEmpty()) {
-                    ErrorMessage("Live TV is enabled, but no channels were found.", null)
+                    // An empty state, not an error: no "send logs" prompt
+                    Text(
+                        text = "Live TV is enabled, but no channels were found.",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(16.dp),
+                    )
                 } else {
                     AnimatedVisibility(tvPrefs.showHeader) {
                         TvGuideHeader(
