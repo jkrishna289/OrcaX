@@ -585,7 +585,14 @@ constructor(
                 forceTranscoding,
             )
         if (!played) {
-            playNextUp()
+            // A single item's playlist is only built below, so there is usually nothing to fall back
+            // to: leave instead of sitting on a black player once the toast is gone.
+            if (playlist.value?.hasNext() == true) {
+                playNextUp()
+            } else {
+                withContext(Dispatchers.Main) { navigationManager.goBack() }
+            }
+            return
         }
 
         if (!isPlaylist && preferences.appPreferences.playbackPreferences.showNextUpWhen != ShowNextUpWhen.NEXT_UP_NEVER) {
