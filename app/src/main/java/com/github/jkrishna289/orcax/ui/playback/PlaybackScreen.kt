@@ -1879,30 +1879,9 @@ private fun P1TopBar(
                 )
             }
         }
-        P1LiveClock()
+        // No clock here: PlaybackPage's TimeDisplay already shows one, honouring the user's
+        // show-clock setting and 12/24h format (this one ignored both and doubled it up)
     }
-}
-
-@Composable
-private fun P1LiveClock() {
-    var timeText by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) {
-        while (true) {
-            val cal = java.util.Calendar.getInstance()
-            val h   = cal.get(java.util.Calendar.HOUR).let { if (it == 0) 12 else it }
-            val m   = cal.get(java.util.Calendar.MINUTE).toString().padStart(2, '0')
-            val ap  = if (cal.get(java.util.Calendar.AM_PM) == java.util.Calendar.AM) "AM" else "PM"
-            timeText = "$h:$m $ap"
-            kotlinx.coroutines.delay(10_000L)
-        }
-    }
-    Text(
-        text          = timeText,
-        color         = Color.White.copy(alpha = 0.85f),
-        fontSize      = 15.sp,
-        fontWeight    = FontWeight.SemiBold,
-        letterSpacing = (0.02f * 15).sp
-    )
 }
 
 @Composable
