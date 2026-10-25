@@ -27,7 +27,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.ItemFields
+import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
+import java.util.UUID
 
 /**
  * The details page for a title the engine knows about but the library doesn't hold.
@@ -42,6 +48,7 @@ class EngineDetailsViewModel
     @AssistedInject
     constructor(
         private val engineClient: OrcaEngineClient,
+        private val api: ApiClient,
         private val navigationManager: NavigationManager,
         private val preferences: DataStore<AppPreferences>,
         private val streamWatchTracker: StreamWatchTracker,
@@ -102,7 +109,36 @@ class EngineDetailsViewModel
                 ensureActive()
                 status?.availability?.let { fresh -> availability.update { fresh } }
                 updateProgress(progress)
+                if (libraryItemId.value == null && availability.value in IN_LIBRARY) {
+                    findLibraryItemByTmdb()?.let { id -> libraryItemId.update { id } }
+                }
             }
+        }
+
+        /**
+         * Progress only resolves the library copy for movies on engine 1.3+, so series and older
+         * engines would leave Play dead on a title that is already in the library.
+         */
+        private suspend fun findLibraryItemByTmdb(): UUID? {
+            val tmdbId = item.media.tmdbId?.toString() ?: return null
+            val title = item.card.title?.takeIf { it.isNotBlank() } ?: return null
+            val kind = if (item.media.mediaType == MediaType.SERIES) BaseItemKind.SERIES else BaseItemKind.MOVIE
+            // ponytail: title search then match on TMDB id, because servers ignore AnyProviderIdEquals.
+            // Misses a library copy filed under a different title; page the whole type if that bites.
+            return runCatching {
+                api.itemsApi
+                    .getItems(
+                        GetItemsRequest(
+                            searchTerm = title,
+                            recursive = true,
+                            includeItemTypes = listOf(kind),
+                            fields = listOf(ItemFields.PROVIDER_IDS),
+                            limit = 25,
+                        ),
+                    ).content.items
+                    .firstOrNull { it.providerIds?.get("Tmdb") == tmdbId }
+                    ?.id
+            }.getOrNull()
         }
 
         private fun updateProgress(progress: ServerPlaybackProgress?) {
@@ -196,9 +232,9 @@ class EngineDetailsViewModel
                 withContext(Dispatchers.Main) {
                     val destination =
                         if (item.media.mediaType == MediaType.SERIES) {
-                            Destination.SeriesOverview(itemId = id, type = org.jellyfin.sdk.model.api.BaseItemKind.SERIES)
+                            Destination.SeriesOverview(itemId = id, type = BaseItemKind.SERIES)
                         } else {
-                            Destination.MediaItem(itemId = id, type = org.jellyfin.sdk.model.api.BaseItemKind.MOVIE)
+                            Destination.MediaItem(itemId = id, type = BaseItemKind.MOVIE)
                         }
                     navigationManager.navigateTo(destination)
                 }
@@ -211,6 +247,9 @@ class EngineDetailsViewModel
  * formed an opinion yet, and asking anyway trains them to dismiss it without reading.
  */
 private const val KEEP_MIN_WATCH_MS = 15 * 60 * 1000L
+
+/** Engine states that mean a copy is already in the library. */
+private val IN_LIBRARY = setOf(AvailabilityState.WATCH_NOW, AvailabilityState.RECENTLY_ADDED)
 
 /** The release year, read back out of the card's own YEAR badge — the only place the engine sends it. */
 internal fun RenderItem.yearBadge(): Int? =
