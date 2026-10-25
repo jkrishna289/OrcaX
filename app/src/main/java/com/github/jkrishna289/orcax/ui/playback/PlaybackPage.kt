@@ -324,8 +324,8 @@ fun PlaybackPageContent(
         phaseViewModel.updateMetadata(
             showTitle   = item?.title ?: item?.name ?: "",
             episodeName = item?.name ?: "",
-            season      = item?.data?.parentIndexNumber ?: 1,
-            episode     = item?.data?.indexNumber ?: 1,
+            season      = item?.data?.parentIndexNumber ?: 0,
+            episode     = item?.data?.indexNumber ?: 0,
             synopsis    = item?.data?.overview ?: "",
             year        = item?.data?.productionYear?.toString() ?: "",
             rating      = item?.data?.officialRating ?: "",

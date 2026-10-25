@@ -1869,13 +1869,15 @@ private fun P1TopBar(
                     overflow      = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                text          = stringResource(R.string.p1_season_episode, season, episode),
-                fontSize      = 13.sp,
-                fontWeight    = FontWeight.SemiBold,
-                letterSpacing = (0.12f * 13).sp,
-                color         = Color.White.copy(alpha = 0.72f)
-            )
+            if (season > 0 && episode > 0) {
+                Text(
+                    text          = stringResource(R.string.p1_season_episode, season, episode),
+                    fontSize      = 13.sp,
+                    fontWeight    = FontWeight.SemiBold,
+                    letterSpacing = (0.12f * 13).sp,
+                    color         = Color.White.copy(alpha = 0.72f)
+                )
+            }
         }
         P1LiveClock()
     }

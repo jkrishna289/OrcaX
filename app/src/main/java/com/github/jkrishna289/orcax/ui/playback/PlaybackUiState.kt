@@ -93,8 +93,9 @@ data class PlaybackUiState(
     // Content metadata
     val showTitle: String = "",
     val episodeName: String = "",
-    val season: Int = 1,
-    val episode: Int = 1,
+    // 0 = not an episode (movies, videos); only positive values are shown
+    val season: Int = 0,
+    val episode: Int = 0,
     val synopsis: String = "",
     val artworkUrl: String = "",
     val logoUrl: String = "",
