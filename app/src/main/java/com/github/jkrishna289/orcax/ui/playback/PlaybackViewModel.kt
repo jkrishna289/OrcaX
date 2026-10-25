@@ -1778,6 +1778,12 @@ constructor(
         Timber.e(error, "Playback error")
         isSwitchingStream.update { false }
         viewModelScope.launch(Dispatchers.Main + ExceptionHandler()) {
+            // A torrent source is direct-play only: the transcode "fallback" below would rebuild the
+            // same URL as DIRECT_PLAY again, so a dead stream would retry forever without an error.
+            if (torrentPlayback != null) {
+                loading.setValueOnMain(LoadingState.Error("The stream stopped", error))
+                return@launch
+            }
             currentPlayback.value?.let {
                 when (it.playMethod) {
                     PlayMethod.TRANSCODE -> {
