@@ -135,7 +135,8 @@ fun TopNavBar(
 
     // Rigid, linear frost transition (no spring/bounce, per the design language).
     val scrimColor by animateColorAsState(
-        targetValue = if (isAtTop) Color.Transparent else Color.Black.copy(alpha = 0.6f),
+        // Without blur (pre-Android 12) the scrim alone has to keep row text from showing through the icons
+        targetValue = if (isAtTop) Color.Transparent else Color.Black.copy(alpha = if (SUPPORTS_BLUR) 0.6f else 0.85f),
         animationSpec = tween(durationMillis = 250, easing = LinearEasing),
         label = "topnav-scrim",
     )
