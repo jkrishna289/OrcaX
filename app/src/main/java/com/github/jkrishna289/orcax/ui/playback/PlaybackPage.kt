@@ -487,6 +487,8 @@ fun PlaybackPageContent(
             },
             onPlaybackDialogTypeClick = { playbackDialog = it },
             isOverlayActive = { phaseState.overlayActive },
+            onNext = viewModel::playNextUp,
+            onPrevious = viewModel::previousOrRestart,
         )
 
     val onPlaybackActionClick: (PlaybackAction) -> Unit = {
@@ -531,12 +533,7 @@ fun PlaybackPageContent(
             }
 
             PlaybackAction.Previous -> {
-                val pos = player.currentPosition
-                if (pos < player.maxSeekToPreviousPosition && playlist.hasPrevious()) {
-                    viewModel.playPrevious()
-                } else {
-                    player.seekToPrevious()
-                }
+                viewModel.previousOrRestart()
                 playbackDialog = null
                 focusRequester.tryRequestFocus()
             }

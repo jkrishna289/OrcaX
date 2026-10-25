@@ -446,6 +446,8 @@ constructor(
             MediaSessionPlayer(
                 player,
                 preferences.appPreferences.playbackPreferences,
+                onNext = ::playNextUp,
+                onPrevious = ::previousOrRestart,
             )
         mediaSession =
             MediaSession
@@ -1600,6 +1602,15 @@ constructor(
                     }
                 }
             }
+        }
+    }
+
+    /** The previous item when near the start of this one, otherwise restart it (the usual remote convention). */
+    fun previousOrRestart() {
+        if (player.currentPosition < player.maxSeekToPreviousPosition && playlist.value?.hasPrevious() == true) {
+            playPrevious()
+        } else {
+            player.seekToPrevious()
         }
     }
 

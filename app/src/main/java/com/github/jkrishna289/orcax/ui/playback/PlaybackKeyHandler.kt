@@ -29,6 +29,14 @@ class PlaybackKeyHandler(
     private val onStop: () -> Unit,
     private val onPlaybackDialogTypeClick: (PlaybackDialogType) -> Unit,
     private val isOverlayActive: () -> Boolean = { false },
+    // Video playback overrides these: its playlist lives in the ViewModel, so the player itself holds a
+    // single item and its own next/previous would do nothing or just restart the episode.
+    private val onNext: () -> Unit = {
+        if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) player.seekToNext()
+    },
+    private val onPrevious: () -> Unit = {
+        if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS)) player.seekToPrevious()
+    },
 ) {
     private var leftHandledByRepeat = false
     private var rightHandledByRepeat = false
@@ -113,11 +121,11 @@ class PlaybackKeyHandler(
                 }
 
                 Key.MediaNext -> {
-                    if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) player.seekToNext()
+                    onNext()
                 }
 
                 Key.MediaPrevious -> {
-                    if (player.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS)) player.seekToPrevious()
+                    onPrevious()
                 }
 
                 Key.Captions -> {
