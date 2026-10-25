@@ -455,13 +455,8 @@ private fun EngineCardBody(
                     // excluded: RANK feeds TopRankedCard, STUDIO/DAY/TODAY sit top-left, PREMIERE lives
                     // in the title block, TIMELEFT is the wide card's bottom-left chip, and CONTEXT is
                     // deliberately unrendered (kept in PLACED_BADGE_KINDS so it can't leak in here).
-                    val overlayBadges =
-                        card.badges.filterNot { badge ->
-                            PLACED_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) } ||
-                                AVAILABILITY_BADGE_KINDS.any { badge.kind.equals(it, ignoreCase = true) }
-                        }
                     CardBadges(
-                        badges = overlayBadges,
+                        badges = card.badges,
                         availability = item.media.availability,
                         modifier = Modifier.align(Alignment.TopEnd),
                     )
@@ -618,6 +613,12 @@ private fun CardBadges(
     modifier: Modifier = Modifier,
 ) {
     val availabilityLabel = availabilityBadge(availability)
+    // Filtered here rather than by each caller: the Top-10 card once forgot, so its corner showed the
+    // availability word twice and the second copy ellipsized to "R…".
+    val badges =
+        badges.filterNot { badge ->
+            (PLACED_BADGE_KINDS + AVAILABILITY_BADGE_KINDS).any { badge.kind.equals(it, ignoreCase = true) }
+        }
     if (availabilityLabel == null && badges.isEmpty()) return
 
     Row(
@@ -794,9 +795,8 @@ private fun TopRankedCard(
                         accent = accent,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    val overlayBadges = card.badges.filterNot { it.kind.equals("RANK", ignoreCase = true) }
                     CardBadges(
-                        badges = overlayBadges,
+                        badges = card.badges,
                         availability = item.media.availability,
                         modifier = Modifier.align(Alignment.TopEnd),
                     )
