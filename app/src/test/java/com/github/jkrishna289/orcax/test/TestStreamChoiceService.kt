@@ -237,6 +237,21 @@ class TestStreamChoiceServiceSmart(
         @Parameterized.Parameters(name = "{index}: {0}")
         fun data(): Collection<TestInput> =
             listOf(
+                // Real file (Dark S1E1): foreign default audio with a default+forced track in that
+                // language. Smart mode must still pick the user's subtitle language, not the forced track.
+                TestInput(
+                    5,
+                    SubtitlePlaybackMode.SMART,
+                    userAudioLang = "",
+                    streamAudioLang = "ita",
+                    subtitles =
+                        listOf(
+                            subtitle(3, "ita", default = true, forced = true),
+                            subtitle(4, "ita"),
+                            subtitle(5, "eng"),
+                            subtitle(6, "nld"),
+                        ),
+                ),
                 TestInput(
                     0,
                     SubtitlePlaybackMode.SMART,
