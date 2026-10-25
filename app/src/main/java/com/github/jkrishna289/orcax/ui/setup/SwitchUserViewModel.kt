@@ -131,7 +131,13 @@ class SwitchUserViewModel
                     }
                 } catch (ex: Exception) {
                     Timber.e(ex, "Error switching user")
-                    setError("Error switching user", ex)
+                    val msg =
+                        if (ex is InvalidStatusException && ex.status == 401) {
+                            "Sign-in for ${user.name ?: "this user"} has expired. Use Add User to sign in again."
+                        } else {
+                            "Error switching user"
+                        }
+                    setError(msg, ex)
                 }
             }
         }
