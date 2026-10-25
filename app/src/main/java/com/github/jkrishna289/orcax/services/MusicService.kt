@@ -26,6 +26,7 @@ import com.github.jkrishna289.orcax.util.PlaybackItemState
 import com.github.jkrishna289.orcax.util.TrackActivityPlaybackListener
 import com.github.jkrishna289.orcax.util.profile.supportedAudioCodecs
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -152,9 +153,8 @@ class MusicService
         }
 
         /**
-         * Fetches instant mix items, replaces the queue, and begins playback
-         */
-        /**
+         * Fetches instant mix items, replaces the queue, and begins playback.
+         *
          * Marks the queue as loading before its first suspension, so a caller that starts this
          * undispatched can navigate to Now Playing straight after and never see an empty queue.
          */
@@ -391,48 +391,56 @@ class MusicService
                 .subscribe<PlaystateMessage>()
                 .onEach { message ->
                     message.data?.let {
-                        withContext(Dispatchers.Main) {
-                            when (it.command) {
-                                PlaystateCommand.STOP -> {
-                                    stop()
-                                }
+                        // Caught per command: an exception here would otherwise end the subscription,
+                        // and with it remote control, for the rest of the session
+                        try {
+                            withContext(Dispatchers.Main) {
+                                when (it.command) {
+                                    PlaystateCommand.STOP -> {
+                                        stop()
+                                    }
 
-                                PlaystateCommand.PAUSE -> {
-                                    player.pause()
-                                }
+                                    PlaystateCommand.PAUSE -> {
+                                        player.pause()
+                                    }
 
-                                PlaystateCommand.UNPAUSE -> {
-                                    player.play()
-                                }
+                                    PlaystateCommand.UNPAUSE -> {
+                                        player.play()
+                                    }
 
-                                PlaystateCommand.NEXT_TRACK -> {
-                                    player.seekToNext()
-                                }
+                                    PlaystateCommand.NEXT_TRACK -> {
+                                        player.seekToNext()
+                                    }
 
-                                PlaystateCommand.PREVIOUS_TRACK -> {
-                                    player.seekToPrevious()
-                                }
+                                    PlaystateCommand.PREVIOUS_TRACK -> {
+                                        player.seekToPrevious()
+                                    }
 
-                                PlaystateCommand.SEEK -> {
-                                    it.seekPositionTicks?.ticks?.let {
-                                        player.seekTo(
-                                            it.inWholeMilliseconds,
-                                        )
+                                    PlaystateCommand.SEEK -> {
+                                        it.seekPositionTicks?.ticks?.let {
+                                            player.seekTo(
+                                                it.inWholeMilliseconds,
+                                            )
+                                        }
+                                    }
+
+                                    PlaystateCommand.REWIND -> {
+                                        player.seekBack(10.seconds)
+                                    }
+
+                                    PlaystateCommand.FAST_FORWARD -> {
+                                        player.seekForward(30.seconds)
+                                    }
+
+                                    PlaystateCommand.PLAY_PAUSE -> {
+                                        if (player.isPlaying) player.pause() else player.play()
                                     }
                                 }
-
-                                PlaystateCommand.REWIND -> {
-                                    player.seekBack(10.seconds)
-                                }
-
-                                PlaystateCommand.FAST_FORWARD -> {
-                                    player.seekForward(30.seconds)
-                                }
-
-                                PlaystateCommand.PLAY_PAUSE -> {
-                                    if (player.isPlaying) player.pause() else player.play()
-                                }
                             }
+                        } catch (ex: CancellationException) {
+                            throw ex
+                        } catch (ex: Exception) {
+                            Timber.e(ex, "Error handling playstate command %s", it.command)
                         }
                     }
                 }.catch { ex ->
