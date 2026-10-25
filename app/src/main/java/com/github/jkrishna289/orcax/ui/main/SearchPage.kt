@@ -254,19 +254,19 @@ fun SearchPage(
         viewModel.navigationManager.navigateTo(item.destination())
     }
 
-    LaunchedEffect(searchClicked, movies, collections, series, episodes) {
+    LaunchedEffect(searchClicked, movies, series, episodes, albums, artists, songs, collections) {
         if (!searchClicked) return@LaunchedEffect
 
         withContext(Dispatchers.IO) {
-            // Want to focus on the first successful row after all of the ones before it are finished searching
-            val results = listOf(movies, collections, series, episodes)
+            // Want to focus on the first successful row after all of the ones before it are finished searching.
+            // Index i is row i + 1 (row 0 is the search bar), so this must stay in on-screen row order.
+            val results = listOf(movies, series, episodes, albums, artists, songs, collections)
             val firstSuccess =
                 results.indexOfFirst { it is SearchResult.Success }
             if (firstSuccess >= 0) {
                 val anyBeforeSearching =
                     results.subList(0, firstSuccess).any { it is SearchResult.Searching }
                 if (!anyBeforeSearching) {
-                    // 0-th row is the search bar
                     position = RowColumn(firstSuccess + 1, 0)
                     onMain { focusRequesters[firstSuccess + 1].tryRequestFocus() }
                 }
@@ -335,7 +335,10 @@ fun SearchPage(
                                 }.onPreviewKeyEvent { event ->
                                     val isActivationKey =
                                         event.key in listOf(Key.DirectionCenter, Key.Enter)
-                                    if (event.type == KeyEventType.KeyUp && isActivationKey && !isSearchActive) {
+                                    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                                        // The text field eats Down as a cursor move, so focus could never reach the results
+                                        focusManager.moveFocus(FocusDirection.Down)
+                                    } else if (event.type == KeyEventType.KeyUp && isActivationKey && !isSearchActive) {
                                         isSearchActive = true
                                         keyboardController?.show()
                                         true
@@ -417,9 +420,9 @@ fun SearchPage(
         searchResultRow(
             title = R.string.artists,
             result = artists,
-            rowIndex = COLLECTION_ROW,
+            rowIndex = ARTIST_ROW,
             position = position,
-            focusRequester = focusRequesters[COLLECTION_ROW],
+            focusRequester = focusRequesters[ARTIST_ROW],
             onClickItem = onClickItem,
             onClickPosition = { position = it },
             modifier = Modifier.fillMaxWidth(),
@@ -427,7 +430,7 @@ fun SearchPage(
                 SeasonCard(
                     item = item,
                     onClick = {
-                        position = RowColumn(ALBUM_ROW, index)
+                        position = RowColumn(ARTIST_ROW, index)
                         onClick.invoke()
                     },
                     onLongClick = onLongClick,
@@ -451,7 +454,7 @@ fun SearchPage(
                 SeasonCard(
                     item = item,
                     onClick = {
-                        position = RowColumn(ALBUM_ROW, index)
+                        position = RowColumn(SONG_ROW, index)
                         onClick.invoke()
                     },
                     onLongClick = onLongClick,
