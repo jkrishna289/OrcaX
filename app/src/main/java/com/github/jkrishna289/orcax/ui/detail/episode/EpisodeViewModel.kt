@@ -79,7 +79,8 @@ class EpisodeViewModel
         val canDelete = MutableStateFlow(false)
 
         init {
-            init()
+            // No init() here: EpisodeDetails calls it on every resume, including the first, so
+            // calling it here too fetched everything twice on open
             viewModelScope.launchDefault {
                 item
                     .asFlow()

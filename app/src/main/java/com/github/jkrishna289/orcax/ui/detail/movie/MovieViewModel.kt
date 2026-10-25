@@ -93,7 +93,8 @@ class MovieViewModel
         val state: StateFlow<MovieState> = _state
 
         init {
-            init()
+            // No init() here: MovieDetails calls it on every resume, including the first, so
+            // calling it here too fetched everything twice on open
             viewModelScope.launchDefault {
                 userPreferencesService.flow.collectLatest { preferences ->
                     _state.update {
