@@ -1787,12 +1787,34 @@ constructor(
             currentPlayback.value?.let {
                 when (it.playMethod) {
                     PlayMethod.TRANSCODE -> {
-                        loading.setValueOnMain(
-                            LoadingState.Error(
-                                "Error during playback",
-                                error,
-                            ),
-                        )
+                        if (qualityManager.onTranscodeFailed()) {
+                            // AUTO had capped this to a transcode the server can't produce; direct
+                            // play may still work (it did before the cap), so go back to it
+                            Timber.w("Transcode failed under an AUTO quality cap, returning to direct play")
+                            changeStreams(
+                                item,
+                                currentItemPlayback.value!!,
+                                currentItemPlayback.value?.audioIndex,
+                                currentItemPlayback.value?.subtitleIndex,
+                                player.currentPosition,
+                                false,
+                                enableDirectPlay = !forceTranscoding && qualityManager.effectiveEnableDirectPlay,
+                                enableDirectStream = !forceTranscoding,
+                                allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
+                                forceRebuild = true,
+                            )
+                            withContext(Dispatchers.Main) {
+                                player.prepare()
+                                player.play()
+                            }
+                        } else {
+                            loading.setValueOnMain(
+                                LoadingState.Error(
+                                    "Error during playback",
+                                    error,
+                                ),
+                            )
+                        }
                     }
 
                     PlayMethod.DIRECT_STREAM, PlayMethod.DIRECT_PLAY -> {

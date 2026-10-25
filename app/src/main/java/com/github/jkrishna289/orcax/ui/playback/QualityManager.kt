@@ -283,6 +283,32 @@ class QualityManager(
 
     fun onStreamRebuilt() = healthTracker.onStreamRebuilt()
 
+    /**
+     * The server couldn't produce the transcode AUTO capped playback to (e.g. a codec its hardware
+     * decoder doesn't support), so a lower rung is no use. Lift AUTO's cap to go back to direct play,
+     * and stop rescuing for the rest of this item so it can't ratchet into the same failing transcode.
+     *
+     * @return true when an AUTO cap was lifted, so a rebuild is worth trying; false for manual picks
+     * or when no AUTO cap was in the way (the error is then real).
+     */
+    fun onTranscodeFailed(): Boolean {
+        if (_mode.value != QualitySelection.Auto) return false
+        val hadCap = rescueRung != null || sessionSelection != QualitySelection.Original
+        epoch.incrementAndGet() // drop any in-flight post-rescue verification
+        rescueRung = null
+        rescueCount = MAX_RESCUES
+        sessionSelection = QualitySelection.Original
+        if (hadCap) {
+            QualityDecisionLog.log(
+                event = "TRANSCODE_FAILED",
+                to = describe(QualitySelection.Original),
+                reason = "server could not transcode; rescues disabled for this item",
+                sessionId = sessionId(),
+            )
+        }
+        return hadCap
+    }
+
     fun onRebuffer(positionMs: Long, durationMs: Long, isSwitchingStream: Boolean) {
         if (healthTracker.onRebuffer(positionMs, durationMs, isSwitchingStream) ==
             PlaybackHealthTracker.Verdict.RESCUE
