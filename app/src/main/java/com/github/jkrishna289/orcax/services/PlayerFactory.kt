@@ -179,7 +179,8 @@ class PlayerFactory
                                             .Builder()
                                             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                                             .build(),
-                                        false,
+                                        // Take audio focus: pause/duck for the Assistant and other apps
+                                        true,
                                     )
                                 }
                             }
@@ -224,7 +225,8 @@ class PlayerFactory
                             .Builder()
                             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                             .build(),
-                        false,
+                        // Take audio focus: otherwise music keeps playing over whatever app comes next
+                        true,
                     )
                 }
         }
