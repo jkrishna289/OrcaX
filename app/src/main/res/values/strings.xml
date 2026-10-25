@@ -540,6 +540,7 @@
     <string name="request">Request</string>
     <string name="requested">Requested</string>
     <string name="requesting">Requesting…</string>
+    <string name="request_title_confirm">Request %1$s?</string>
     <string name="pending">Pending</string>
     <string name="quick_connect">Quick Connect</string>
     <string name="quick_connect_summary">Authorize another device to log in to your account</string>
