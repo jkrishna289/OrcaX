@@ -15,12 +15,12 @@ import com.github.jkrishna289.orcax.ui.nav.ServerNavDrawerItem
 import com.github.jkrishna289.orcax.ui.showToast
 import com.github.jkrishna289.orcax.util.supportedCollectionTypes
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
@@ -70,11 +70,17 @@ class NavDrawerService
                         )
                     }
                     if (user != null && userDto != null && user.id == userDto.id) {
-                        updateNavDrawer(user, userDto)
+                        // Caught per update: a flow-level catch ends the flow, so one failed fetch
+                        // (e.g. an expired token) would leave the drawer empty for the whole session.
+                        try {
+                            updateNavDrawer(user, userDto)
+                        } catch (ex: CancellationException) {
+                            throw ex
+                        } catch (ex: Exception) {
+                            Timber.e(ex, "Error updating nav drawer")
+                            showToast(context, "Error fetching user's views")
+                        }
                     }
-                }.catch { ex ->
-                    Timber.e(ex, "Error updating nav drawer")
-                    showToast(context, "Error fetching user's views")
                 }.launchIn(coroutineScope)
 
             // Handle when music is actively playing or not
