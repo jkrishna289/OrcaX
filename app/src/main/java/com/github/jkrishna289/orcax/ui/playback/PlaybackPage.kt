@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
@@ -76,6 +77,7 @@ import androidx.media3.ui.compose.state.rememberPlayPauseButtonState
 import androidx.media3.ui.compose.state.rememberPresentationState
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.surfaceColorAtElevation
+import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.data.model.Playlist
 import com.github.jkrishna289.orcax.data.model.TrackIndex
@@ -86,6 +88,7 @@ import com.github.jkrishna289.orcax.preferences.skipBackOnResume
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
+import com.github.jkrishna289.orcax.ui.components.TextButton
 import com.github.jkrishna289.orcax.ui.components.TimeDisplay
 import com.github.jkrishna289.orcax.ui.components.ErrorMessage
 import com.github.jkrishna289.orcax.ui.components.LoadingPage
@@ -137,7 +140,16 @@ fun PlaybackPage(
     val loading by viewModel.loading.observeAsState(LoadingState.Loading)
     when (val st = loading) {
         is LoadingState.Error -> {
-            ErrorMessage(st, modifier)
+            Column(modifier) {
+                // Most playback errors are a dropped connection: offer a way back in without
+                // leaving the player
+                TextButton(
+                    stringRes = R.string.retry,
+                    onClick = viewModel::retry,
+                    modifier = Modifier.padding(start = 16.dp, top = 16.dp),
+                )
+                ErrorMessage(st)
+            }
         }
 
         LoadingState.Pending,

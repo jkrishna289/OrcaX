@@ -1818,6 +1818,33 @@ constructor(
         }
     }
 
+    /**
+     * From the playback error screen: rebuild the stream where it stopped. Errors here are usually a
+     * dropped connection, so direct play is allowed again rather than staying on the transcode fallback.
+     */
+    fun retry() {
+        val itemPlayback = currentItemPlayback.value ?: return
+        viewModelScope.launch(Dispatchers.Main + ExceptionHandler()) {
+            val positionMs = player.currentPosition
+            if (torrentPlayback == null) {
+                changeStreams(
+                    item,
+                    itemPlayback,
+                    itemPlayback.audioIndex,
+                    itemPlayback.subtitleIndex,
+                    positionMs,
+                    userInitiated = false,
+                    forceRebuild = true,
+                )
+            } else {
+                // A torrent has one fixed URL; re-preparing it is the whole retry
+                loading.value = LoadingState.Success
+            }
+            player.prepare()
+            player.play()
+        }
+    }
+
     fun release() {
         Timber.v("release")
         disconnectPlayer()
