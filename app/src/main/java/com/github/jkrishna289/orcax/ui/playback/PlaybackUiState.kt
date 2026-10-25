@@ -96,6 +96,9 @@ data class PlaybackUiState(
     // 0 = not an episode (movies, videos); only positive values are shown
     val season: Int = 0,
     val episode: Int = 0,
+    // The user's skip settings, so the on-screen skip buttons match the D-pad
+    val skipBackMs: Long = 10_000L,
+    val skipForwardMs: Long = 30_000L,
     val synopsis: String = "",
     val artworkUrl: String = "",
     val logoUrl: String = "",

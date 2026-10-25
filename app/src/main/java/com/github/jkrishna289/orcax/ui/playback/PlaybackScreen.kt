@@ -1938,11 +1938,11 @@ private fun P1BottomBar(
         ) {
             FrostPlaybackButton(
                 iconRes            = null,
-                text               = "«30",
-                contentDescription = stringResource(R.string.p1_skip_back_30),
+                text               = "«${state.skipBackMs / 1000}",
+                contentDescription = stringResource(R.string.p1_skip_back_30, state.skipBackMs / 1000),
                 isDimmed           = anyDropdownOpen,
                 onClick            = {
-                    val pos = (state.seekPositionMs - 30_000L).coerceAtLeast(0L)
+                    val pos = (state.seekPositionMs - state.skipBackMs).coerceAtLeast(0L)
                     onSeekRequested(pos)
                     viewModel.onSeekTo(pos)
                 },
@@ -1961,14 +1961,14 @@ private fun P1BottomBar(
             )
             FrostPlaybackButton(
                 iconRes            = null,
-                text               = "15»",
-                contentDescription = stringResource(R.string.p1_skip_forward_15),
+                text               = "${state.skipForwardMs / 1000}»",
+                contentDescription = stringResource(R.string.p1_skip_forward_15, state.skipForwardMs / 1000),
                 isDimmed           = anyDropdownOpen,
                 onClick            = {
                     // durationMs == 0 while unknown (live / not yet reported) — clamping
                     // against it would seek to the start instead of forward.
                     val limit = if (state.durationMs > 0L) state.durationMs else Long.MAX_VALUE
-                    val pos = (state.seekPositionMs + 15_000L).coerceAtMost(limit)
+                    val pos = (state.seekPositionMs + state.skipForwardMs).coerceAtMost(limit)
                     onSeekRequested(pos)
                     viewModel.onSeekTo(pos)
                 },

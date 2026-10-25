@@ -307,6 +307,13 @@ fun PlaybackPageContent(
     val isTorrentStream by viewModel.isTorrentStream.collectAsState()
     val streamHealth by viewModel.streamHealth.collectAsState()
 
+    LaunchedEffect(preferences.appPreferences.playbackPreferences) {
+        phaseViewModel.updateSkipDurations(
+            backMs = preferences.appPreferences.playbackPreferences.skipBackMs,
+            forwardMs = preferences.appPreferences.playbackPreferences.skipForwardMs,
+        )
+    }
+
     // ── Sync progress + playing state to PlaybackPhaseViewModel ────────────
     LaunchedEffect(currentPositionMs, currentDurationMs, currentBufferedMs) {
         phaseViewModel.updateProgress(currentPositionMs, currentDurationMs, currentBufferedMs)

@@ -43,6 +43,10 @@ class PlaybackPhaseViewModel : ViewModel() {
         }
     }
 
+    fun updateSkipDurations(backMs: Long, forwardMs: Long) {
+        _uiState.update { it.copy(skipBackMs = backMs, skipForwardMs = forwardMs) }
+    }
+
     fun updatePlayingState(isPlaying: Boolean) {
         _uiState.update { it.copy(isPlaying = isPlaying) }
     }

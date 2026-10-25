@@ -74,8 +74,8 @@
     <string name="stream_health_waiting">Waiting for the swarm…</string>
     <string name="stream_health_stalled">Not receiving data</string>
     <string name="stream_health_hint">BACK closes · playback continues</string>
-    <string name="p1_skip_back_30">Back 30 seconds</string>
-    <string name="p1_skip_forward_15">Forward 15 seconds</string>
+    <string name="p1_skip_back_30">Back %1$d seconds</string>
+    <string name="p1_skip_forward_15">Forward %1$d seconds</string>
     <string name="p1_season_episode">S%1$d  ·  E%2$d</string>
     <string name="minutes_left_under_one">&lt;1m left</string>
     <string name="minutes_left">%1$dm left</string>
