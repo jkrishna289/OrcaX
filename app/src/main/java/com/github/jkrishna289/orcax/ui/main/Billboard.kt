@@ -62,6 +62,7 @@ import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 
@@ -363,7 +364,7 @@ private fun BillboardInfo(item: RenderItem) {
 
         card.subtitle?.takeIf { it.isNotBlank() }?.let { tagline ->
             Text(
-                text = tagline,
+                text = tagline.collapseWhitespace(),
                 color = Color.White.copy(alpha = 0.78f),
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,

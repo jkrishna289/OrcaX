@@ -188,6 +188,12 @@ fun RequestOrRestoreFocus(
     }
 }
 
+/**
+ * Flattens paragraph breaks for line-clamped previews, where a blank line wastes a line and can leave
+ * a lone "…" as the last visible line.
+ */
+fun String.collapseWhitespace() = trim().replace(Regex("\\s+"), " ")
+
 fun Modifier.enableMarquee(focused: Boolean) =
     if (focused) {
         basicMarquee(

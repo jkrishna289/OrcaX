@@ -53,6 +53,7 @@ import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
 import com.github.jkrishna289.orcax.ui.TrailerPhase
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import com.github.jkrishna289.orcax.ui.main.BillboardButton
 import com.github.jkrishna289.orcax.ui.main.EngineHomeArt
 import com.github.jkrishna289.orcax.ui.main.engineHeroArt
@@ -255,7 +256,7 @@ internal fun SpotlightCard(
                 BadgeStrip(badges = stripBadges)
                 card.synopsis?.takeIf { it.isNotBlank() }?.let { synopsis ->
                     Text(
-                        text = synopsis,
+                        text = synopsis.collapseWhitespace(),
                         color = Color.White.copy(alpha = 0.8f),
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 3,
@@ -407,7 +408,8 @@ private fun SpotlightMetadataLine(item: RenderItem) {
     val genres =
         badges.filter { it.kind.equals("GENRE", ignoreCase = true) }
             .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
-            .take(3)
+            // Three long genres ("Action & Adventure", "Sci-Fi & Fantasy") overflow the line
+            .take(2)
     if (cert == null && rating == null && year == null && runtime == null && genres.isEmpty()) return
 
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
@@ -428,7 +430,8 @@ private fun SpotlightMetadataLine(item: RenderItem) {
             if (index > 0 || cert != null || rating != null) {
                 Text("·", color = Color.White.copy(alpha = 0.35f), fontSize = 16.sp)
             }
-            Text(label, color = Color.White.copy(alpha = 0.78f), fontSize = 16.sp)
+            // softWrap off: a label that runs out of room must not break onto a second line by itself
+            Text(label, color = Color.White.copy(alpha = 0.78f), fontSize = 16.sp, maxLines = 1, softWrap = false)
         }
     }
 }

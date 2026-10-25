@@ -35,6 +35,7 @@ import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import com.github.jkrishna289.orcax.ui.detail.discover.DecisionCard
 import com.github.jkrishna289.orcax.ui.detail.discover.KeepInLibraryPrompt
 import com.github.jkrishna289.orcax.ui.detail.discover.SourcePickerDialog
@@ -129,7 +130,7 @@ fun EngineDetailsPage(
 
             card.synopsis?.takeIf { it.isNotBlank() }?.let {
                 Text(
-                    text = it,
+                    text = it.collapseWhitespace(),
                     color = OnStage.copy(alpha = 0.9f),
                     fontSize = 12.sp,
                     maxLines = 4,
