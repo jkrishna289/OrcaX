@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -80,6 +82,7 @@ import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
 import com.github.jkrishna289.orcax.ui.TrailerPhase
 import com.github.jkrishna289.orcax.ui.enableMarquee
 import com.github.jkrishna289.orcax.ui.main.EngineHomeArt
+import com.github.jkrishna289.orcax.ui.main.TopNavBarHeight
 import com.github.jkrishna289.orcax.ui.main.engineCardArt
 import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.ImageType
@@ -236,16 +239,28 @@ private fun EngineCardBody(
     // trailer prepares (no early expand, no loading animation) and pops into the live preview the
     // moment playback starts. A card whose trailer never resolves simply never changes.
     val expanded = isWide && trailerPhase == TrailerPhase.PLAYING
+    // The title/subtitle/detail lines under the card, measured so the expanded card leaves room for them.
+    var infoHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+    // Up to WIDE_FOCUS_SCALE, but never past what the screen holds: the whole row (its title, the card
+    // and the lines under it) must fit below the top bar, and the card inside the row's edge padding.
+    val configuration = LocalConfiguration.current
+    val expandScale =
+        minOf(
+            WIDE_FOCUS_SCALE,
+            (configuration.screenWidthDp.dp - EXPANDED_ROW_EDGE * 2) / width,
+            (configuration.screenHeightDp.dp - TopNavBarHeight - EXPANDED_ROW_CHROME - infoHeight) / height,
+        ).coerceAtLeast(1f)
     // One uniform scale for BOTH axes (real layout), so the enlarged box keeps the base 16:9 aspect and
     // the trailer fills it with no crop and no bars. Width reflows the LazyRow (neighbours slide); height
     // grows the row, which the centred focused-row scroll (EngineHomePage) leaves room for.
     val animatedWidth by animateDpAsState(
-        targetValue = if (expanded) width * WIDE_FOCUS_SCALE else width,
+        targetValue = if (expanded) width * expandScale else width,
         animationSpec = tween(durationMillis = 260),
         label = "wide-card-expand-width",
     )
     val animatedHeight by animateDpAsState(
-        targetValue = if (expanded) height * WIDE_FOCUS_SCALE else height,
+        targetValue = if (expanded) height * expandScale else height,
         animationSpec = tween(durationMillis = 260),
         label = "wide-card-expand-height",
     )
@@ -482,49 +497,54 @@ private fun EngineCardBody(
 
         // Wide cards keep the title + subtitle beneath the thumbnail (poster titles are overlaid).
         if (isWide && card.showTitle && !card.title.isNullOrBlank()) {
-            Text(
-                text = card.title!!,
-                maxLines = 1,
-                fontWeight = FontWeight.Bold,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth().enableMarquee(focusedAfterDelay),
-            )
-            if (!card.subtitle.isNullOrBlank()) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.onSizeChanged { infoHeight = with(density) { it.height.toDp() } },
+            ) {
                 Text(
-                    text = card.subtitle!!,
+                    text = card.title!!,
                     maxLines = 1,
+                    fontWeight = FontWeight.Bold,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth().enableMarquee(focusedAfterDelay),
                 )
-            }
-            // On focus, reveal a movie-detail line (year • rating • genres) beneath the enlarged card,
-            // built from whatever metadata badges the engine supplied. Rendered only when non-empty, so
-            // cards that carry just a title/subtitle locally show nothing extra.
-            if (focused) {
-                val detailMeta =
-                    buildList {
-                        card.badges.firstOrNull { it.kind.equals("YEAR", ignoreCase = true) }
-                            ?.text?.takeIf { it.isNotBlank() }?.let { add(it) }
-                        card.badges.firstOrNull { it.kind.equals("RATING", ignoreCase = true) }
-                            ?.text?.takeIf { it.isNotBlank() }?.let { add(it) }
-                        card.badges.filter { it.kind.equals("GENRE", ignoreCase = true) }
-                            .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
-                            .take(2)
-                            .forEach { add(it) }
-                    }
-                if (detailMeta.isNotEmpty()) {
+                if (!card.subtitle.isNullOrBlank()) {
                     Text(
-                        text = detailMeta.joinToString("  •  "),
+                        text = card.subtitle!!,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                }
+                // On focus, reveal a movie-detail line (year • rating • genres) beneath the enlarged card,
+                // built from whatever metadata badges the engine supplied. Rendered only when non-empty, so
+                // cards that carry just a title/subtitle locally show nothing extra.
+                if (focused) {
+                    val detailMeta =
+                        buildList {
+                            card.badges.firstOrNull { it.kind.equals("YEAR", ignoreCase = true) }
+                                ?.text?.takeIf { it.isNotBlank() }?.let { add(it) }
+                            card.badges.firstOrNull { it.kind.equals("RATING", ignoreCase = true) }
+                                ?.text?.takeIf { it.isNotBlank() }?.let { add(it) }
+                            card.badges.filter { it.kind.equals("GENRE", ignoreCase = true) }
+                                .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+                                .take(2)
+                                .forEach { add(it) }
+                        }
+                    if (detailMeta.isNotEmpty()) {
+                        Text(
+                            text = detailMeta.joinToString("  •  "),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        )
+                    }
                 }
             }
         }
@@ -1306,6 +1326,15 @@ private const val LARGE_CARD_SCALE = 1.35f
  * down toward 2.2 if it crowds neighbouring rows on smaller screens.
  */
 private const val WIDE_FOCUS_SCALE = 2.5f
+
+/** The row's side padding ([ItemRow]'s horizontalPadding), kept clear on both sides of an expanded card. */
+private val EXPANDED_ROW_EDGE = 16.dp
+
+/**
+ * The row's fixed vertical chrome around an expanded card: its title line (titleLarge), the
+ * title-to-row gap, the LazyRow's top and bottom padding, the card-to-info gap, and a little air.
+ */
+private val EXPANDED_ROW_CHROME = 72.dp
 
 /** Sustained focus on a 16:9 card before its trailer starts loading (avoids firing while scrolling). */
 private const val TRAILER_DWELL_MS = 3_500L
