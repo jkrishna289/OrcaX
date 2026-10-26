@@ -47,6 +47,7 @@ import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.PreviewTvSpec
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import com.github.jkrishna289.orcax.ui.theme.OrcaTheme
 import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import kotlin.time.Duration
@@ -119,7 +120,7 @@ fun NextUpEpisode(
                         modifier = Modifier,
                     )
                     Text(
-                        text = description ?: "",
+                        text = description?.collapseWhitespace() ?: "",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         overflow = TextOverflow.Ellipsis,

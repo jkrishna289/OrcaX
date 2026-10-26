@@ -95,6 +95,7 @@ import coil3.request.ImageRequest
 import coil3.request.transitionFactory
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.ui.CrossFadeFactory
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import kotlin.time.Duration.Companion.milliseconds
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -447,7 +448,7 @@ private fun Phase2OverlayLayer(
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text       = state.synopsis,
+                    text       = state.synopsis.collapseWhitespace(),
                     fontSize   = 14.sp,
                     color      = Color.White.copy(alpha = 0.80f),
                     lineHeight = (14 * 1.55f).sp,

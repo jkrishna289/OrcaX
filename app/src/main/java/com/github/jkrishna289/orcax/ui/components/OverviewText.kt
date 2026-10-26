@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import com.github.jkrishna289.orcax.ui.playOnClickSound
 import com.github.jkrishna289.orcax.ui.playSoundOnFocus
 
@@ -59,7 +60,8 @@ fun OverviewText(
                 },
     ) {
         Text(
-            text = overview,
+            // Clamped preview; the full overview (paragraphs intact) opens on click
+            text = overview.collapseWhitespace(),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = maxLines,

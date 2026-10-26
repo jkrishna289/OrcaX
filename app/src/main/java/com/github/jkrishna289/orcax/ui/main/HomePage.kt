@@ -56,6 +56,7 @@ import com.github.jkrishna289.orcax.ui.cards.BannerCardWithTitle
 import com.github.jkrishna289.orcax.ui.cards.GenreCard
 import com.github.jkrishna289.orcax.ui.cards.ItemRow
 import com.github.jkrishna289.orcax.ui.cards.StudioCard
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import com.github.jkrishna289.orcax.ui.components.CircularProgress
 import com.github.jkrishna289.orcax.ui.components.ConfirmDeleteDialog
 import com.github.jkrishna289.orcax.ui.components.DialogParams
@@ -535,7 +536,7 @@ fun HomePageHeader(
                     .width(400.dp)
             if (overview.isNotNullOrBlank()) {
                 Text(
-                    text = overview,
+                    text = overview.collapseWhitespace(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = if (overviewTwoLines) 2 else 3,
