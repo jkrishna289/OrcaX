@@ -234,8 +234,9 @@ fun EngineHomePage(
             }
 
             // Smart back-intercept: when scrolled into the rows, Back returns to the top and
-            // refocuses the billboard's Play button instead of exiting the app.
-            BackHandler(enabled = isScrolledDown) {
+            // refocuses the billboard's Play button instead of exiting the app. A focused first row
+            // counts too: the list hasn't scrolled past the billboard yet, but the viewer is in the rows.
+            BackHandler(enabled = isScrolledDown || focusedRowId != null) {
                 scope.launch { listState.animateScrollToItem(0) }
                 runCatching { billboardPlayFocus.requestFocus() }
             }
@@ -464,7 +465,9 @@ fun EngineHomePage(
                 }
 
                 TopNavBar(
-                    isAtTop = isAtTop,
+                    // Focusing the first row leaves the billboard peeking (still index 0), so frost on
+                    // row focus too — otherwise the bar's icons sit right on the billboard's content.
+                    isAtTop = isAtTop && focusedRowId == null,
                     contentFocusRequester = billboardPlayFocus,
                     navFocusRequester = navFocus,
                     modifier =

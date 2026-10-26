@@ -317,8 +317,8 @@ class EngineHomeViewModel
                 loadHeroFavorites()
                 // Warm the ambient colors (and their 1080p art) for every hero up front.
                 heroes.forEach { hero ->
-                    hero.media.jellyfinId?.toUUIDOrNull()?.let { id ->
-                        viewModelScope.launch { backdropService.extractColorsFromBackdrop(ambientUrl(hero, id)) }
+                    ambientUrl(hero)?.let { url ->
+                        viewModelScope.launch { backdropService.extractColorsFromBackdrop(url) }
                     }
                 }
             }
@@ -386,26 +386,28 @@ class EngineHomeViewModel
             // Feature A: a focus change ends the previous card's dwell — record it as a signal.
             trackFocusChange(item.media.jellyfinId)
 
-            val idStr = item.media.jellyfinId
-            if (idStr == null) {
+            val url = ambientUrl(item)
+            val key = item.media.jellyfinId ?: item.media.tmdbId?.let { "tmdb:$it" } ?: item.card.title ?: "sample"
+            if (url == null) {
                 // Art-only card (sample/demo bundle): no bitmap to sample, so drive the ambient
                 // wash straight from the accent hint — same focus-following effect, no network.
                 val accent = EngineHomeArt.parseAccent(item.card.accentColorHint)
                 val (primary, secondary, tertiary) = EngineHomeArt.ambient(accent)
-                val key = item.card.title ?: item.card.accentColorHint ?: "sample"
                 viewModelScope.launch { backdropService.submitColors(key, primary, secondary, tertiary) }
                 return
             }
-            val id = idStr.toUUIDOrNull() ?: return
-            viewModelScope.launch { backdropService.submit(idStr, ambientUrl(item, id)) }
+            viewModelScope.launch { backdropService.submit(key, url) }
         }
 
-        private fun ambientUrl(
-            item: RenderItem,
-            id: UUID,
-        ): String? =
-            item.card.backdropImageUrl
-                ?: imageUrlService.getItemImageUrl(itemId = id, imageType = ImageType.BACKDROP, fillHeight = 1080)
+        /**
+         * The art the ambient wash samples: the card's own backdrop (or its image) when the engine
+         * sent one — which is all a title outside the library has — else the library backdrop.
+         */
+        private fun ambientUrl(item: RenderItem): String? =
+            imageUrlService.engineImageUrl(item.card.backdropImageUrl ?: item.card.imageUrl.takeIf { item.media.jellyfinId == null })
+                ?: item.media.jellyfinId?.toUUIDOrNull()?.let {
+                    imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 1080)
+                }
 
         /** The server-cached trailer URL for a card (#11), or null when there's no TMDB id. */
         fun trailerUrlFor(item: RenderItem): String? {
@@ -421,8 +423,18 @@ class EngineHomeViewModel
          * instant the server reports Ready and stop retrying titles that will never resolve. Null when
          * the engine is unreachable / too old to expose the status endpoint.
          */
-        suspend fun trailerStatusFor(item: RenderItem): com.github.jkrishna289.orcax.engine.TrailerStatus? =
-            client.getTrailerStatus(item.media.tmdbId, item.media.mediaType, langHint())
+        suspend fun trailerStatusFor(item: RenderItem): com.github.jkrishna289.orcax.engine.TrailerStatus? {
+            val key = "${item.media.tmdbId}|${item.media.mediaType}|${langHint()}"
+            settledTrailerStatus[key]?.let { return it }
+            return client.getTrailerStatus(item.media.tmdbId, item.media.mediaType, langHint())?.also {
+                // Ready / never-available won't change while Home is up, so ask once per title.
+                // ponytail: no expiry; if the engine evicts a Ready file mid-session the player's
+                // own error path covers it — add a TTL if that shows up.
+                if (it.isReady || it.isPermanentlyUnavailable) settledTrailerStatus[key] = it
+            }
+        }
+
+        private val settledTrailerStatus = java.util.concurrent.ConcurrentHashMap<String, com.github.jkrishna289.orcax.engine.TrailerStatus>()
 
         /**
          * Predictively prefetches trailers for likely-next items (Phase 3 client half): row neighbours,
