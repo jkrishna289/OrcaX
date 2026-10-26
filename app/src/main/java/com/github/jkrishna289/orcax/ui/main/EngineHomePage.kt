@@ -38,6 +38,9 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -115,6 +118,8 @@ fun EngineHomePage(
             // Focus-first adaptive layout: which zone currently holds focus. When the billboard is
             // focused it reclaims vertical space to breathe; when a row is focused the others recede.
             var billboardFocused by remember { mutableStateOf(false) }
+            // Set by the first key press inside the billboard, cleared when focus leaves it
+            var billboardEngaged by remember { mutableStateOf(false) }
             var focusedRowId by remember { mutableStateOf<String?>(null) }
             val billboardPlayFocus = remember { FocusRequester() }
             // Shared so the nav Search icon and the billboard Play button can point at each other
@@ -218,9 +223,11 @@ fun EngineHomePage(
                     viewModel.onHeroActive(activeHero)
                 }
             }
-            // Plain artwork rotation: only with >1 hero and while the billboard is visible.
-            LaunchedEffect(heroes, activeHero, isAtTop) {
-                if (heroes.size <= 1 || !isAtTop) return@LaunchedEffect
+            // Plain artwork rotation: only with >1 hero and while the billboard is visible. Paused
+            // once the viewer presses a key on it, so the title can't change under the button they
+            // are about to press (Request has no confirm step here).
+            LaunchedEffect(heroes, activeHero, isAtTop, billboardEngaged) {
+                if (heroes.size <= 1 || !isAtTop || billboardEngaged) return@LaunchedEffect
                 delay(SPOTLIGHT_ROTATE_MS)
                 activeHero = (activeHero + 1) % heroes.size
             }
@@ -308,7 +315,11 @@ fun EngineHomePage(
                                                     scope.launch { listState.animateScrollToItem(0) }
                                                 } else {
                                                     billboardFocused = false
+                                                    billboardEngaged = false
                                                 }
+                                            }.onPreviewKeyEvent {
+                                                if (it.type == KeyEventType.KeyDown) billboardEngaged = true
+                                                false
                                             },
                                 )
                             }
