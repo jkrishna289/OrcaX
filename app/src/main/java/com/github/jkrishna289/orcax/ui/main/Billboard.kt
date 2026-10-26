@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,12 +56,14 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
+import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import org.jellyfin.sdk.model.api.ImageType
@@ -100,12 +103,9 @@ fun Billboard(
     val card = item.card
     val media = item.media
     val imageUrlService = LocalImageUrlService.current
-    val jellyfinId = media.jellyfinId?.toUUIDOrNull()
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
 
-    val backdropUrl =
-        card.backdropImageUrl
-            ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 720) }
+    val backdropUrl = heroBackdropUrl(item, imageUrlService, fillHeight = 720)
 
     val context = LocalContext.current
 
@@ -299,12 +299,8 @@ fun Billboard(
 /** One 16:9 "UP NEXT" thumbnail: the item's backdrop when resolvable, else its procedural key-art. */
 @Composable
 private fun UpNextThumbnail(item: RenderItem) {
-    val imageUrlService = LocalImageUrlService.current
     val accent = EngineHomeArt.parseAccent(item.card.accentColorHint)
-    val jellyfinId = item.media.jellyfinId?.toUUIDOrNull()
-    val backdropUrl =
-        item.card.backdropImageUrl
-            ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 240) }
+    val backdropUrl = heroBackdropUrl(item, LocalImageUrlService.current, fillHeight = UP_NEXT_FILL_HEIGHT)
     Box(
         modifier =
             Modifier
@@ -335,42 +331,45 @@ private fun BillboardInfo(item: RenderItem) {
     val card = item.card
     val media = item.media
     val context = LocalContext.current
-    val imageUrlService = LocalImageUrlService.current
-    val jellyfinId = media.jellyfinId?.toUUIDOrNull()
-    val logoUrl =
-        card.logoImageUrl
-            ?: jellyfinId?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.LOGO, fillHeight = 240) }
+    val logoUrl = heroLogoUrl(item, LocalImageUrlService.current)
     var logoFailed by remember(logoUrl) { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // Type label with an accent chip (e.g. "■ SERIES"), echoing the source design.
         SeriesBadge(media.mediaType)
 
-        // Real Jellyfin logo art wins; when absent, fall back to the styled title.
-        if (logoUrl != null && !logoFailed) {
-            AsyncImage(
-                model = ImageRequest.Builder(context).data(logoUrl).crossfade(true).build(),
-                contentDescription = card.title,
-                contentScale = ContentScale.Fit,
-                onError = { logoFailed = true },
-                alignment = Alignment.BottomStart,
-                modifier = Modifier.heightIn(max = 104.dp).widthIn(max = 380.dp),
-            )
-        } else {
-            HeroTitle(card.title.orEmpty())
+        // Real Jellyfin logo art wins; when absent, fall back to the styled title. Both sit in a
+        // fixed-height slot, so a logo still loading (0 tall) or failing over to the title can't
+        // shift the text around it.
+        Box(
+            contentAlignment = Alignment.BottomStart,
+            modifier = Modifier.height(LOGO_SLOT_HEIGHT).widthIn(max = 380.dp),
+        ) {
+            if (logoUrl != null && !logoFailed) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(logoUrl).crossfade(true).build(),
+                    contentDescription = card.title,
+                    contentScale = ContentScale.Fit,
+                    onError = { logoFailed = true },
+                    alignment = Alignment.BottomStart,
+                    modifier = Modifier.heightIn(max = LOGO_SLOT_HEIGHT),
+                )
+            } else {
+                HeroTitle(card.title.orEmpty())
+            }
         }
 
         BillboardMetadata(item)
 
-        card.subtitle?.takeIf { it.isNotBlank() }?.let { tagline ->
-            Text(
-                text = tagline.collapseWhitespace(),
-                color = Color.White.copy(alpha = 0.78f),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        // Always two lines tall (blank when there's no tagline), so heroes line up the same.
+        Text(
+            text = card.subtitle?.collapseWhitespace().orEmpty(),
+            color = Color.White.copy(alpha = 0.78f),
+            style = MaterialTheme.typography.bodyMedium,
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -651,3 +650,47 @@ internal fun BillboardButton(
 /** Size of an "UP NEXT" spotlight thumbnail (16:9). */
 private val UP_NEXT_THUMB_WIDTH = 116.dp
 private val UP_NEXT_THUMB_HEIGHT = 72.dp
+private const val UP_NEXT_FILL_HEIGHT = 240
+
+/** Fixed height of the logo / styled-title slot, so the info block keeps its size across heroes. */
+private val LOGO_SLOT_HEIGHT = 104.dp
+
+private fun heroBackdropUrl(
+    item: RenderItem,
+    imageUrlService: ImageUrlService,
+    fillHeight: Int,
+): String? =
+    item.card.backdropImageUrl
+        ?: item.media.jellyfinId?.toUUIDOrNull()?.let {
+            imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = fillHeight)
+        }
+
+private fun heroLogoUrl(
+    item: RenderItem,
+    imageUrlService: ImageUrlService,
+): String? =
+    item.card.logoImageUrl
+        ?: item.media.jellyfinId?.toUUIDOrNull()?.let {
+            imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.LOGO, fillHeight = 240)
+        }
+
+/**
+ * Loads every hero's backdrop, logo and UP NEXT thumbnail into Coil's cache as soon as the heroes
+ * arrive, so each rotation paints from memory instead of starting downloads mid-transition.
+ */
+@Composable
+fun PreloadBillboardArt(heroes: List<RenderItem>) {
+    val context = LocalContext.current
+    val imageUrlService = LocalImageUrlService.current
+    LaunchedEffect(heroes) {
+        heroes
+            .flatMap { hero ->
+                listOf(
+                    heroBackdropUrl(hero, imageUrlService, fillHeight = 720),
+                    heroBackdropUrl(hero, imageUrlService, fillHeight = UP_NEXT_FILL_HEIGHT),
+                    heroLogoUrl(hero, imageUrlService),
+                )
+            }.filterNotNull()
+            .forEach { context.imageLoader.enqueue(ImageRequest.Builder(context).data(it).build()) }
+    }
+}

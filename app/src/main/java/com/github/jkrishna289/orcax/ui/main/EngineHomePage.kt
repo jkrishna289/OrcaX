@@ -209,6 +209,7 @@ fun EngineHomePage(
             // billboard is on screen. The VM resolves each active item's watchlist state and ambient
             // color. The billboard no longer plays trailers, so nothing can hold the rotation.
             val heroes = s.heroes
+            PreloadBillboardArt(heroes)
             // Keyed on the heroes themselves, not the whole state: progressive loading emits a new
             // state for every row that lands, and keying on `s` would restart the rotation each time.
             var activeHero by remember(heroes) { mutableStateOf(0) }

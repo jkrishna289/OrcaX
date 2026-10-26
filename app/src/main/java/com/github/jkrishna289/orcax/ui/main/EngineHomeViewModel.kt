@@ -38,6 +38,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
@@ -95,6 +96,11 @@ class EngineHomeViewModel
         private fun langHint(): String? = trailerLanguage.value.takeIf { it.isNotBlank() }
 
         private var heroes: List<RenderItem> = emptyList()
+
+        // Favorite state for every hero, fetched in one call when the heroes change, so the
+        // billboard's rotation reads it locally instead of hitting the server every few seconds.
+        private val heroFavorites = mutableMapOf<UUID, Boolean>()
+        private var activeHeroId: UUID? = null
 
         // True once the engine's own bundle has landed. The local library home is only a stand-in
         // while the engine builds, so a late local row must never paint over the real thing.
@@ -253,6 +259,8 @@ class EngineHomeViewModel
                 return
             }
             refreshContinueWatching()
+            // The watchlist may have changed on the page the viewer is returning from.
+            loadHeroFavorites()
         }
 
         fun refreshContinueWatching() {
@@ -304,7 +312,16 @@ class EngineHomeViewModel
             // would restart the rotation and re-fetch the hero's favorite state.
             val heroesChanged = nextHeroes != heroes
             heroes = nextHeroes
-            if (heroesChanged) _heroFavorite.value = false
+            if (heroesChanged) {
+                _heroFavorite.value = false
+                loadHeroFavorites()
+                // Warm the ambient colors (and their 1080p art) for every hero up front.
+                heroes.forEach { hero ->
+                    hero.media.jellyfinId?.toUUIDOrNull()?.let { id ->
+                        viewModelScope.launch { backdropService.extractColorsFromBackdrop(ambientUrl(hero, id)) }
+                    }
+                }
+            }
 
             _state.value = EngineHomeState.Success(heroes = heroes, rows = rows)
 
@@ -350,7 +367,8 @@ class EngineHomeViewModel
             val heroId = hero.media.jellyfinId?.toUUIDOrNull()
             // Deliberately not onCardFocused: billboard rotation is automatic, not the viewer browsing.
             trackAndIlluminate(hero)
-            if (heroId != null) refreshHeroFavorite(heroId) else _heroFavorite.value = false
+            activeHeroId = heroId
+            _heroFavorite.value = heroId?.let { heroFavorites[it] } ?: false
         }
 
         /**
@@ -379,11 +397,15 @@ class EngineHomeViewModel
                 return
             }
             val id = idStr.toUUIDOrNull() ?: return
-            val url =
-                item.card.backdropImageUrl
-                    ?: imageUrlService.getItemImageUrl(itemId = id, imageType = ImageType.BACKDROP, fillHeight = 1080)
-            viewModelScope.launch { backdropService.submit(idStr, url) }
+            viewModelScope.launch { backdropService.submit(idStr, ambientUrl(item, id)) }
         }
+
+        private fun ambientUrl(
+            item: RenderItem,
+            id: UUID,
+        ): String? =
+            item.card.backdropImageUrl
+                ?: imageUrlService.getItemImageUrl(itemId = id, imageType = ImageType.BACKDROP, fillHeight = 1080)
 
         /** The server-cached trailer URL for a card (#11), or null when there's no TMDB id. */
         fun trailerUrlFor(item: RenderItem): String? {
@@ -497,10 +519,12 @@ class EngineHomeViewModel
             val id = item.media.jellyfinId?.toUUIDOrNull() ?: return navigateToDetail(item)
             val target = !_heroFavorite.value
             _heroFavorite.value = target // optimistic; revert below on failure
+            heroFavorites[id] = target
             viewModelScope.launch {
                 val ok = runCatching { favoriteWatchManager.setFavorite(id, target) }.isSuccess
                 if (!ok) {
-                    _heroFavorite.value = !target
+                    heroFavorites[id] = !target
+                    if (activeHeroId == id) _heroFavorite.value = !target
                     Timber.w("Orca Engine: watchlist toggle failed for %s", id)
                 }
             }
@@ -585,11 +609,17 @@ class EngineHomeViewModel
             runCatching { client.recordEvents(uid, batch) }
         }
 
-        private fun refreshHeroFavorite(itemId: UUID) {
+        /** One request for every hero's favorite state; the rotation then reads [heroFavorites]. */
+        private fun loadHeroFavorites() {
+            val ids = heroes.mapNotNull { it.media.jellyfinId?.toUUIDOrNull() }
+            if (ids.isEmpty()) return
             viewModelScope.launch {
-                _heroFavorite.value =
-                    runCatching { api.userLibraryApi.getItem(itemId).content.userData?.isFavorite }
-                        .getOrNull() ?: false
+                val items =
+                    runCatching {
+                        api.itemsApi.getItems(userId = currentUserId, ids = ids, enableUserData = true).content.items
+                    }.getOrNull() ?: return@launch
+                items.forEach { heroFavorites[it.id] = it.userData?.isFavorite == true }
+                activeHeroId?.let { _heroFavorite.value = heroFavorites[it] ?: false }
             }
         }
 
