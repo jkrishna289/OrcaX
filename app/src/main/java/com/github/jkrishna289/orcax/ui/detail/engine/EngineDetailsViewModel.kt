@@ -165,7 +165,8 @@ class EngineDetailsViewModel
                     MediaType.SERIES -> "tv"
                     else -> return
                 }
-            requesting.update { true }
+            // The button stays pressable while "Requesting…", so a second press must not send twice
+            if (!requesting.compareAndSet(expect = false, update = true)) return
             viewModelScope.launchIO {
                 val userId = preferences.data.firstOrNull()?.currentUserId?.toUUIDOrNull()
                 val result =

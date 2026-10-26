@@ -524,9 +524,17 @@ class EngineHomeViewModel
                 return
             }
 
+            // A second press while the first is in flight would send a duplicate request.
+            // Touched only on the main thread (click handler and viewModelScope).
+            if (!requestsInFlight.add(tmdbId)) return
             val title = item.card.title ?: "this title"
             viewModelScope.launch {
-                val result = runCatching { client.requestMedia(uid, tmdbId, mediaType, item.card.title) }.getOrNull()
+                val result =
+                    try {
+                        runCatching { client.requestMedia(uid, tmdbId, mediaType, item.card.title) }.getOrNull()
+                    } finally {
+                        requestsInFlight.remove(tmdbId)
+                    }
                 val msg =
                     when {
                         result?.success == true -> "Requested $title"
@@ -536,6 +544,8 @@ class EngineHomeViewModel
                 _message.emit(msg)
             }
         }
+
+        private val requestsInFlight = mutableSetOf<Int>()
 
         /** Ends the previously-focused card's dwell (recording it) and starts timing the new one. */
         private fun trackFocusChange(newId: String?) {

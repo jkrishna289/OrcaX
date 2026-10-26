@@ -1,5 +1,6 @@
 package com.github.jkrishna289.orcax.test
 
+import androidx.datastore.core.DataStore
 import androidx.lifecycle.viewModelScope
 import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.AvailabilityStatusResponse
@@ -7,7 +8,9 @@ import com.github.jkrishna289.orcax.engine.CardDescriptor
 import com.github.jkrishna289.orcax.engine.MediaId
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
+import com.github.jkrishna289.orcax.engine.RequestResult
 import com.github.jkrishna289.orcax.engine.ServerPlaybackProgress
+import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.mockQueryResult
@@ -18,9 +21,11 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -133,12 +138,36 @@ class TestEngineDetailsViewModel {
         assertEquals(seriesId, (navigation.backStack.last() as Destination.SeriesOverview).itemId)
     }
 
-    private fun createViewModel(forItem: RenderItem = item): EngineDetailsViewModel =
+    @Test
+    fun `pressing Request again while one is in flight sends only one request`() {
+        coEvery { engine.getPlaybackProgress(any()) } returns null
+        val gate = CompletableDeferred<Unit>()
+        coEvery { engine.requestMedia(any(), 45745, "movie", any()) } coAnswers {
+            gate.await()
+            RequestResult(success = true, availability = AvailabilityState.REQUESTED)
+        }
+        val prefs = mockk<DataStore<AppPreferences>>()
+        every { prefs.data } returns flowOf(AppPreferences.newBuilder().setCurrentUserId(importedId.toString()).build())
+        val details = createViewModel(preferences = prefs)
+
+        details.request()
+        awaitTrue("the first request never started") { details.requesting.value }
+        details.request()
+        gate.complete(Unit)
+
+        awaitTrue("the request never finished") { details.availability.value == AvailabilityState.REQUESTED }
+        coVerify(exactly = 1) { engine.requestMedia(any(), any(), any(), any()) }
+    }
+
+    private fun createViewModel(
+        forItem: RenderItem = item,
+        preferences: DataStore<AppPreferences> = mockk(),
+    ): EngineDetailsViewModel =
         EngineDetailsViewModel(
             engineClient = engine,
             api = api,
             navigationManager = navigation,
-            preferences = mockk(),
+            preferences = preferences,
             streamWatchTracker = StreamWatchTracker(),
             sources = mockk(relaxed = true),
             item = forItem,
