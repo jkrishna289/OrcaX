@@ -68,6 +68,8 @@ fun InlineCardTrailer(
     statusProvider: (suspend () -> TrailerStatus?)? = null,
     onPhaseChange: (TrailerPhase) -> Unit = {},
     onProgress: (Float) -> Unit = {},
+    // Holds a started trailer on its current frame without tearing it down.
+    paused: Boolean = false,
 ) {
     val exo = rememberLeasedPlayer()
 
@@ -97,6 +99,7 @@ fun InlineCardTrailer(
             delay(PROGRESS_POLL_MS)
         }
     }
+    LaunchedEffect(paused, ready.value) { if (ready.value) exo.playWhenReady = !paused }
     // Keep the live volume in sync without recreating the player.
     LaunchedEffect(exo, volume) { exo.volume = volume }
     // Reset per-media flags when the target changes.

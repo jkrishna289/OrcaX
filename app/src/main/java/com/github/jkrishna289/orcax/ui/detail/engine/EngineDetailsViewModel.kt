@@ -91,7 +91,17 @@ class EngineDetailsViewModel
          */
         val details = MutableStateFlow<TitleDetails?>(null)
 
+        /** The server-cached trailer, built once the viewer's trailer-language preference is read. */
+        val trailerUrl = MutableStateFlow<String?>(null)
+        private var trailerLang: String? = null
+
+        suspend fun trailerStatus() = engineClient.getTrailerStatus(item.media.tmdbId, item.media.mediaType, trailerLang)
+
         init {
+            viewModelScope.launchIO {
+                trailerLang = preferences.data.firstOrNull()?.interfacePreferences?.trailerLanguage?.takeIf { it.isNotBlank() }
+                trailerUrl.update { engineClient.trailerUrl(item.media.tmdbId, item.media.mediaType, trailerLang) }
+            }
             sources.attach(
                 scope = viewModelScope,
                 title = item.card.title.orEmpty(),

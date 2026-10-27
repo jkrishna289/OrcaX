@@ -1,37 +1,24 @@
 package com.github.jkrishna289.orcax.ui.detail
 
-import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.datastore.core.DataStore
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import com.github.jkrishna289.orcax.R
-import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RenderRow
-import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.ui.cards.DynamicCardRow
-import com.github.jkrishna289.orcax.ui.components.ConfirmDialog
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
@@ -42,7 +29,7 @@ import javax.inject.Inject
  * A "More Like This" row powered by the Orca Engine's content-based similarity (catalog-wide,
  * people/genre-aware, and able to surface requestable titles). Self-contained: it loads on its own
  * and renders nothing when the engine is unavailable or has no results, so it's safe to drop into
- * any detail screen. Requestable similar titles submit an engine-proxied request on click.
+ * any detail screen. A title outside the library opens its own details page, where it can be requested.
  */
 @Composable
 fun EngineSimilarRow(
@@ -55,11 +42,6 @@ fun EngineSimilarRow(
     LaunchedEffect(itemId, tmdbId) { viewModel.load(itemId, tmdbId) }
     val row by viewModel.row.collectAsStateWithLifecycle()
 
-    val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        viewModel.message.collect { msg -> Toast.makeText(context, msg, Toast.LENGTH_SHORT).show() }
-    }
-
     row?.takeIf { it.items.isNotEmpty() }?.let { r ->
         DynamicCardRow(
             row = r,
@@ -67,41 +49,20 @@ fun EngineSimilarRow(
             modifier = modifier,
         )
     }
-
-    val pending by viewModel.pendingRequest.collectAsStateWithLifecycle()
-    pending?.let { item ->
-        ConfirmDialog(
-            title = stringResource(R.string.request_title_confirm, item.card.title ?: ""),
-            body = stringResource(R.string.request_destination_note),
-            onCancel = viewModel::cancelRequest,
-            onConfirm = viewModel::confirmRequest,
-        )
-    }
 }
 
-/**
- * Loads engine similarity for an item; on click, asks before requesting a requestable title, or
- * navigates to a watchable title's detail page.
- */
+/** Loads engine similarity for an item; on click, opens the title's details page. */
 @HiltViewModel
 class EngineSimilarViewModel
     @Inject
     constructor(
         private val client: OrcaEngineClient,
         private val navigationManager: NavigationManager,
-        private val preferences: DataStore<AppPreferences>,
     ) : ViewModel() {
         private val _row = MutableStateFlow<RenderRow?>(null)
         val row: StateFlow<RenderRow?> = _row.asStateFlow()
 
-        private val _message = MutableSharedFlow<String>(extraBufferCapacity = 4)
-        val message: SharedFlow<String> = _message.asSharedFlow()
-
-        private val _pendingRequest = MutableStateFlow<RenderItem?>(null)
-        val pendingRequest: StateFlow<RenderItem?> = _pendingRequest.asStateFlow()
-
         private var loadedFor: Any? = null
-        private var currentUserId: UUID? = null
 
         fun load(
             itemId: UUID?,
@@ -111,22 +72,19 @@ class EngineSimilarViewModel
             if (loadedFor == key) return
             loadedFor = key
             viewModelScope.launch {
-                currentUserId =
-                    runCatching {
-                        preferences.data.firstOrNull()?.currentUserId?.toUUIDOrNull()
-                    }.getOrNull()
                 _row.value = client.getSimilar(jellyfinId = itemId, tmdbId = tmdbId.takeIf { itemId == null })?.row
             }
         }
 
         fun onClick(item: RenderItem) {
-            // Requestable (not-in-library) similar titles submit an engine-proxied request, once confirmed.
-            if (item.media.availability == AvailabilityState.REQUEST && item.media.jellyfinId == null) {
-                _pendingRequest.value = item
+            val id = item.media.jellyfinId?.toUUIDOrNull()
+            if (id == null) {
+                // Not in the library: its own not-yet-requested page, with its own "More like this".
+                // Back returns here.
+                if ((item.media.tmdbId ?: 0) > 0) navigationManager.navigateTo(Destination.EngineItem(item))
                 return
             }
 
-            val id = item.media.jellyfinId?.toUUIDOrNull() ?: return
             val kind =
                 when (item.media.mediaType) {
                     MediaType.SERIES -> BaseItemKind.SERIES
@@ -143,56 +101,5 @@ class EngineSimilarViewModel
                     Destination.MediaItem(itemId = id, type = kind)
                 }
             navigationManager.navigateTo(destination)
-        }
-
-        fun confirmRequest() {
-            val item = _pendingRequest.value ?: return
-            _pendingRequest.value = null
-            request(item)
-        }
-
-        fun cancelRequest() {
-            _pendingRequest.value = null
-        }
-
-        private fun request(item: RenderItem) {
-            val tmdbId = item.media.tmdbId
-            val mediaType =
-                when (item.media.mediaType) {
-                    MediaType.MOVIE -> "movie"
-                    MediaType.SERIES -> "tv"
-                    else -> null
-                }
-            val uid = currentUserId
-            if (tmdbId == null || mediaType == null || uid == null) return
-
-            val title = item.card.title ?: "this title"
-            viewModelScope.launch {
-                val result = runCatching { client.requestMedia(uid, tmdbId, mediaType, item.card.title) }.getOrNull()
-                if (result?.success == true) markRequested(tmdbId)
-                val msg =
-                    when {
-                        result?.success == true -> "Requested $title"
-                        result != null && result.message.isNotBlank() -> result.message
-                        else -> "Couldn't request $title"
-                    }
-                _message.emit(msg)
-            }
-        }
-
-        /** Flips the card's badge locally; the engine row isn't refetched. */
-        private fun markRequested(tmdbId: Int) {
-            _row.update { row ->
-                row?.copy(
-                    items =
-                        row.items.map {
-                            if (it.media.tmdbId == tmdbId) {
-                                it.copy(media = it.media.copy(availability = AvailabilityState.REQUESTED))
-                            } else {
-                                it
-                            }
-                        },
-                )
-            }
         }
     }

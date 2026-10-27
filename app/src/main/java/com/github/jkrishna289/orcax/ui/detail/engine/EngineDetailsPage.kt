@@ -1,5 +1,9 @@
 package com.github.jkrishna289.orcax.ui.detail.engine
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -10,30 +14,52 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
+import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
+import com.github.jkrishna289.orcax.ui.TrailerPhase
+import com.github.jkrishna289.orcax.ui.cards.InlineCardTrailer
+import kotlinx.coroutines.delay
+import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.tv.material3.Text
@@ -90,9 +116,49 @@ fun EngineDetailsPage(
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(availability) { firstFocus.tryRequestFocus() }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    // Trailer autoplay: starts once the page has sat still for TRAILER_DWELL_MS, pauses while
+    // "More like this" has focus, and stops for good at TRAILER_STOP_AT of its length, handing the
+    // screen back to the backdrop. Leaving the page stops it; coming back waits again.
+    val trailerUrl by viewModel.trailerUrl.collectAsState()
+    var lastKeyAt by remember { mutableLongStateOf(0L) }
+    var trailerArmed by remember { mutableStateOf(false) }
+    var trailerDone by remember { mutableStateOf(false) }
+    var trailerPhase by remember { mutableStateOf(TrailerPhase.IDLE) }
+    var similarFocused by remember { mutableStateOf(false) }
+    var wordsAwake by remember { mutableStateOf(false) }
+    LifecycleResumeEffect(Unit) {
+        trailerDone = false
+        onPauseOrDispose { trailerArmed = false }
+    }
+    LaunchedEffect(lastKeyAt, trailerArmed) {
+        if (!trailerArmed) {
+            delay(TRAILER_DWELL_MS)
+            trailerArmed = true
+        }
+    }
+    // While it plays the fine print fades so the picture leads; any press brings it back for a while.
+    LaunchedEffect(lastKeyAt) {
+        wordsAwake = true
+        delay(WORDS_AWAKE_MS)
+        wordsAwake = false
+    }
+    val trailerPlaying = trailerPhase == TrailerPhase.PLAYING
+    val finePrintAlpha by animateFloatAsState(if (trailerPlaying && !wordsAwake) 0f else 1f, tween(600), label = "fine-print")
+
+    Box(
+        modifier =
+            modifier.fillMaxSize().onPreviewKeyEvent {
+                if (it.type == KeyEventType.KeyDown) lastKeyAt = System.nanoTime()
+                false
+            },
+    ) {
+        val imageUrls = LocalImageUrlService.current
+        // The card's own art; a library title the engine sent without any falls back to its Jellyfin backdrop.
         val backdrop =
-            LocalImageUrlService.current.engineImageUrl(card.backdropImageUrl ?: card.imageUrl)
+            imageUrls.engineImageUrl(card.backdropImageUrl ?: card.imageUrl)
+                ?: item.media.jellyfinId?.toUUIDOrNull()?.let {
+                    imageUrls.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 1080)
+                }
         if (backdrop != null) {
             AsyncImage(
                 model = backdrop,
@@ -100,8 +166,19 @@ fun EngineDetailsPage(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        // The same left-to-bottom scrim the library details page uses, so an unowned title sits on
-        // exactly the same stage as an owned one.
+        InlineCardTrailer(
+            trailerUrl = trailerUrl,
+            backdropUrl = backdrop,
+            play = trailerArmed && !trailerDone,
+            paused = similarFocused,
+            volume = LocalTrailerVolume.current,
+            statusProvider = viewModel::trailerStatus,
+            onPhaseChange = { trailerPhase = it },
+            onProgress = { if (it >= TRAILER_STOP_AT) trailerDone = true },
+            modifier = Modifier.fillMaxSize(),
+        )
+        // Dark from the left and up from the bottom, so the words hold up over any frame of the trailer
+        // while its right side still shows through.
         Box(
             modifier =
                 Modifier
@@ -109,24 +186,50 @@ fun EngineDetailsPage(
                     .background(
                         Brush.horizontalGradient(
                             0f to StageColor,
-                            0.2f to StageColor.copy(alpha = 0.94f),
-                            0.75f to StageColor.copy(alpha = 0.35f),
+                            0.3f to StageColor.copy(alpha = 0.92f),
+                            0.55f to StageColor.copy(alpha = 0.5f),
+                            1f to StageColor.copy(alpha = 0.15f),
+                        ),
+                    ).background(
+                        Brush.verticalGradient(
+                            0.55f to Color.Transparent,
+                            1f to StageColor.copy(alpha = 0.9f),
                         ),
                     ),
         )
 
-        // The hero fills the first screen; "More like this" sits below it, reached with Down.
+        // The hero fills 90% of the first screen; "More like this" peeks into the rest, dimmed and
+        // softly blurred until Down gives it focus, so it's plain there is more below.
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val screenHeight = maxHeight
-            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                Box(modifier = Modifier.fillMaxWidth().height(screenHeight)) {
+            val heroWidth = maxWidth
+            // Two positions only, driven by which half has focus: the hero, or slid up just far enough
+            // to show all of "More like this". Not a scroll container, so focus restoration and
+            // bring-into-view can't leave the page stopped halfway (as they did on Back from a page
+            // opened from the row).
+            var contentHeight by remember { mutableIntStateOf(0) }
+            val screenHeightPx = with(LocalDensity.current) { screenHeight.roundToPx() }
+            val shift by animateIntAsState(
+                if (similarFocused) (contentHeight - screenHeightPx).coerceAtLeast(0) else 0,
+                tween(300),
+                label = "page-shift",
+            )
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                        .onSizeChanged { contentHeight = it.height }
+                        .offset { IntOffset(0, -shift) },
+            ) {
+                Box(modifier = Modifier.fillMaxWidth().height(screenHeight * 0.9f)) {
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier =
                             Modifier
                                 .align(Alignment.BottomStart)
-                                .fillMaxWidth(0.66f)
-                                .padding(start = 40.dp, bottom = 30.dp, end = 20.dp),
+                                .padding(start = 56.dp, bottom = 48.dp, end = 20.dp)
+                                .width(min(heroWidth * 0.46f, 620.dp)),
                     ) {
                         LibraryStatusChip(availability)
 
@@ -136,17 +239,28 @@ fun EngineDetailsPage(
                         )
 
                         metaLine(item, details)?.let {
-                            Text(text = it, color = OnStage, fontSize = 13.sp)
+                            // One line: a wrapped genre list pushed the status chip off the top of the screen.
+                            Text(
+                                text = it,
+                                color = OnStage,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = Legible,
+                            )
                         }
 
                         // The catalog's full overview when it has one; the card only carries a trimmed synopsis.
                         (details?.overview ?: card.synopsis)?.takeIf { it.isNotBlank() }?.let {
                             Text(
                                 text = it.collapseWhitespace(),
-                                color = OnStage.copy(alpha = 0.9f),
-                                fontSize = 12.sp,
+                                color = OnStage.copy(alpha = 0.92f),
+                                fontSize = 17.sp,
+                                lineHeight = 25.sp,
                                 maxLines = 4,
                                 overflow = TextOverflow.Ellipsis,
+                                style = Legible,
                             )
                         }
 
@@ -154,17 +268,20 @@ fun EngineDetailsPage(
                             peopleLine(d)?.let {
                                 Text(
                                     text = it,
-                                    color = OnStage.copy(alpha = 0.7f),
-                                    fontSize = 12.sp,
+                                    color = OnStage.copy(alpha = 0.72f),
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
+                                    style = Legible,
+                                    modifier = Modifier.alpha(finePrintAlpha),
                                 )
                             }
                         }
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(11.dp),
-                            modifier = Modifier.padding(top = 9.dp),
+                            modifier = Modifier.padding(top = 6.dp),
                         ) {
                             when {
                                 // Already yours — the fork is over, and the only useful action is to go watch it.
@@ -222,16 +339,24 @@ fun EngineDetailsPage(
                             text = stringResource(R.string.request_destination_note),
                             color = OnStage.copy(alpha = 0.45f),
                             fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 9.dp),
+                            modifier = Modifier.padding(top = 9.dp).alpha(finePrintAlpha),
                         )
                     }
                 }
 
                 item.media.tmdbId?.takeIf { it > 0 }?.let { tmdbId ->
+                    val peekAlpha by animateFloatAsState(if (similarFocused) 1f else 0.5f, tween(300), label = "peek-alpha")
+                    val peekBlur by animateDpAsState(if (similarFocused) 0.dp else 2.dp, tween(300), label = "peek-blur")
                     EngineSimilarRow(
                         itemId = null,
                         tmdbId = tmdbId,
-                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, bottom = 40.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = 24.dp, bottom = 40.dp)
+                                .onFocusChanged { similarFocused = it.hasFocus }
+                                .alpha(peekAlpha)
+                                .blur(peekBlur),
                     )
                 }
             }
@@ -317,10 +442,13 @@ private fun TitleOrLogo(
         Text(
             text = title,
             color = OnStageBright,
-            fontSize = 41.sp,
+            fontSize = 44.sp,
+            // Room below the baseline, so a descender (the "y" in "Family") isn't clipped.
+            lineHeight = 51.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            style = Legible,
         )
     }
 }
@@ -379,6 +507,18 @@ private fun runtimeMinutes(item: com.github.jkrishna289.orcax.engine.RenderItem)
     val mins = Regex("""(\d+)\s*m""").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: 0
     return (hours * 60 + mins).takeIf { it > 0 }
 }
+
+/** Quiet before the trailer starts, so clicking through titles never starts one. */
+private const val TRAILER_DWELL_MS = 3_000L
+
+/** Stop here: enough to decide, without running into the ending or the end cards. */
+private const val TRAILER_STOP_AT = 0.65f
+
+/** How long a press keeps the faded fine print visible while the trailer plays. */
+private const val WORDS_AWAKE_MS = 4_000L
+
+/** A soft shadow under the words, for the frames of the trailer the scrim can't fully darken. */
+private val Legible = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), 3f))
 
 private val StageColor = Color(0xFF15121C)
 private val OnStage = Color(0xFFE8DFF0)
