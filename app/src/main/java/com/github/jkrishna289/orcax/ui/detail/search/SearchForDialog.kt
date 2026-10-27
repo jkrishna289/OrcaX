@@ -183,7 +183,8 @@ fun SearchForContent(
                 ErrorMessage("Error", st.ex)
             }
 
-            SearchResult.NoQuery -> {
+            // Titles only come from the search page's engine row, never from this dialog.
+            SearchResult.NoQuery, is SearchResult.Titles -> {
                 // no-op
             }
 

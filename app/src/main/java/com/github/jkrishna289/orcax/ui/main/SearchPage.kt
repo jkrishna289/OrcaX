@@ -46,8 +46,12 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
+import com.github.jkrishna289.orcax.engine.RenderItem
+import com.github.jkrishna289.orcax.engine.RenderRow
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.NavigationManager
+import com.github.jkrishna289.orcax.services.OrcaEngineClient
+import com.github.jkrishna289.orcax.ui.cards.DynamicCardRow
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.Cards
 import com.github.jkrishna289.orcax.ui.SlimItemFields
@@ -70,6 +74,7 @@ import com.github.jkrishna289.orcax.util.ExceptionHandler
 import com.github.jkrishna289.orcax.util.GetItemsRequestHandler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -89,6 +94,7 @@ class SearchViewModel
         val api: ApiClient,
         val navigationManager: NavigationManager,
         val voiceInputManager: VoiceInputManager,
+        private val engine: OrcaEngineClient,
     ) : ViewModel() {
         val voiceState = voiceInputManager.state
         val soundLevel = voiceInputManager.soundLevel
@@ -102,7 +108,11 @@ class SearchViewModel
         val artists = MutableLiveData<SearchResult>(SearchResult.NoQuery)
         val songs = MutableLiveData<SearchResult>(SearchResult.NoQuery)
 
+        /** Titles the server doesn't have yet, from the engine, so they can be found and requested. */
+        val notInLibrary = MutableLiveData<SearchResult>(SearchResult.NoQuery)
+
         private var currentQuery: String? = null
+        private var notInLibraryJob: Job? = null
 
         private val semaphore = Semaphore(4)
 
@@ -123,13 +133,31 @@ class SearchViewModel
                 searchInternal(query, BaseItemKind.MUSIC_ARTIST, artists)
                 searchInternal(query, BaseItemKind.AUDIO, songs)
                 searchInternal(query, BaseItemKind.BOX_SET, collections)
+                searchNotInLibrary(query)
             } else {
                 movies.value = SearchResult.NoQuery
                 series.value = SearchResult.NoQuery
                 episodes.value = SearchResult.NoQuery
                 collections.value = SearchResult.NoQuery
+                notInLibraryJob?.cancel()
+                notInLibrary.value = SearchResult.NoQuery
             }
         }
+
+        private fun searchNotInLibrary(query: String) {
+            notInLibraryJob?.cancel()
+            notInLibrary.value = SearchResult.Searching
+            notInLibraryJob =
+                viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
+                    // No engine (or one without search) hides the row rather than showing an error.
+                    val row = engine.searchTitles(query)?.row
+                    withContext(Dispatchers.Main) {
+                        notInLibrary.value = row?.let { SearchResult.Titles(it) } ?: SearchResult.NoQuery
+                    }
+                }
+        }
+
+        fun openTitle(item: RenderItem) = navigationManager.navigateTo(Destination.EngineItem(item))
 
         private fun searchInternal(
             query: String,
@@ -185,12 +213,27 @@ sealed interface SearchResult {
     data class Success(
         val items: List<BaseItem?>,
     ) : SearchResult
+
+    /** Engine titles outside the library. */
+    data class Titles(
+        val row: RenderRow,
+    ) : SearchResult
 }
+
+/** Whether a finished search has something to focus. */
+private val SearchResult.hasResults: Boolean
+    get() =
+        when (this) {
+            is SearchResult.Success -> items.isNotEmpty()
+            is SearchResult.Titles -> row.items.isNotEmpty()
+            else -> false
+        }
 
 private const val SEARCH_ROW = 0
 private const val MOVIE_ROW = SEARCH_ROW + 1
 private const val SERIES_ROW = MOVIE_ROW + 1
-private const val EPISODE_ROW = SERIES_ROW + 1
+private const val NOT_IN_LIBRARY_ROW = SERIES_ROW + 1
+private const val EPISODE_ROW = NOT_IN_LIBRARY_ROW + 1
 private const val ALBUM_ROW = EPISODE_ROW + 1
 private const val ARTIST_ROW = ALBUM_ROW + 1
 private const val SONG_ROW = ARTIST_ROW + 1
@@ -214,6 +257,7 @@ fun SearchPage(
     val albums by viewModel.albums.observeAsState(SearchResult.NoQuery)
     val artists by viewModel.artists.observeAsState(SearchResult.NoQuery)
     val songs by viewModel.songs.observeAsState(SearchResult.NoQuery)
+    val notInLibrary by viewModel.notInLibrary.observeAsState(SearchResult.NoQuery)
 
 //    val query = rememberTextFieldState()
     var query by rememberSaveable { mutableStateOf("") }
@@ -254,15 +298,16 @@ fun SearchPage(
         viewModel.navigationManager.navigateTo(item.destination())
     }
 
-    LaunchedEffect(searchClicked, movies, series, episodes, albums, artists, songs, collections) {
+    LaunchedEffect(searchClicked, movies, series, notInLibrary, episodes, albums, artists, songs, collections) {
         if (!searchClicked) return@LaunchedEffect
 
         withContext(Dispatchers.IO) {
-            // Want to focus on the first successful row after all of the ones before it are finished searching.
+            // Want to focus on the first row with results after all of the ones before it are finished
+            // searching (an empty row has nothing to take focus, which left a not-owned film unfocused).
             // Index i is row i + 1 (row 0 is the search bar), so this must stay in on-screen row order.
-            val results = listOf(movies, series, episodes, albums, artists, songs, collections)
+            val results = listOf(movies, series, notInLibrary, episodes, albums, artists, songs, collections)
             val firstSuccess =
-                results.indexOfFirst { it is SearchResult.Success }
+                results.indexOfFirst { it.hasResults }
             if (firstSuccess >= 0) {
                 val anyBeforeSearching =
                     results.subList(0, firstSuccess).any { it is SearchResult.Searching }
@@ -368,6 +413,15 @@ fun SearchPage(
             focusRequester = focusRequesters[SERIES_ROW],
             onClickItem = onClickItem,
             onClickPosition = { position = it },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        notInLibraryRow(
+            result = notInLibrary,
+            focusRequester = focusRequesters[NOT_IN_LIBRARY_ROW],
+            onClickItem = {
+                position = RowColumn(NOT_IN_LIBRARY_ROW, 0)
+                viewModel.openTitle(it)
+            },
             modifier = Modifier.fillMaxWidth(),
         )
         searchResultRow(
@@ -518,7 +572,7 @@ fun LazyListScope.searchResultRow(
                 )
             }
 
-            SearchResult.NoQuery -> {
+            SearchResult.NoQuery, is SearchResult.Titles -> {
                 // no-op
             }
 
@@ -548,6 +602,36 @@ fun LazyListScope.searchResultRow(
                     )
                 }
             }
+        }
+    }
+}
+
+/** Titles matching the search that the server doesn't have, opening their not-yet-requested page. */
+fun LazyListScope.notInLibraryRow(
+    result: SearchResult,
+    focusRequester: FocusRequester,
+    onClickItem: (RenderItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    item {
+        val title = stringResource(R.string.not_in_your_library)
+        when (val r = result) {
+            SearchResult.Searching ->
+                SearchResultPlaceholder(title = title, message = stringResource(R.string.searching), modifier = modifier)
+
+            is SearchResult.Titles ->
+                if (r.row.items.isEmpty()) {
+                    SearchResultPlaceholder(title = title, message = stringResource(R.string.no_results), modifier = modifier)
+                } else {
+                    DynamicCardRow(
+                        row = r.row.copy(title = title),
+                        onClickItem = onClickItem,
+                        focusRequester = focusRequester,
+                        modifier = modifier,
+                    )
+                }
+
+            else -> Unit
         }
     }
 }

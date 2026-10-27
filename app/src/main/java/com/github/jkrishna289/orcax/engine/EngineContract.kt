@@ -206,6 +206,12 @@ data class EngineRequestBody(
     @SerialName("Title") val title: String? = null,
 )
 
+/** Response of `GET /Search` — the titles matching a search that aren't in the library, as one row. */
+@Serializable
+data class TitleSearchResponse(
+    @SerialName("Row") val row: RenderRow = RenderRow(),
+)
+
 /** Response of `GET /Similar` — a directly-renderable "More Like This" row. */
 @Serializable
 data class SimilarResponse(

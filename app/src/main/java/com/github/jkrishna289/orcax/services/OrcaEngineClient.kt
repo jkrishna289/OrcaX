@@ -200,6 +200,17 @@ class OrcaEngineClient
         }
 
         /**
+         * Movies and series matching [query] that aren't in the library (`/Search`, TMDB-backed), so
+         * search can find titles to request. Null on an engine without it or when it's unreachable.
+         */
+        suspend fun searchTitles(query: String): com.github.jkrishna289.orcax.engine.TitleSearchResponse? {
+            val q = java.net.URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
+            return get("/Search?supported=$SUPPORTED_CARD_TYPES_QUERY&query=$q") {
+                EngineJson.decodeFromString<com.github.jkrishna289.orcax.engine.TitleSearchResponse>(it)
+            }
+        }
+
+        /**
          * "Did You Know?" trivia facts for a title (engine resolves by Jellyfin or TMDB id, served
          * from its permanent cache). Returns null when neither id is given or the engine is absent.
          */
