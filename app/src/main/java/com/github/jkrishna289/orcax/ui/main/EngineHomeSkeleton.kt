@@ -31,7 +31,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.github.jkrishna289.orcax.ui.AspectRatios
-import com.github.jkrishna289.orcax.ui.Cards
+import com.github.jkrishna289.orcax.ui.cards.EngineCardHeight
 import com.github.jkrishna289.orcax.ui.cards.ItemRowTitle
 
 /**
@@ -77,15 +77,15 @@ fun SkeletonRow(
     ) {
         ItemRowTitle(title)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
             modifier = Modifier.fillMaxWidth().padding(PaddingValues(horizontal = 16.dp, vertical = 8.dp)),
         ) {
             repeat(SKELETON_CARDS) {
                 Box(
                     modifier =
                         Modifier
-                            .height(Cards.height2x3)
-                            .width(Cards.height2x3 * AspectRatios.TALL)
+                            .height(EngineCardHeight)
+                            .width(EngineCardHeight * AspectRatios.TALL)
                             .clip(RoundedCornerShape(8.dp))
                             .background(block),
                 )

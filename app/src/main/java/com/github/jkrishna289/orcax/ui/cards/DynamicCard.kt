@@ -1,5 +1,7 @@
 package com.github.jkrishna289.orcax.ui.cards
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateDpAsState
@@ -7,7 +9,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,6 +31,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -36,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
@@ -72,6 +81,7 @@ import com.github.jkrishna289.orcax.engine.CardType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RenderRow
 import com.github.jkrishna289.orcax.engine.RowStyle
+import com.github.jkrishna289.orcax.engine.TitleDetails
 import com.github.jkrishna289.orcax.engine.TrailerStatus
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.AspectRatios
@@ -80,6 +90,7 @@ import com.github.jkrishna289.orcax.ui.FontAwesome
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
 import com.github.jkrishna289.orcax.ui.TrailerPhase
+import com.github.jkrishna289.orcax.ui.collapseWhitespace
 import com.github.jkrishna289.orcax.ui.enableMarquee
 import com.github.jkrishna289.orcax.ui.main.EngineHomeArt
 import com.github.jkrishna289.orcax.ui.main.TopNavBarHeight
@@ -108,10 +119,12 @@ fun DynamicCard(
     backdropUrlFor: (RenderItem) -> String? = { null },
     // Queries the engine trailer state machine for adaptive, state-driven playback. Null = best-effort.
     trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
+    // The catalog's details for a Discover card's focus panel. Null = no panel (non-home callers).
+    titleDetailsFor: (suspend (RenderItem) -> TitleDetails?)? = null,
 ) {
     val card = item.card
     val resolvedImageUrl = rememberEngineImageUrl(item)
-    val width = Cards.height2x3 * aspectRatioValue(card.aspectRatio)
+    val width = EngineCardHeight * aspectRatioValue(card.aspectRatio)
 
     when (card.type) {
         CardType.PERSON_CIRCLE ->
@@ -122,7 +135,7 @@ fun DynamicCard(
                 favorite = false,
                 onClick = onClick,
                 onLongClick = onLongClick,
-                modifier = modifier.width(Cards.height2x3),
+                modifier = modifier.width(EngineCardHeight),
             )
 
         CardType.GENRE ->
@@ -165,19 +178,176 @@ fun DynamicCard(
                 modifier = modifier,
             )
 
-        else ->
-            EngineCardBody(
-                item = item,
-                resolvedImageUrl = resolvedImageUrl,
-                onClick = onClick,
-                onLongClick = onLongClick,
-                trailerUrlFor = trailerUrlFor,
-                backdropUrlFor = backdropUrlFor,
-                trailerStatusProvider = trailerStatusProvider,
-                modifier = modifier,
-            )
+        else -> {
+            val body: @Composable (Modifier) -> Unit = { bodyModifier ->
+                EngineCardBody(
+                    item = item,
+                    resolvedImageUrl = resolvedImageUrl,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    trailerUrlFor = trailerUrlFor,
+                    backdropUrlFor = backdropUrlFor,
+                    trailerStatusProvider = trailerStatusProvider,
+                    modifier = bodyModifier,
+                )
+            }
+            // Only titles you don't have yet get the focus panel: it's what you decide a request on.
+            if (card.type == CardType.DISCOVER && titleDetailsFor != null) {
+                DiscoverCardWithPanel(item = item, titleDetailsFor = titleDetailsFor, cardModifier = modifier, card = body)
+            } else {
+                body(modifier)
+            }
+        }
     }
 }
+
+/**
+ * A Discover card plus its focus panel. Hold focus on the card briefly and a panel — rating, age
+ * rating, year/runtime, genres, synopsis — slides out from behind its right edge. The panel is real
+ * layout, so the cards to its right shift over rather than being covered. Titles already requested
+ * (or on their way in) don't get it: that decision has been made.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DiscoverCardWithPanel(
+    item: RenderItem,
+    titleDetailsFor: suspend (RenderItem) -> TitleDetails?,
+    cardModifier: Modifier,
+    card: @Composable (Modifier) -> Unit,
+) {
+    val requested = item.media.availability == AvailabilityState.REQUESTED || item.media.availability == AvailabilityState.DOWNLOADING
+    var focused by remember { mutableStateOf(false) }
+    var open by remember { mutableStateOf(false) }
+    var details by remember(item) { mutableStateOf<TitleDetails?>(null) }
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused, requested) {
+        if (focused && !requested) {
+            delay(PANEL_DWELL_MS) // not while the viewer is scrolling past
+            open = true
+            if (details == null) details = titleDetailsFor(item)
+        } else {
+            open = false
+        }
+    }
+    // Once the panel is out the card + panel is wider; pull the whole of it into view in the row.
+    LaunchedEffect(open) {
+        if (open) {
+            delay(PANEL_SLIDE_MS.toLong())
+            runCatching { bringIntoView.bringIntoView() }
+        }
+    }
+    val height = EngineCardHeight * (if (item.card.size == CardSize.LARGE) LARGE_CARD_SCALE else 1f)
+
+    Row(
+        verticalAlignment = Alignment.Top,
+        modifier =
+            Modifier
+                .bringIntoViewRequester(bringIntoView)
+                .onFocusChanged { focused = it.hasFocus },
+    ) {
+        // The row's own focus/click modifiers stay on the card; it draws over the panel as it slides.
+        card(cardModifier.zIndex(1f))
+        AnimatedVisibility(
+            visible = open,
+            // The expanding width (clipped) moves the neighbours; the slide makes the panel emerge
+            // from behind the card rather than appear beside it.
+            enter =
+                expandHorizontally(tween(PANEL_SLIDE_MS), expandFrom = Alignment.Start) +
+                    slideInHorizontally(tween(PANEL_SLIDE_MS)) { -it } +
+                    fadeIn(tween(PANEL_SLIDE_MS / 2)),
+            // Closing gives its width back at once. Focus has already moved on and the row is
+            // scrolling to the next card; a panel still shrinking under that scroll moves the next
+            // card a second time, so the row overshoots and then pulls everything back right.
+            exit = ExitTransition.None,
+        ) {
+            DiscoverDetailPanel(
+                item = item,
+                details = details,
+                modifier = Modifier.padding(start = PANEL_GAP).width(PANEL_WIDTH).height(height),
+            )
+        }
+    }
+}
+
+/** The panel's contents: the catalog's details when they've loaded, else the card's own badges. */
+@Composable
+private fun DiscoverDetailPanel(
+    item: RenderItem,
+    details: TitleDetails?,
+    modifier: Modifier = Modifier,
+) {
+    val badges = item.card.badges
+    fun badge(kind: String) = badges.firstOrNull { it.kind.equals(kind, ignoreCase = true) }?.text?.takeIf { it.isNotBlank() }
+
+    val rating = details?.communityRating?.takeIf { it > 0f }?.let { "%.1f".format(it) } ?: badge("RATING")
+    val cert = details?.officialRating ?: badge("CERT")
+    val year = details?.year?.toString() ?: badge("YEAR")
+    val runtime = details?.runtimeMinutes?.let(::panelRuntime) ?: badge("RUNTIME")
+    val genres =
+        details?.genres?.takeIf { it.isNotEmpty() }?.take(3)
+            ?: badges.filter { it.kind.equals("GENRE", ignoreCase = true) }.mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }.take(3)
+    val overview = (details?.overview ?: item.card.synopsis)?.collapseWhitespace()?.takeIf { it.isNotBlank() }
+    val shape = RoundedCornerShape(10.dp)
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier =
+            modifier
+                .clip(shape)
+                .background(Color.White.copy(alpha = 0.07f))
+                .border(1.dp, Color.White.copy(alpha = 0.1f), shape)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Text(
+            text = item.card.title.orEmpty(),
+            color = PanelBright,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (rating != null || cert != null || year != null || runtime != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                rating?.let { Text("★ $it", color = AppColors.GoldenYellow, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                cert?.let {
+                    Text(
+                        text = it,
+                        color = PanelText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier =
+                            Modifier
+                                .border(1.5.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+                listOfNotNull(year, runtime).forEach { Text(it, color = PanelText.copy(alpha = 0.85f), fontSize = 13.sp, maxLines = 1) }
+            }
+        }
+        if (genres.isNotEmpty()) {
+            Text(genres.joinToString(" · "), color = PanelText.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        // Takes whatever height is left and ellipsizes on its last visible line.
+        overview?.let {
+            Text(
+                text = it,
+                color = PanelText.copy(alpha = 0.88f),
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+        }
+    }
+}
+
+private fun panelRuntime(minutes: Int): String =
+    when {
+        minutes < 60 -> "${minutes}m"
+        minutes % 60 == 0 -> "${minutes / 60}h"
+        else -> "${minutes / 60}h ${minutes % 60}m"
+    }
 
 /**
  * The shared descriptor-driven card body. Wide (16:9) cards enlarge on focus and, after a short
@@ -204,7 +374,7 @@ private fun EngineCardBody(
     // engine-tagged "Large" cards (the featured For You row) render bigger for visual variety.
     val baseScale = if (isWide) WIDE_CARD_SCALE else 1f
     val sizeScale = if (card.size == CardSize.LARGE) LARGE_CARD_SCALE else 1f
-    val height = Cards.height2x3 * baseScale * sizeScale
+    val height = EngineCardHeight * baseScale * sizeScale
     val width = height * aspectRatioValue(card.aspectRatio)
     val interactionSource = remember { MutableInteractionSource() }
     val focusedAfterDelay by rememberFocusedAfterDelay(interactionSource)
@@ -788,7 +958,7 @@ private fun TopRankedCard(
     val card = item.card
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
     val rank = card.badges.firstOrNull { it.kind.equals("RANK", ignoreCase = true) }?.text.orEmpty()
-    val height = Cards.height2x3
+    val height = EngineCardHeight
     val width = height * AspectRatios.TALL
     val cardShape = RoundedCornerShape(8.dp)
 
@@ -1237,6 +1407,8 @@ fun DynamicCardRow(
     backdropUrlFor: (RenderItem) -> String? = { null },
     // Queries the engine trailer state machine for adaptive, state-driven playback. Null = best-effort.
     trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
+    // Details for a Discover card's focus panel. Null = no panel.
+    titleDetailsFor: (suspend (RenderItem) -> TitleDetails?)? = null,
 ) {
     if (row.rowStyle == RowStyle.SPOTLIGHT) {
         // Exactly one item by contract; an empty row is a server bug, so render nothing rather
@@ -1266,6 +1438,7 @@ fun DynamicCardRow(
         // A Top-10 row carries a "TOP 10" chip beside its title (the ranked layout itself comes from
         // each item's TOP_RANKED card type — rowStyle stays an advisory hint).
         titleExtra = if (row.rowStyle == RowStyle.TOP10) ({ Top10Chip() }) else null,
+        itemSpacing = ENGINE_CARD_SPACING,
         onClickItem = { _, item -> onClickItem(item) },
         onLongClickItem = { _, item -> onLongClickItem(item) },
         cardContent = { _, item, cardModifier, onClick, onLongClick ->
@@ -1277,6 +1450,7 @@ fun DynamicCardRow(
                     trailerUrlFor = trailerUrlFor,
                     backdropUrlFor = backdropUrlFor,
                     trailerStatusProvider = trailerStatusProvider,
+                    titleDetailsFor = titleDetailsFor,
                     modifier =
                         cardModifier.onFocusChanged {
                             if (it.isFocused) onFocusItem(item)
@@ -1326,6 +1500,24 @@ private const val LARGE_CARD_SCALE = 1.35f
  * down toward 2.2 if it crowds neighbouring rows on smaller screens.
  */
 private const val WIDE_FOCUS_SCALE = 2.5f
+
+/**
+ * Base height of an engine card (a 2:3 poster; wide and large cards scale from it). Larger than the
+ * library's [Cards.height2x3] so a home row shows fewer, bigger cards — about 5½ posters across a
+ * 960 dp screen instead of 7½.
+ */
+val EngineCardHeight = 210.dp
+
+/** Space between cards in an engine row (and the row's side padding stays [ItemRow]'s 16 dp). */
+private val ENGINE_CARD_SPACING = 28.dp
+
+/** Discover focus panel: width, gap from the card, dwell before it opens, and its slide-out time. */
+private val PANEL_WIDTH = 300.dp
+private val PANEL_GAP = 16.dp
+private const val PANEL_DWELL_MS = 450L
+private const val PANEL_SLIDE_MS = 340
+private val PanelBright = Color(0xFFF5F1FA)
+private val PanelText = Color(0xFFE8DFF0)
 
 /** The row's side padding ([ItemRow]'s horizontalPadding), kept clear on both sides of an expanded card. */
 private val EXPANDED_ROW_EDGE = 16.dp

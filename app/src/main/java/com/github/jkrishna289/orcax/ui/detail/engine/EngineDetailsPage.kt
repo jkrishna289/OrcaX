@@ -4,18 +4,25 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -33,9 +40,11 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.AvailabilityState
+import com.github.jkrishna289.orcax.engine.TitleDetails
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.collapseWhitespace
+import com.github.jkrishna289.orcax.ui.detail.EngineSimilarRow
 import com.github.jkrishna289.orcax.ui.detail.discover.DecisionCard
 import com.github.jkrishna289.orcax.ui.detail.discover.KeepInLibraryPrompt
 import com.github.jkrishna289.orcax.ui.detail.discover.SourcePickerDialog
@@ -71,6 +80,7 @@ fun EngineDetailsPage(
     val sourceSearch by viewModel.sources.state.collectAsState()
     val canFindSources by viewModel.sources.enabled.collectAsState()
     val keepPrompt by viewModel.keepPrompt.collectAsState()
+    val details by viewModel.details.collectAsState()
 
     LifecycleResumeEffect(Unit) {
         viewModel.refresh()
@@ -105,101 +115,126 @@ fun EngineDetailsPage(
                     ),
         )
 
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier =
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth(0.66f)
-                    .padding(start = 40.dp, bottom = 30.dp, end = 20.dp),
-        ) {
-            LibraryStatusChip(availability)
+        // The hero fills the first screen; "More like this" sits below it, reached with Down.
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val screenHeight = maxHeight
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Box(modifier = Modifier.fillMaxWidth().height(screenHeight)) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth(0.66f)
+                                .padding(start = 40.dp, bottom = 30.dp, end = 20.dp),
+                    ) {
+                        LibraryStatusChip(availability)
 
-            Text(
-                text = card.title.orEmpty(),
-                color = OnStageBright,
-                fontSize = 41.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            metaLine(item)?.let {
-                Text(text = it, color = OnStage, fontSize = 13.sp)
-            }
-
-            card.synopsis?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    text = it.collapseWhitespace(),
-                    color = OnStage.copy(alpha = 0.9f),
-                    fontSize = 12.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(11.dp),
-                modifier = Modifier.padding(top = 9.dp),
-            ) {
-                when {
-                    // Already yours — the fork is over, and the only useful action is to go watch it.
-                    availability == AvailabilityState.WATCH_NOW ->
-                        DecisionCard(
-                            title = if (canResume) R.string.resume else R.string.play,
-                            subtitle = R.string.in_your_library,
-                            iconStringRes = R.string.fa_play,
-                            onClick = viewModel::navigateToLibraryItem,
-                            enabled = libraryItemId != null,
-                            modifier = Modifier.focusRequester(firstFocus),
+                        TitleOrLogo(
+                            title = card.title.orEmpty(),
+                            logoUrl = LocalImageUrlService.current.engineImageUrl(card.logoImageUrl ?: details?.logoImageUrl),
                         )
 
-                    // Asked for already. Kept as a statement, not a button, so pressing it again
-                    // can't queue a duplicate.
-                    availability == AvailabilityState.REQUESTED ||
-                        availability == AvailabilityState.DOWNLOADING ->
-                        DecisionCard(
-                            title =
-                                if (availability == AvailabilityState.DOWNLOADING) {
-                                    R.string.availability_adding
-                                } else {
-                                    R.string.requested
-                                },
-                            subtitle = R.string.request_already_queued,
-                            iconStringRes = R.string.fa_check,
-                            enabled = false,
-                            onClick = {},
-                            modifier = Modifier.focusRequester(firstFocus),
-                        )
+                        metaLine(item, details)?.let {
+                            Text(text = it, color = OnStage, fontSize = 13.sp)
+                        }
 
-                    else ->
-                        DecisionCard(
-                            title = if (requesting) R.string.requesting else R.string.request,
-                            subtitle = R.string.request_subtitle,
-                            iconStringRes = if (requesting) R.string.fa_clock else R.string.fa_plus,
-                            onClick = viewModel::request,
-                            modifier = Modifier.focusRequester(firstFocus),
+                        // The catalog's full overview when it has one; the card only carries a trimmed synopsis.
+                        (details?.overview ?: card.synopsis)?.takeIf { it.isNotBlank() }?.let {
+                            Text(
+                                text = it.collapseWhitespace(),
+                                color = OnStage.copy(alpha = 0.9f),
+                                fontSize = 12.sp,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        details?.let { d ->
+                            peopleLine(d)?.let {
+                                Text(
+                                    text = it,
+                                    color = OnStage.copy(alpha = 0.7f),
+                                    fontSize = 12.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(11.dp),
+                            modifier = Modifier.padding(top = 9.dp),
+                        ) {
+                            when {
+                                // Already yours — the fork is over, and the only useful action is to go watch it.
+                                availability == AvailabilityState.WATCH_NOW ->
+                                    DecisionCard(
+                                        title = if (canResume) R.string.resume else R.string.play,
+                                        subtitle = R.string.in_your_library,
+                                        iconStringRes = R.string.fa_play,
+                                        onClick = viewModel::navigateToLibraryItem,
+                                        enabled = libraryItemId != null,
+                                        modifier = Modifier.focusRequester(firstFocus),
+                                    )
+
+                                // Asked for already. Kept as a statement, not a button, so pressing it again
+                                // can't queue a duplicate.
+                                availability == AvailabilityState.REQUESTED ||
+                                    availability == AvailabilityState.DOWNLOADING ->
+                                    DecisionCard(
+                                        title =
+                                            if (availability == AvailabilityState.DOWNLOADING) {
+                                                R.string.availability_adding
+                                            } else {
+                                                R.string.requested
+                                            },
+                                        subtitle = R.string.request_already_queued,
+                                        iconStringRes = R.string.fa_check,
+                                        enabled = false,
+                                        onClick = {},
+                                        modifier = Modifier.focusRequester(firstFocus),
+                                    )
+
+                                else ->
+                                    DecisionCard(
+                                        title = if (requesting) R.string.requesting else R.string.request,
+                                        subtitle = R.string.request_subtitle,
+                                        iconStringRes = if (requesting) R.string.fa_clock else R.string.fa_plus,
+                                        onClick = viewModel::request,
+                                        modifier = Modifier.focusRequester(firstFocus),
+                                    )
+                            }
+
+                            // Streaming is offered whenever the server does it and the title isn't already yours.
+                            // When the operator hasn't enabled it, the viewer never learns it exists.
+                            if (canFindSources && libraryItemId == null) {
+                                DecisionCard(
+                                    title = if (canResume) R.string.resume else R.string.find_streaming_sources,
+                                    subtitle = if (canResume) R.string.sources_picker_title else R.string.find_streaming_sources_subtitle,
+                                    iconStringRes = null,
+                                    onClick = viewModel.sources::findSources,
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = stringResource(R.string.request_destination_note),
+                            color = OnStage.copy(alpha = 0.45f),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 9.dp),
                         )
+                    }
                 }
 
-                // Streaming is offered whenever the server does it and the title isn't already yours.
-                // When the operator hasn't enabled it, the viewer never learns it exists.
-                if (canFindSources && libraryItemId == null) {
-                    DecisionCard(
-                        title = if (canResume) R.string.resume else R.string.find_streaming_sources,
-                        subtitle = if (canResume) R.string.sources_picker_title else R.string.find_streaming_sources_subtitle,
-                        iconStringRes = null,
-                        onClick = viewModel.sources::findSources,
+                item.media.tmdbId?.takeIf { it > 0 }?.let { tmdbId ->
+                    EngineSimilarRow(
+                        itemId = null,
+                        tmdbId = tmdbId,
+                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, bottom = 40.dp),
                     )
                 }
             }
-
-            Text(
-                text = stringResource(R.string.request_destination_note),
-                color = OnStage.copy(alpha = 0.45f),
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 9.dp),
-            )
         }
     }
 
@@ -207,7 +242,7 @@ fun EngineDetailsPage(
         state = sourceSearch,
         title = card.title.orEmpty(),
         // The engine's own logo art when it sent any; the wait falls back to the title otherwise.
-        logoUrl = LocalImageUrlService.current.engineImageUrl(card.logoImageUrl),
+        logoUrl = LocalImageUrlService.current.engineImageUrl(card.logoImageUrl ?: details?.logoImageUrl),
         onPick = { viewModel.sources.playSource(it) },
         onRetry = viewModel.sources::retry,
         onRequest = {
@@ -223,7 +258,7 @@ fun EngineDetailsPage(
     keepPrompt?.let { watch ->
         KeepInLibraryPrompt(
             watch = watch,
-            runtimeMinutes = runtimeMinutes(viewModel.item),
+            runtimeMinutes = details?.runtimeMinutes ?: runtimeMinutes(viewModel.item),
             onKeep = viewModel::keepInLibrary,
             onDismiss = viewModel::dismissKeepPrompt,
         )
@@ -262,21 +297,77 @@ private fun LibraryStatusChip(availability: AvailabilityState) {
     )
 }
 
-/** Year · runtime · genres, assembled from whichever badges the engine actually sent. */
-private fun metaLine(item: com.github.jkrishna289.orcax.engine.RenderItem): String? {
+/** The logo art when there is any (falling back if it fails to load), else the title as text. */
+@Composable
+private fun TitleOrLogo(
+    title: String,
+    logoUrl: String?,
+) {
+    var logoFailed by remember(logoUrl) { mutableStateOf(false) }
+    if (logoUrl != null && !logoFailed) {
+        AsyncImage(
+            model = logoUrl,
+            contentDescription = title,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.BottomStart,
+            onError = { logoFailed = true },
+            modifier = Modifier.height(88.dp).widthIn(max = 420.dp),
+        )
+    } else {
+        Text(
+            text = title,
+            color = OnStageBright,
+            fontSize = 41.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * Year · runtime · certificate · ★ score · genres. The engine catalog's details when they've loaded,
+ * else whichever badges the card happened to carry.
+ */
+private fun metaLine(
+    item: com.github.jkrishna289.orcax.engine.RenderItem,
+    details: TitleDetails?,
+): String? {
     val badges = item.card.badges
     fun of(kind: String) =
         badges.firstOrNull { it.kind.equals(kind, ignoreCase = true) }?.text?.takeIf { it.isNotBlank() }
 
-    val genres =
-        badges.filter { it.kind.equals("GENRE", ignoreCase = true) }
-            .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
-            .take(3)
-
-    return (listOfNotNull(of("YEAR"), of("RUNTIME"), of("CERT")) + genres)
-        .takeIf { it.isNotEmpty() }
-        ?.joinToString(" · ")
+    val parts =
+        if (details != null) {
+            listOfNotNull(
+                details.year?.toString(),
+                details.runtimeMinutes?.let(::formatRuntime),
+                details.officialRating,
+                details.communityRating?.takeIf { it > 0f }?.let { "★ " + "%.1f".format(it) },
+            ) + details.genres.take(3)
+        } else {
+            listOfNotNull(of("YEAR"), of("RUNTIME"), of("CERT"), of("RATING")?.let { "★ $it" }) +
+                badges.filter { it.kind.equals("GENRE", ignoreCase = true) }
+                    .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+                    .take(3)
+        }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
+
+/** "Starring A, B, C · Directed by D", from whichever of the two the catalog has. */
+@Composable
+private fun peopleLine(details: TitleDetails): String? {
+    val starring = details.cast.take(4).takeIf { it.isNotEmpty() }?.let { stringResource(R.string.starring, it.joinToString(", ")) }
+    val directed = details.directors.take(2).takeIf { it.isNotEmpty() }?.let { stringResource(R.string.directed_by, it.joinToString(", ")) }
+    return listOfNotNull(starring, directed).takeIf { it.isNotEmpty() }?.joinToString("  ·  ")
+}
+
+private fun formatRuntime(minutes: Int): String =
+    when {
+        minutes < 60 -> "${minutes}m"
+        minutes % 60 == 0 -> "${minutes / 60}h"
+        else -> "${minutes / 60}h ${minutes % 60}m"
+    }
 
 /** Runtime for the Keep prompt's progress bar, parsed out of the card's RUNTIME badge ("1h 54m"). */
 private fun runtimeMinutes(item: com.github.jkrishna289.orcax.engine.RenderItem): Int? {

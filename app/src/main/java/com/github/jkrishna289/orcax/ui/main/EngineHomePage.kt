@@ -457,6 +457,8 @@ fun EngineHomePage(
                                 backdropUrlFor = { viewModel.backdropUrlFor(it) },
                                 // Adaptive, state-driven start via the engine trailer status machine (M3).
                                 trailerStatusProvider = { viewModel.trailerStatusFor(it) },
+                                // Discover cards' focus panel (rating, age rating, synopsis).
+                                titleDetailsFor = { viewModel.titleDetailsFor(it) },
                             )
                             }
                         }

@@ -8,6 +8,7 @@ import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.PlaybackIdentity
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.ServerPlaybackProgress
+import com.github.jkrishna289.orcax.engine.TitleDetails
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
@@ -83,6 +84,13 @@ class EngineDetailsViewModel
         /** Non-null while the "Keep it?" prompt is up, after returning from a streamed playback. */
         val keepPrompt = MutableStateFlow<StreamWatch?>(null)
 
+        /**
+         * The engine catalog's facts, cast and crew for this title. The card carries only a title and a
+         * short synopsis, so without this the page has nothing else to say. Null until loaded, and on an
+         * engine too old to serve it — the page then falls back to what the card has.
+         */
+        val details = MutableStateFlow<TitleDetails?>(null)
+
         init {
             sources.attach(
                 scope = viewModelScope,
@@ -92,6 +100,11 @@ class EngineDetailsViewModel
                 tmdbId = item.media.tmdbId,
             )
             refreshAvailability()
+            item.media.tmdbId?.takeIf { it > 0 }?.let { tmdbId ->
+                viewModelScope.launchIO {
+                    engineClient.getTitleDetails(tmdbId, item.media.mediaType)?.let { found -> details.update { found } }
+                }
+            }
         }
 
         /** Re-reads status on every resume, which is also when a return from the player happens. */

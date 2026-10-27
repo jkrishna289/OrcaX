@@ -101,6 +101,7 @@
     <string name="delete">Delete</string>
     <string name="died">Died</string>
     <string name="directed_by">Directed by %1$s</string>
+    <string name="starring">Starring %1$s</string>
     <string name="director">Director</string>
     <string name="disabled">Disabled</string>
     <string name="discovered_servers">Discovered Servers</string>

@@ -49,6 +49,8 @@ fun <T> ItemRow(
     focusRequester: FocusRequester? = null,
     // Optional content rendered inline after the title (e.g. a "TOP 10" chip). Null = title only.
     titleExtra: (@Composable () -> Unit)? = null,
+    // Gap between cards; the row's edge padding stays [horizontalPadding].
+    itemSpacing: Dp = horizontalPadding,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
@@ -81,7 +83,7 @@ fun <T> ItemRow(
 
         LazyRow(
             state = state,
-            horizontalArrangement = Arrangement.spacedBy(horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(itemSpacing),
             contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 8.dp),
             modifier =
                 Modifier

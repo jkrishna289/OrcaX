@@ -213,6 +213,27 @@ data class SimilarResponse(
     @SerialName("Row") val row: RenderRow = RenderRow(),
 )
 
+/**
+ * Response of `GET /Metadata/Details` — what the engine's catalog knows about one title. Feeds the
+ * details page of a title that isn't in the library, which otherwise has only its card.
+ */
+@Serializable
+data class TitleDetails(
+    @SerialName("Title") val title: String = "",
+    @SerialName("Year") val year: Int? = null,
+    @SerialName("RuntimeMinutes") val runtimeMinutes: Int? = null,
+    @SerialName("OfficialRating") val officialRating: String? = null,
+    @SerialName("CommunityRating") val communityRating: Float? = null,
+    @SerialName("Genres") val genres: List<String> = emptyList(),
+    @SerialName("Overview") val overview: String? = null,
+    @SerialName("Cast") val cast: List<String> = emptyList(),
+    @SerialName("Directors") val directors: List<String> = emptyList(),
+    @SerialName("Writers") val writers: List<String> = emptyList(),
+    @SerialName("Studios") val studios: List<String> = emptyList(),
+    @SerialName("CollectionName") val collectionName: String? = null,
+    @SerialName("LogoImageUrl") val logoImageUrl: String? = null,
+)
+
 /** Response of `GET /Metadata/Trivia` — "Did You Know?" facts for an item (lazy, cached server-side). */
 @Serializable
 data class TriviaResponse(

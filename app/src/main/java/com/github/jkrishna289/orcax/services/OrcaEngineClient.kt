@@ -203,6 +203,17 @@ class OrcaEngineClient
          * "Did You Know?" trivia facts for a title (engine resolves by Jellyfin or TMDB id, served
          * from its permanent cache). Returns null when neither id is given or the engine is absent.
          */
+        /** A title's stored facts, cast and crew (`/Metadata/Details`). Null on an engine without it. */
+        suspend fun getTitleDetails(
+            tmdbId: Int,
+            mediaType: com.github.jkrishna289.orcax.engine.MediaType,
+        ): com.github.jkrishna289.orcax.engine.TitleDetails? {
+            val type = if (mediaType == com.github.jkrishna289.orcax.engine.MediaType.SERIES) "tv" else "movie"
+            return get("/Metadata/Details?tmdbId=$tmdbId&type=$type") {
+                EngineJson.decodeFromString<com.github.jkrishna289.orcax.engine.TitleDetails>(it)
+            }
+        }
+
         suspend fun getTrivia(
             jellyfinId: UUID? = null,
             tmdbId: Int? = null,

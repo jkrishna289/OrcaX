@@ -46,11 +46,13 @@ import javax.inject.Inject
  */
 @Composable
 fun EngineSimilarRow(
-    itemId: UUID,
+    itemId: UUID?,
     modifier: Modifier = Modifier,
+    // For a title outside the library, which has no Jellyfin id; the engine resolves either.
+    tmdbId: Int? = null,
 ) {
     val viewModel: EngineSimilarViewModel = hiltViewModel()
-    LaunchedEffect(itemId) { viewModel.load(itemId) }
+    LaunchedEffect(itemId, tmdbId) { viewModel.load(itemId, tmdbId) }
     val row by viewModel.row.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
@@ -98,18 +100,22 @@ class EngineSimilarViewModel
         private val _pendingRequest = MutableStateFlow<RenderItem?>(null)
         val pendingRequest: StateFlow<RenderItem?> = _pendingRequest.asStateFlow()
 
-        private var loadedFor: UUID? = null
+        private var loadedFor: Any? = null
         private var currentUserId: UUID? = null
 
-        fun load(itemId: UUID) {
-            if (loadedFor == itemId) return
-            loadedFor = itemId
+        fun load(
+            itemId: UUID?,
+            tmdbId: Int? = null,
+        ) {
+            val key = itemId ?: tmdbId ?: return
+            if (loadedFor == key) return
+            loadedFor = key
             viewModelScope.launch {
                 currentUserId =
                     runCatching {
                         preferences.data.firstOrNull()?.currentUserId?.toUUIDOrNull()
                     }.getOrNull()
-                _row.value = client.getSimilar(jellyfinId = itemId)?.row
+                _row.value = client.getSimilar(jellyfinId = itemId, tmdbId = tmdbId.takeIf { itemId == null })?.row
             }
         }
 

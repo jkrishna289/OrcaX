@@ -437,6 +437,22 @@ class EngineHomeViewModel
         private val settledTrailerStatus = java.util.concurrent.ConcurrentHashMap<String, com.github.jkrishna289.orcax.engine.TrailerStatus>()
 
         /**
+         * The catalog's details for a Discover card's focus panel, fetched once per title. A miss (an
+         * engine without `/Metadata/Details`, or a title it doesn't know) is remembered too, so the
+         * panel falls back to the card's own badges without asking again on every focus.
+         */
+        suspend fun titleDetailsFor(item: RenderItem): com.github.jkrishna289.orcax.engine.TitleDetails? {
+            val tmdbId = item.media.tmdbId?.takeIf { it > 0 } ?: return null
+            val key = "$tmdbId|${item.media.mediaType}"
+            titleDetails[key]?.let { return it.getOrNull() }
+            val details = client.getTitleDetails(tmdbId, item.media.mediaType)
+            titleDetails[key] = Result.success(details)
+            return details
+        }
+
+        private val titleDetails = java.util.concurrent.ConcurrentHashMap<String, Result<com.github.jkrishna289.orcax.engine.TitleDetails?>>()
+
+        /**
          * Predictively prefetches trailers for likely-next items (Phase 3 client half): row neighbours,
          * the next hero, or a detail page just opened. Fire-and-forget at a below-focus [priority]; the
          * engine bounds concurrency and dedupes, so we can prefetch liberally as the user navigates.
