@@ -38,8 +38,15 @@ fun PauseIndicator(
 ) {
     val state = rememberPauseState(player)
     var visible by remember { mutableStateOf(false) }
+    // The hide lives here, not in the animated content: a re-show during the exit fade keeps that
+    // content composed, so an effect inside it never re-ran and the icon stuck on screen
     LaunchedEffect(state.isPaused) {
-        if (state.isPaused) visible = true
+        if (state.isPaused) {
+            visible = true
+            delay(duration)
+            delay(50)
+        }
+        visible = false
     }
     AnimatedVisibility(
         visible = visible,
@@ -53,11 +60,6 @@ fun PauseIndicator(
         exit = fadeOut(spring(stiffness = Spring.StiffnessMediumLow)),
         modifier = modifier,
     ) {
-        LaunchedEffect(Unit) {
-            delay(duration)
-            delay(50)
-            visible = false
-        }
         Icon(
             modifier = Modifier.size(64.dp, 64.dp),
             painter = painterResource(id = R.drawable.baseline_pause_24),
@@ -92,8 +94,9 @@ class PauseState(
                 Player.EVENT_AVAILABLE_COMMANDS_CHANGED,
             ) {
                 // Timber.v("isPaused=$isPaused, playWhenReady=${player.playWhenReady}, playbackState=${player.playbackState}")
-                isPaused = !isPaused && // Not already paused, don't want to trigger more than once
-                    !player.playWhenReady && // Player is actually paused
+                // Plain state, not a toggle: toggling flipped it off and on again on every
+                // seek while paused (READY → BUFFERING → READY), re-flashing the icon
+                isPaused = !player.playWhenReady && // Player is actually paused
                     // Player could play if it was not paused, ie it is not stopped
                     player.playbackState.let { it == Player.STATE_READY || it == Player.STATE_BUFFERING }
             }.observe()

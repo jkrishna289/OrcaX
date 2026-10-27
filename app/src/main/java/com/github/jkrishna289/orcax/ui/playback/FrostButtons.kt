@@ -156,6 +156,7 @@ fun FrostSettingButton(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
     isDimmed: Boolean = false,
+    focusRequester: FocusRequester? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -201,6 +202,7 @@ fun FrostSettingButton(
                     else -> false
                 }
             }
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusable(interactionSource = interaction)
             .padding(horizontal = 16.dp, vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

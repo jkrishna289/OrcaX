@@ -140,13 +140,19 @@ fun PlaybackPage(
     val loading by viewModel.loading.observeAsState(LoadingState.Loading)
     when (val st = loading) {
         is LoadingState.Error -> {
+            // Nothing else here takes focus, so without this OK does nothing until a D-pad press
+            val retryFocusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { retryFocusRequester.tryRequestFocus() }
             Column(modifier) {
                 // Most playback errors are a dropped connection: offer a way back in without
                 // leaving the player
                 TextButton(
                     stringRes = R.string.retry,
                     onClick = viewModel::retry,
-                    modifier = Modifier.padding(start = 16.dp, top = 16.dp),
+                    modifier =
+                        Modifier
+                            .padding(start = 16.dp, top = 16.dp)
+                            .focusRequester(retryFocusRequester),
                 )
                 ErrorMessage(st)
             }
@@ -701,9 +707,11 @@ fun PlaybackPageContent(
                 remember(subtitleSettings) { subtitleSettings.imageSubtitleOpacity / 100f }
 
             // Subtitles — rendered above the Phase 1 toolbar (zIndex), and only while
-            // ACTIVE so they don't paint over the Phase 2 cinematic overlay.
+            // ACTIVE so they don't paint over the Phase 2 cinematic overlay or across an
+            // open Audio/Sub dropdown's rows.
             if (skipIndicatorDuration == 0L && currentItemPlayback.subtitleIndexEnabled &&
-                !presentationState.coverSurface && phaseState.phase == PlaybackPhase.ACTIVE) {
+                !presentationState.coverSurface && phaseState.phase == PlaybackPhase.ACTIVE &&
+                phaseState.dropdown == null) {
                 val maxSize by animateFloatAsState(
                     if (phaseState.toolbarVisibility == ToolbarVisibility.VISIBLE) .7f else 1f,
                 )

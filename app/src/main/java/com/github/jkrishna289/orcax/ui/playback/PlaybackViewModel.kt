@@ -116,6 +116,7 @@ import org.jellyfin.sdk.api.client.extensions.mediaInfoApi
 import org.jellyfin.sdk.api.client.extensions.mediaSegmentsApi
 import org.jellyfin.sdk.api.client.extensions.sessionApi
 import org.jellyfin.sdk.api.client.extensions.trickplayApi
+import org.jellyfin.sdk.api.client.extensions.tvShowsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.api.client.extensions.videosApi
 import org.jellyfin.sdk.api.sockets.subscribe
@@ -267,13 +268,11 @@ constructor(
     val currentUserDto = serverRepository.currentUserDto
 
     init {
-        viewModelScope.launchIO {
-            addCloseable {
-                screensaverService.keepScreenOn(false)
-                disconnectPlayer()
-            }
-            init()
+        addCloseable {
+            screensaverService.keepScreenOn(false)
+            disconnectPlayer()
         }
+        start()
         // Quality engine events: rescue rebuilds + informational toasts.
         viewModelScope.launch {
             qualityManager.events.collect { event ->
@@ -473,6 +472,20 @@ constructor(
         }
     }
 
+    private fun start() {
+        viewModelScope.launchIO {
+            try {
+                init()
+            } catch (ex: CancellationException) {
+                throw ex
+            } catch (ex: Exception) {
+                // Otherwise the page sits on its loading spinner forever with no way to tell why
+                Timber.e(ex, "Playback init failed")
+                loading.setValueOnMain(LoadingState.Error(ex))
+            }
+        }
+    }
+
     /**
      * Initialize from the UI to start playback
      */
@@ -534,7 +547,20 @@ constructor(
             return
         }
 
-        val queriedItem = api.userLibraryApi.getItem(itemId).content
+        val queriedItem =
+            api.userLibraryApi.getItem(itemId).content.let { item ->
+                // Series cards (home hero, grids) hand over the show itself: play what the series
+                // page's Play would — the next-up episode, else the first one
+                if (item.type == BaseItemKind.SERIES && destination is Destination.Playback) {
+                    val episode =
+                        api.tvShowsApi.getNextUp(seriesId = item.id).content.items.firstOrNull()
+                            ?: api.tvShowsApi.getEpisodes(item.id, limit = 1).content.items.firstOrNull()
+                    episode?.let { api.userLibraryApi.getItem(it.id).content }
+                        ?: throw IllegalStateException("${item.name} has no episodes to play")
+                } else {
+                    item
+                }
+            }
         val base =
             if (queriedItem.type.playable) {
                 queriedItem
@@ -1845,7 +1871,14 @@ constructor(
      * dropped connection, so direct play is allowed again rather than staying on the transcode fallback.
      */
     fun retry() {
-        val itemPlayback = currentItemPlayback.value ?: return
+        val itemPlayback =
+            currentItemPlayback.value ?: run {
+                // Nothing was ever built (init failed, e.g. the connection dropped before the item
+                // loaded): start over rather than leave Retry doing nothing
+                loading.value = LoadingState.Loading
+                start()
+                return
+            }
         viewModelScope.launch(Dispatchers.Main + ExceptionHandler()) {
             val positionMs = player.currentPosition
             if (torrentPlayback == null) {

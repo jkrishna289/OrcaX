@@ -35,6 +35,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -340,8 +343,9 @@ private fun Phase2OverlayLayer(
     // FULL vs COMPACT (BACK) vs idle-dim. COMPACT fades the browse chrome to nothing
     // and reveals the frame; idle only dims the narrative and stays in FULL's focus model.
     val isCompact = state.phase2SubState == Phase2SubState.COMPACT
+    // The picker opens over the narrative column, so its text would read through the rows
     val narrativeAlpha by animateFloatAsState(
-        targetValue   = if (isCompact) 0f else 1f,
+        targetValue   = if (isCompact || state.p2PickerType != null) 0f else 1f,
         animationSpec = tween(300),
         label         = "p2_narrative_alpha"
     )
@@ -487,8 +491,10 @@ private fun Phase2OverlayLayer(
                 ) {
                     Phase2ControlsRow(
                         isPlaying  = state.isPlaying,
+                        skipBackSec    = state.skipBackMs / 1000,
+                        skipForwardSec = state.skipForwardMs / 1000,
                         onSkipBack = {
-                            val pos = (state.seekPositionMs - 10_000L).coerceAtLeast(0L)
+                            val pos = (state.seekPositionMs - state.skipBackMs).coerceAtLeast(0L)
                             onSeekRequested(pos)
                             viewModel.onSeekTo(pos)
                         },
@@ -500,7 +506,7 @@ private fun Phase2OverlayLayer(
                             // durationMs == 0 while unknown (live / not yet reported) — clamping
                             // against it would seek to the start instead of forward.
                             val limit = if (state.durationMs > 0L) state.durationMs else Long.MAX_VALUE
-                            val pos = (state.seekPositionMs + 10_000L).coerceAtMost(limit)
+                            val pos = (state.seekPositionMs + state.skipForwardMs).coerceAtMost(limit)
                             onSeekRequested(pos)
                             viewModel.onSeekTo(pos)
                         },
@@ -869,6 +875,8 @@ private fun Phase2OverlayLayer(
 @Composable
 private fun Phase2ControlsRow(
     isPlaying: Boolean,
+    skipBackSec: Long,
+    skipForwardSec: Long,
     onSkipBack: () -> Unit,
     onPlayPause: () -> Unit,
     onSkipForward: () -> Unit,
@@ -886,7 +894,7 @@ private fun Phase2ControlsRow(
         verticalAlignment     = Alignment.CenterVertically
     ) {
         P2CircleBtn(
-            label          = "−10",
+            label          = "−$skipBackSec",
             onClick        = onSkipBack,
             onInteraction  = onInteraction,
             focusRequester = skipBackFR,
@@ -905,7 +913,7 @@ private fun Phase2ControlsRow(
             focusEnabled   = canFocus,
         )
         P2CircleBtn(
-            label          = "+10",
+            label          = "+$skipForwardSec",
             onClick        = onSkipForward,
             onInteraction  = onInteraction,
             focusRequester = skipFwdFR,
@@ -1195,7 +1203,7 @@ private fun Phase2Card(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
+                if (item.episodeNumber > 0) Text(
                     stringResource(R.string.p2_ep_short, item.episodeNumber),
                     fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     letterSpacing = (0.10f * 12).sp,
@@ -1231,7 +1239,9 @@ private fun Phase2Card(
         // Identical structure on every card (title + status line) → consistent alignment.
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                stringResource(R.string.p2_episode_number, item.episodeNumber),
+                // 0 = no episode number (movies): "Episode 0" reads as a bug, the title doesn't
+                if (item.episodeNumber > 0) stringResource(R.string.p2_episode_number, item.episodeNumber)
+                else item.title,
                 fontSize = 14.sp, fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.90f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis
@@ -1735,9 +1745,14 @@ private fun P1DropdownMenu(
         RouletteType.AUDIO    -> stringResource(R.string.p1_dropdown_audio)
         RouletteType.SUBTITLE -> stringResource(R.string.p1_dropdown_subtitle)
     }
+    // Track lists run to dozens of rows (40+ subtitle languages), so the list is capped and
+    // scrolls with the highlight instead of running off screen; the set width stops the rows'
+    // fillMaxWidth stretching the menu across the whole screen.
+    val listState = rememberLazyListState((focusedIdx - 2).coerceAtLeast(0))
+    LaunchedEffect(focusedIdx) { listState.animateScrollToItem((focusedIdx - 2).coerceAtLeast(0)) }
     Column(
         modifier = Modifier
-            .widthIn(min = 200.dp)
+            .width(360.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF0E0F14).copy(alpha = 0.96f))
             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
@@ -1752,59 +1767,61 @@ private fun P1DropdownMenu(
             modifier      = Modifier.padding(top = 10.dp, start = 16.dp, end = 16.dp, bottom = 6.dp)
         )
 
-        items.forEachIndexed { index, item ->
-            val isCurrent = index == confirmedIdx
-            val isFocused = index == focusedIdx
+        LazyColumn(state = listState, modifier = Modifier.heightIn(max = 300.dp)) {
+            itemsIndexed(items) { index, item ->
+                val isCurrent = index == confirmedIdx
+                val isFocused = index == focusedIdx
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (isFocused) Modifier
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White.copy(alpha = 0.10f))
-                            .border(2.dp, Color.White.copy(alpha = 0.80f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
-                        else Modifier
-                            .padding(horizontal = 16.dp, vertical = 9.dp)
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(6.dp)
-                        .background(
-                            if (isCurrent) PlaybackColors.Purple else Color.Transparent,
-                            CircleShape
-                        )
+                        .fillMaxWidth()
                         .then(
-                            if (!isCurrent) Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                            if (isFocused) Modifier
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.10f))
+                                .border(2.dp, Color.White.copy(alpha = 0.80f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
                             else Modifier
-                        )
-                )
-                Text(
-                    text       = item.title,
-                    fontSize   = 15.sp,
-                    fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
-                    color      = Color.White.copy(alpha = when {
-                        isFocused -> 1f
-                        isCurrent -> 0.92f
-                        else      -> 0.55f
-                    }),
-                    maxLines   = 1,
-                    overflow   = TextOverflow.Ellipsis,
-                    modifier   = Modifier.weight(1f)
-                )
-                if (isCurrent) {
-                    Text(
-                        text       = stringResource(R.string.p2_current_on),
-                        fontSize   = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (0.08f * 11).sp,
-                        color      = Color.White.copy(alpha = 0.38f)
+                                .padding(horizontal = 16.dp, vertical = 9.dp)
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(
+                                if (isCurrent) PlaybackColors.Purple else Color.Transparent,
+                                CircleShape
+                            )
+                            .then(
+                                if (!isCurrent) Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                else Modifier
+                            )
                     )
+                    Text(
+                        text       = item.title,
+                        fontSize   = 15.sp,
+                        fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
+                        color      = Color.White.copy(alpha = when {
+                            isFocused -> 1f
+                            isCurrent -> 0.92f
+                            else      -> 0.55f
+                        }),
+                        maxLines   = 1,
+                        overflow   = TextOverflow.Ellipsis,
+                        modifier   = Modifier.weight(1f)
+                    )
+                    if (isCurrent) {
+                        Text(
+                            text       = stringResource(R.string.p2_current_on),
+                            fontSize   = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (0.08f * 11).sp,
+                            color      = Color.White.copy(alpha = 0.38f)
+                        )
+                    }
                 }
             }
         }
@@ -1917,6 +1934,21 @@ private fun P1BottomBar(
         label         = "seekBarDim"
     )
 
+    // BACK's KeyDown becomes a focus Exit (up to the video surface) before the BackHandler closes
+    // the dropdown, leaving the still-visible toolbar with nothing focused and the D-pad dead —
+    // hand focus back to the chip that opened it, as the Phase 2 picker does.
+    val audioChipFR = remember { FocusRequester() }
+    val subChipFR = remember { FocusRequester() }
+    var lastDropdown by remember { mutableStateOf<RouletteType?>(null) }
+    LaunchedEffect(state.dropdown?.type) {
+        val closed = lastDropdown
+        lastDropdown = state.dropdown?.type
+        // Not when the toolbar itself is going away: that would pull focus onto a fading chip
+        if (lastDropdown == null && closed != null && state.toolbarVisibility == ToolbarVisibility.VISIBLE) {
+            runCatching { (if (closed == RouletteType.AUDIO) audioChipFR else subChipFR).requestFocus() }
+        }
+    }
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         CinematicSeekBar(
             seekFraction     = seekFraction,
@@ -1982,6 +2014,7 @@ private fun P1BottomBar(
                 isDimmed = anyDropdownOpen && state.dropdown?.type != RouletteType.AUDIO,
                 onOpen   = { viewModel.openDropdown(RouletteType.AUDIO) },
                 modifier = chipInsetModifier(RouletteType.AUDIO),
+                focusRequester = audioChipFR,
             )
             FrostSettingButton(
                 header   = stringResource(R.string.p1_sub),
@@ -1991,6 +2024,7 @@ private fun P1BottomBar(
                 isDimmed = anyDropdownOpen && state.dropdown?.type != RouletteType.SUBTITLE,
                 onOpen   = { viewModel.openDropdown(RouletteType.SUBTITLE) },
                 modifier = chipInsetModifier(RouletteType.SUBTITLE),
+                focusRequester = subChipFR,
             )
             // Quality picks a Jellyfin transcode ladder. A torrent has no ladder — the file is the
             // release, served byte-for-byte — so the control is replaced rather than merely disabled:
