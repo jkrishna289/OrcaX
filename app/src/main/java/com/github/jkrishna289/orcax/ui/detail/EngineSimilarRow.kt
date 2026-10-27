@@ -1,9 +1,19 @@
 package com.github.jkrishna289.orcax.ui.detail
 
+import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.stringResource
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.ui.main.SkeletonRow
+import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,17 +47,38 @@ fun EngineSimilarRow(
     modifier: Modifier = Modifier,
     // For a title outside the library, which has no Jellyfin id; the engine resolves either.
     tmdbId: Int? = null,
+    // Hold the row's place with a focusable skeleton while it loads, so Down always leaves the
+    // buttons above (an early Down otherwise did nothing, and the next OK pressed Request).
+    placeholderWhileLoading: Boolean = false,
+    // Where focus goes if the skeleton had it and the row turned out empty, so it isn't lost.
+    fallbackFocus: FocusRequester? = null,
 ) {
     val viewModel: EngineSimilarViewModel = hiltViewModel()
     LaunchedEffect(itemId, tmdbId) { viewModel.load(itemId, tmdbId) }
     val row by viewModel.row.collectAsStateWithLifecycle()
+    val loading by viewModel.loading.collectAsStateWithLifecycle()
+    var skeletonFocused by remember { mutableStateOf(false) }
 
-    row?.takeIf { it.items.isNotEmpty() }?.let { r ->
+    val loaded = row?.takeIf { it.items.isNotEmpty() }
+    if (loaded != null) {
+        val rowFocus = remember { FocusRequester() }
+        // Read as the row first composes, before the skeleton's own focus loss is reported.
+        val takeFocus = remember(loaded) { skeletonFocused }
         DynamicCardRow(
-            row = r,
+            row = loaded,
             onClickItem = viewModel::onClick,
+            focusRequester = rowFocus,
             modifier = modifier,
         )
+        LaunchedEffect(loaded) { if (takeFocus) rowFocus.tryRequestFocus() }
+    } else if (placeholderWhileLoading && loading) {
+        SkeletonRow(
+            title = stringResource(R.string.more_like_this),
+            modifier = modifier.onFocusChanged { skeletonFocused = it.isFocused }.focusable(),
+        )
+    } else if (placeholderWhileLoading) {
+        val hadFocus = remember { skeletonFocused }
+        LaunchedEffect(Unit) { if (hadFocus) fallbackFocus?.tryRequestFocus() }
     }
 }
 
@@ -62,6 +93,9 @@ class EngineSimilarViewModel
         private val _row = MutableStateFlow<RenderRow?>(null)
         val row: StateFlow<RenderRow?> = _row.asStateFlow()
 
+        private val _loading = MutableStateFlow(true)
+        val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
         private var loadedFor: Any? = null
 
         fun load(
@@ -71,8 +105,13 @@ class EngineSimilarViewModel
             val key = itemId ?: tmdbId ?: return
             if (loadedFor == key) return
             loadedFor = key
+            _loading.value = true
             viewModelScope.launch {
-                _row.value = client.getSimilar(jellyfinId = itemId, tmdbId = tmdbId.takeIf { itemId == null })?.row
+                try {
+                    _row.value = client.getSimilar(jellyfinId = itemId, tmdbId = tmdbId.takeIf { itemId == null })?.row
+                } finally {
+                    _loading.value = false
+                }
             }
         }
 

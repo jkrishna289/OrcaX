@@ -350,6 +350,8 @@ fun EngineDetailsPage(
                     EngineSimilarRow(
                         itemId = null,
                         tmdbId = tmdbId,
+                        placeholderWhileLoading = true,
+                        fallbackFocus = firstFocus,
                         modifier =
                             Modifier
                                 .fillMaxWidth()
