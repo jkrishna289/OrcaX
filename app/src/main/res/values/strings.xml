@@ -900,7 +900,12 @@
     <string name="quality_transcoding">Transcoding to selected quality</string>
     <string name="quality_rescue_toast">Quality lowered to %1$s — connection can\'t keep up</string>
     <string name="quality_manual_struggling_toast">Playback is struggling — open the quality menu to lower quality</string>
-    <string name="quality_started_reduced_toast">Started at %1$s — connection %2$s</string>
+    <string name="quality_suggest_auto_title">Playback is stuttering</string>
+    <string name="quality_suggest_auto_body">Switch quality to Auto? It checks your connection and picks the highest quality that plays smoothly.</string>
+    <string name="quality_keep_original">Keep Original</string>
+    <string name="quality_switch_to_auto">Switch to Auto</string>
+    <string name="quality_checking_connection">Checking your connection…</string>
+    <string name="quality_transcode_failed_toast">The server couldn\'t lower the quality — back to Original</string>
     <string name="quality_details_preview">AUTO quality: %1$s · connection %2$s</string>
 
     <!-- Streaming sources. Wording is deliberately non-technical: a viewer should never need to know

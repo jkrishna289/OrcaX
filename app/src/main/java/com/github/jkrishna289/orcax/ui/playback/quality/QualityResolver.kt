@@ -168,6 +168,8 @@ object QualityResolver {
      * Rescue target after observed starvation: the recommendation's rung when it
      * is strictly below the current cap, else one rung below the current cap.
      * Always strictly downward (one-way ratchet), null at the ladder bottom.
+     * Rungs come from the recommendation's ladder (those below the source), so
+     * a rescue from Original never "lowers" a 10 Mbps file to a 40 Mbps cap.
      */
     fun rescueTarget(
         recommendation: QualityRecommendation?,
@@ -175,7 +177,9 @@ object QualityResolver {
     ): QualityRung? {
         val fromRecommendation = (recommendation?.recommended as? QualitySelection.Rung)?.rung
             ?.takeIf { it.maxBitrateBps < currentMaxBitrateBps }
+        val ladder = recommendation?.options?.mapNotNull { (it.selection as? QualitySelection.Rung)?.rung }
+            ?: QualityRung.entries
         return fromRecommendation
-            ?: QualityRung.entries.firstOrNull { it.maxBitrateBps < currentMaxBitrateBps }
+            ?: ladder.firstOrNull { it.maxBitrateBps < currentMaxBitrateBps }
     }
 }

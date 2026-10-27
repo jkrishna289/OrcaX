@@ -30,17 +30,18 @@ sealed interface QualityEvent {
     /** Manual pick is struggling — informational toast ONLY, never auto-switched. */
     data object ManualStruggling : QualityEvent
 
-    /** Warm-cache pre-empt: AUTO started reduced because the cache proves Original can't play. */
-    data class StartedReduced(val rung: QualityRung, val measuredBps: Long?) : QualityEvent
+    /** Direct play is stuttering — ask the viewer whether to switch to AUTO (once per item). */
+    data object SuggestAuto : QualityEvent
 }
 
 /**
  * Quality controller for the Orca X player.
  *
+ * Every item starts in Original (direct play) unless the viewer saved a pick for it: the engine
+ * never transcodes on its own say-so. When direct play stutters the viewer is asked whether to
+ * switch to AUTO; [switchToAutoAfterStutter] then measures and steps down.
+ *
  * AUTO semantics (product rulings 2026-07-13, docs/quality-audit.md):
- *  - Starts at Original. Exception: a fresh HIGH-confidence cached measurement
- *    proving Original can't play starts at the recommended rung (+ toast), and
- *    known-incompatible source audio starts re-encoded (silent-playback guard).
  *  - Downgrades ONLY on observed buffer starvation (rescue), never predictions.
  *    After a rescue: speed test only — hold if the current rung fits, else one
  *    more resolver-guided downgrade. One-way ratchet, max 2 rescues per item.
@@ -88,7 +89,7 @@ class QualityManager(
 
     private var rescueRung: QualityRung? = null
     private var rescueCount = 0
-    private var manualToastShown = false
+    private var struggleNoticeShown = false
 
     /**
      * Epoch guard: bumped on every new item and selection; async work from an
@@ -118,6 +119,11 @@ class QualityManager(
             )
         }
     }
+
+    /** AUTO has capped playback below Original — any transcode now is its doing, not the viewer's. */
+    val autoCapActive: Boolean
+        get() = _mode.value == QualitySelection.Auto &&
+            (rescueRung != null || sessionSelection != QualitySelection.Original)
 
     val effectiveBitrateBps: Int get() = activeConstraints().maxBitrateBps
 
@@ -152,7 +158,7 @@ class QualityManager(
         sessionSelection = QualitySelection.Original
         rescueRung = null
         rescueCount = 0
-        manualToastShown = false
+        struggleNoticeShown = false
         healthTracker.reset()
         _recommendation.value = null
 
@@ -161,7 +167,7 @@ class QualityManager(
                 QualitySelection.fromPersisted(qualityPreferenceDao.get(rowId, subject)?.selection)
             }
         }
-        _mode.value = persisted ?: QualitySelection.Auto
+        _mode.value = persisted ?: QualitySelection.Original
         if (persisted != null) {
             Timber.d("Quality: restored persisted ${persisted.persistKey()} for subject $subjectId")
         }
@@ -169,9 +175,9 @@ class QualityManager(
 
     /**
      * Media profile known (after StreamChoiceService picked the source).
-     * Synchronously decides the start selection from the CACHED measurement
-     * only, then refines in the background for the picker and future items.
-     * Must complete before the first changeStreams call.
+     * Builds the picker's recommendation from the CACHED measurement, then
+     * refines it in the background. Must complete before the first
+     * changeStreams call.
      */
     fun onMediaProfile(
         profile: QualityResolver.MediaQualityProfile,
@@ -181,21 +187,6 @@ class QualityManager(
         deviceCaps = caps
         val cached = networkAnalyzer.cachedMeasurement(userId)
         val rec = recompute(cached)
-        if (_mode.value == QualitySelection.Auto) {
-            sessionSelection = rec.startSelection
-            (sessionSelection as? QualitySelection.Rung)?.let { start ->
-                QualityDecisionLog.log(
-                    event = "START_REDUCED",
-                    to = start.rung.name,
-                    reason = "warm cache pre-empt / audio compatibility",
-                    bandwidthBps = cached?.bps ?: 0L,
-                    mediaBps = profile.videoBitrateBps,
-                    subtitleRisk = subtitleRiskActive,
-                    sessionId = sessionId(),
-                )
-                _events.tryEmit(QualityEvent.StartedReduced(start.rung, cached?.bps))
-            }
-        }
         QualityDecisionLog.log(
             event = "RESOLVE",
             to = describe(rec.recommended),
@@ -293,7 +284,7 @@ class QualityManager(
      */
     fun onTranscodeFailed(): Boolean {
         if (_mode.value != QualitySelection.Auto) return false
-        val hadCap = rescueRung != null || sessionSelection != QualitySelection.Original
+        val hadCap = autoCapActive
         epoch.incrementAndGet() // drop any in-flight post-rescue verification
         rescueRung = null
         rescueCount = MAX_RESCUES
@@ -325,18 +316,51 @@ class QualityManager(
         }
     }
 
+    /**
+     * The viewer said yes to AUTO after direct play stuttered. Measures the connection afresh rather
+     * than trusting a cached figure, then rescues: down to the rung that fits, or — when the numbers
+     * say Original should fit, which the stutter just disproved — the first rung below the source.
+     * One more rescue stays available should that still stutter.
+     */
+    suspend fun switchToAutoAfterStutter() {
+        val myEpoch = epoch.get()
+        // Measured while still in Original, so stutter meanwhile can't set off a rescue of its own
+        val measured = networkAnalyzer.measure(userId, force = true)
+        if (epoch.get() != myEpoch || media == null) return
+        selectMode(QualitySelection.Auto)
+        val rec = recompute(measured ?: networkAnalyzer.cachedMeasurement(userId))
+        val target = QualityResolver.rescueTarget(rec, Int.MAX_VALUE) ?: return
+        sessionSelection = QualitySelection.Original
+        rescueRung = target
+        rescueCount = 1
+        // The old stream's stutter is answered; the new rung is judged from its own first frame
+        healthTracker.reset()
+        QualityDecisionLog.log(
+            event = "RESCUE",
+            from = describe(QualitySelection.Original),
+            to = target.name,
+            reason = "viewer chose AUTO after direct play stuttered",
+            bandwidthBps = measured?.bps ?: 0L,
+            mediaBps = media?.videoBitrateBps ?: 0,
+            subtitleRisk = subtitleRiskActive,
+            sessionId = sessionId(),
+        )
+        _events.tryEmit(QualityEvent.RescueDowngrade(target, secondStage = false))
+    }
+
     private fun triggerRescue(cause: String) {
-        // Manual picks are never auto-switched (ruling 6).
+        // Only AUTO switches by itself (ruling 6). Original asks the viewer; a manual rung just says so.
         if (_mode.value != QualitySelection.Auto) {
-            if (!manualToastShown) {
-                manualToastShown = true
+            if (!struggleNoticeShown) {
+                struggleNoticeShown = true
+                val original = _mode.value == QualitySelection.Original
                 QualityDecisionLog.log(
-                    event = "MANUAL_STRUGGLING",
+                    event = if (original) "SUGGEST_AUTO" else "MANUAL_STRUGGLING",
                     to = describe(_mode.value),
                     reason = cause,
                     sessionId = sessionId(),
                 )
-                _events.tryEmit(QualityEvent.ManualStruggling)
+                _events.tryEmit(if (original) QualityEvent.SuggestAuto else QualityEvent.ManualStruggling)
             }
             return
         }

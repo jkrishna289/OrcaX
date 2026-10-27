@@ -62,6 +62,7 @@ import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
@@ -88,6 +89,7 @@ import com.github.jkrishna289.orcax.preferences.skipBackOnResume
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
+import com.github.jkrishna289.orcax.ui.components.ConfirmDialog
 import com.github.jkrishna289.orcax.ui.components.TextButton
 import com.github.jkrishna289.orcax.ui.components.TimeDisplay
 import com.github.jkrishna289.orcax.ui.components.ErrorMessage
@@ -995,6 +997,23 @@ fun PlaybackPageContent(
                         .heightIn(max = 400.dp),
             )
         }
+    }
+
+    // Direct play stuttered: ask before handing quality to Auto. Back keeps Original.
+    val suggestAuto by viewModel.suggestAuto.collectAsStateWithLifecycle()
+    LaunchedEffect(suggestAuto) {
+        // The prompt is its own window: closing it leaves nothing here focused, so the remote went dead
+        if (!suggestAuto && !overlayShowing) focusRequester.tryRequestFocus()
+    }
+    if (suggestAuto) {
+        ConfirmDialog(
+            title = stringResource(R.string.quality_suggest_auto_title),
+            body = stringResource(R.string.quality_suggest_auto_body),
+            onCancel = { viewModel.answerSuggestAuto(false) },
+            onConfirm = { viewModel.answerSuggestAuto(true) },
+            cancelRes = R.string.quality_keep_original,
+            confirmRes = R.string.quality_switch_to_auto,
+        )
     }
 
     playbackDialog?.let { type ->

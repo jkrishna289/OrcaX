@@ -259,6 +259,10 @@ constructor(
     val streamHealth = MutableStateFlow<StreamSessionStatus?>(null)
 
     val nextUp = MutableLiveData<BaseItem?>()
+
+    /** True while asking whether to switch to Auto because direct play is stuttering. */
+    val suggestAuto = MutableStateFlow(false)
+
     private val isPlaylist = destination is Destination.PlaybackList
 
     val playlist = MutableLiveData<Playlist>(Playlist(listOf()))
@@ -315,18 +319,20 @@ constructor(
                             context.getString(R.string.quality_manual_struggling_toast),
                             Toast.LENGTH_LONG,
                         )
-                    is QualityEvent.StartedReduced ->
-                        showToast(
-                            context,
-                            context.getString(
-                                R.string.quality_started_reduced_toast,
-                                rungLabel(event.rung),
-                                event.measuredBps?.let { mbpsLabel(it) } ?: "?",
-                            ),
-                            Toast.LENGTH_LONG,
-                        )
+                    QualityEvent.SuggestAuto -> suggestAuto.value = true
                 }
             }
+        }
+    }
+
+    /** The viewer's answer to [suggestAuto]. No keeps direct play; the question isn't asked again for this item. */
+    fun answerSuggestAuto(switchToAuto: Boolean) {
+        suggestAuto.value = false
+        if (!switchToAuto) return
+        // The rescue it ends in arrives as a RescueDowngrade, which rebuilds the stream above
+        viewModelScope.launchIO {
+            showToast(context, context.getString(R.string.quality_checking_connection), Toast.LENGTH_SHORT)
+            qualityManager.switchToAutoAfterStutter()
         }
     }
 
@@ -670,9 +676,10 @@ constructor(
 
             // ── Quality engine: new item ──────────────────────────────────
             // Synchronous state reset + persisted manual pick load BEFORE the
-            // stream builds (kills the stale-tier race). AUTO starts at
-            // Original; the rescue engine downgrades only on observed
-            // starvation — there is no post-resolve re-prepare anymore.
+            // stream builds (kills the stale-tier race). Without a saved pick
+            // the item starts in Original (direct play); stutter asks the
+            // viewer about Auto rather than transcoding unasked.
+            suggestAuto.value = false
             qualityManager.onNewItem(
                 seriesId = item.data.seriesId,
                 itemId = item.id,
@@ -765,10 +772,9 @@ constructor(
             val audioIndex = audioStream?.index
 
             // ── Quality engine: media + device profile ────────────────────
-            // Profiles the source StreamChoiceService actually picked. Decides
-            // the start selection synchronously from the CACHED measurement
-            // (warm-cache pre-empt / audio-compat guard) before the first
-            // stream build; a background probe refines the picker only.
+            // Profiles the source StreamChoiceService actually picked, for the
+            // quality picker's ladder and recommendation; a background probe
+            // refines it. It no longer changes how playback starts.
             qualityManager.onMediaProfile(
                 QualityResolver.MediaQualityProfile(
                     videoBitrateBps = videoStream?.bitrateBps ?: 0,
@@ -1114,6 +1120,8 @@ constructor(
                     positionMs,
                 )
                 Timber.i("[STREAM-SWITCH] Media item set (player.playbackState=%d)", player.playbackState)
+                autoTranscodeDeadline?.cancel()
+                if (transcodeType == PlayMethod.TRANSCODE && qualityManager.autoCapActive) watchAutoTranscodeStart()
                 if (needsCleanReset) {
                     Timber.i("[STREAM-SWITCH] Preparing fresh Transcode session")
                     player.prepare()
@@ -1719,6 +1727,7 @@ constructor(
     // after setMediaItem) toggle true→false before Compose ever recomposes,
     // so the cover is never shown and the frozen-size guard never engages.
     override fun onRenderedFirstFrame() {
+        autoTranscodeDeadline?.cancel()
         // Buffer must prime after any (re)build before starvation counts again.
         qualityManager.onPlaybackStarted()
         Timber.i(
@@ -1802,6 +1811,7 @@ constructor(
 
     override fun onPlayerError(error: PlaybackException) {
         Timber.e(error, "Playback error")
+        autoTranscodeDeadline?.cancel()
         isSwitchingStream.update { false }
         viewModelScope.launch(Dispatchers.Main + ExceptionHandler()) {
             // A torrent source is direct-play only: the transcode "fallback" below would rebuild the
@@ -1814,25 +1824,8 @@ constructor(
                 when (it.playMethod) {
                     PlayMethod.TRANSCODE -> {
                         if (qualityManager.onTranscodeFailed()) {
-                            // AUTO had capped this to a transcode the server can't produce; direct
-                            // play may still work (it did before the cap), so go back to it
                             Timber.w("Transcode failed under an AUTO quality cap, returning to direct play")
-                            changeStreams(
-                                item,
-                                currentItemPlayback.value!!,
-                                currentItemPlayback.value?.audioIndex,
-                                currentItemPlayback.value?.subtitleIndex,
-                                player.currentPosition,
-                                false,
-                                enableDirectPlay = !forceTranscoding && qualityManager.effectiveEnableDirectPlay,
-                                enableDirectStream = !forceTranscoding,
-                                allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
-                                forceRebuild = true,
-                            )
-                            withContext(Dispatchers.Main) {
-                                player.prepare()
-                                player.play()
-                            }
+                            returnToDirectPlay()
                         } else {
                             loading.setValueOnMain(
                                 LoadingState.Error(
@@ -1864,6 +1857,46 @@ constructor(
                 }
             }
         }
+    }
+
+    /**
+     * AUTO had capped playback to a transcode the server can't produce; direct play may still work (it
+     * did before the cap), so go back to it. Call after [QualityManager.onTranscodeFailed] lifted the cap.
+     */
+    private suspend fun returnToDirectPlay() {
+        showToast(context, context.getString(R.string.quality_transcode_failed_toast), Toast.LENGTH_LONG)
+        changeStreams(
+            item,
+            currentItemPlayback.value!!,
+            currentItemPlayback.value?.audioIndex,
+            currentItemPlayback.value?.subtitleIndex,
+            onMain { player.currentPosition },
+            false,
+            enableDirectPlay = !forceTranscoding && qualityManager.effectiveEnableDirectPlay,
+            enableDirectStream = !forceTranscoding,
+            allowAudioStreamCopy = qualityManager.effectiveAllowAudioStreamCopy,
+            forceRebuild = true,
+        )
+        withContext(Dispatchers.Main) {
+            player.prepare()
+            player.play()
+        }
+    }
+
+    // A server that can't produce AUTO's transcode never sends a frame, and Media3's timeouts and
+    // retries only give up after ~90s of spinner. AUTO stops waiting long before that.
+    private var autoTranscodeDeadline: Job? = null
+
+    private fun watchAutoTranscodeStart() {
+        autoTranscodeDeadline?.cancel()
+        autoTranscodeDeadline =
+            viewModelScope.launch(Dispatchers.Main + ExceptionHandler()) {
+                delay(AUTO_TRANSCODE_START_DEADLINE_MS)
+                if (currentPlayback.value?.playMethod != PlayMethod.TRANSCODE) return@launch
+                if (!qualityManager.onTranscodeFailed()) return@launch
+                Timber.w("AUTO transcode showed no picture in %d ms, returning to direct play", AUTO_TRANSCODE_START_DEADLINE_MS)
+                returnToDirectPlay()
+            }
     }
 
     /**
@@ -2122,3 +2155,6 @@ data class PlaybackPositionState(
  * because there is nothing else to look at; here there is a film playing.
  */
 private const val STREAM_HEALTH_POLL_MS = 3_000L
+
+/** How long a transcode AUTO switched to may take to show a picture before AUTO falls back to direct play. */
+private const val AUTO_TRANSCODE_START_DEADLINE_MS = 20_000L

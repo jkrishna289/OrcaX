@@ -209,6 +209,12 @@ class QualityResolverTest {
     }
 
     @Test
+    fun `rescue from Original steps just below the source`() {
+        val rec = resolve(null, media(10.0)) // connection unknown → recommends Original
+        assertEquals(QualityRung.R8, QualityResolver.rescueTarget(rec, Int.MAX_VALUE))
+    }
+
+    @Test
     fun `rescue at the ladder bottom yields null`() {
         assertNull(QualityResolver.rescueTarget(null, QualityRung.R1_5.maxBitrateBps))
     }
