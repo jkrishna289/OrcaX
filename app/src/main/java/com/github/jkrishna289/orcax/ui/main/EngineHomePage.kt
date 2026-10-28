@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
 import android.widget.Toast
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -36,6 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
@@ -414,10 +418,21 @@ fun EngineHomePage(
                                             }
                                         }
                                         .graphicsLayer {
-                                            alpha = rowAlpha
                                             scaleX = rowScale
                                             scaleY = rowScale
                                             transformOrigin = TransformOrigin(0f, 0.5f)
+                                            // Its own layer while dimmed, so the darkening below only
+                                            // touches what this row drew.
+                                            if (rowAlpha < 1f) compositingStrategy = CompositingStrategy.Offscreen
+                                        }
+                                        // Dim by darkening, not by alpha: a translucent row let the
+                                        // ambient backdrop (the focused title's art) show through its
+                                        // posters as a ghost image.
+                                        .drawWithContent {
+                                            drawContent()
+                                            if (rowAlpha < 1f) {
+                                                drawRect(Color.Black.copy(alpha = 1f - rowAlpha), blendMode = BlendMode.SrcAtop)
+                                            }
                                         }
                                         .then(if (rowBlur > 0.dp) Modifier.blur(rowBlur) else Modifier),
                             ) {
@@ -470,6 +485,9 @@ fun EngineHomePage(
                     // Focusing the first row leaves the billboard peeking (still index 0), so frost on
                     // row focus too — otherwise the bar's icons sit right on the billboard's content.
                     isAtTop = isAtTop && focusedRowId == null,
+                    // Rows scroll content up under the bar (and the first row leaves the billboard's
+                    // metadata under it), so step out of the way unless the billboard has the screen.
+                    hidden = !(isAtTop && focusedRowId == null),
                     contentFocusRequester = billboardPlayFocus,
                     navFocusRequester = navFocus,
                     modifier =

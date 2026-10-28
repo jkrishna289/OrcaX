@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -962,11 +963,31 @@ private fun TopRankedCard(
     val width = height * AspectRatios.TALL
     val cardShape = RoundedCornerShape(8.dp)
 
+    // The numeral gets its own slot beside the poster, as wide as the numeral itself ("10" is about
+    // twice a "1"), with only its right edge tucked under the poster. It used to sit ON the poster in a
+    // fixed slot: it covered the art and title of every card, and the focused card, scaling up over
+    // it, hid its own number.
+    val numeral = rankNumeralLayout(rank)
+    val slot = (numeral.width - RANK_NUMERAL_TUCK).coerceAtLeast(0.dp)
+
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.width(RANK_NUMERAL_INSET + width),
+        modifier = modifier.width(slot + width),
     ) {
-        Box {
+        // Room below the poster: the row clips at its items' bounds, which cut off the focused
+        // card's scaled-up bottom border and the numerals' drop shadow.
+        Box(modifier = Modifier.padding(bottom = RANK_ROW_OVERFLOW)) {
+            // Drawn before the Card, so the poster (and its focus scale) passes over the numeral's edge.
+            RankNumeral(
+                rank = rank,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .width(numeral.width)
+                        // Digits have no descender: drop the empty space below the baseline so the
+                        // numeral stands on the poster's bottom edge.
+                        .offset(y = numeral.belowBaseline),
+            )
             Card(
                 onClick = onClick,
                 onLongClick = onLongClick,
@@ -976,7 +997,7 @@ private fun TopRankedCard(
                     CardDefaults.border(
                         focusedBorder = Border(BorderStroke(3.dp, Color.White), shape = cardShape),
                     ),
-                modifier = Modifier.padding(start = RANK_NUMERAL_INSET).size(width, height),
+                modifier = Modifier.padding(start = slot).size(width, height),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     EngineCardArt(
@@ -992,14 +1013,6 @@ private fun TopRankedCard(
                     )
                 }
             }
-            // Drawn after the Card so it overlaps the poster's left edge.
-            RankNumeral(
-                rank = rank,
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .width(RANK_NUMERAL_INSET + RANK_NUMERAL_OVERLAP),
-            )
         }
         if (card.showTitle && !card.title.isNullOrBlank()) {
             Text(
@@ -1009,15 +1022,44 @@ private fun TopRankedCard(
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = RANK_NUMERAL_INSET).fillMaxWidth(),
+                modifier = Modifier.padding(start = slot).fillMaxWidth(),
             )
         }
     }
 }
 
+/** A rank numeral's measured width, and the empty space under its baseline. */
+private data class RankNumeralLayout(
+    val width: Dp,
+    val belowBaseline: Dp,
+)
+
+/** Measures [rank] in the numeral's own style, so its slot fits it exactly. */
+@Composable
+private fun rankNumeralLayout(rank: String): RankNumeralLayout {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val style = rankNumeralStyle()
+    return remember(rank, style, density) {
+        val layout = measurer.measure(rank, style, maxLines = 1, softWrap = false)
+        with(density) {
+            RankNumeralLayout(
+                width = layout.size.width.toDp(),
+                belowBaseline = (layout.size.height - layout.firstBaseline).toDp(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun rankNumeralStyle(): TextStyle {
+    val numeralSize = with(LocalDensity.current) { RANK_NUMERAL_HEIGHT.toSp() }
+    return TextStyle(fontWeight = FontWeight.Black, fontSize = numeralSize, lineHeight = numeralSize)
+}
+
 /**
- * The oversized rank numeral: end-aligned in its slot so a wider glyph run ("10") spills LEFT into
- * the row gap (like the mockup) rather than over the poster. Overflow stays visible on purpose.
+ * The oversized rank numeral, end-aligned in a slot measured to fit it ([rankNumeralLayout]).
+ * Overflow stays visible on purpose.
  */
 @Composable
 private fun RankNumeral(
@@ -1550,11 +1592,11 @@ private val PLACED_BADGE_KINDS = listOf("RANK", "STUDIO", "DAY", "TODAY", "PREMI
  */
 private val AVAILABILITY_BADGE_KINDS = listOf("AVAILABILITY", "NEW")
 
-/** Horizontal room reserved beside a ranked poster for its rank numeral (mockup: ~26% of card width). */
-private val RANK_NUMERAL_INSET = 36.dp
+/** How much of the rank numeral's right edge tucks under its poster. */
+private val RANK_NUMERAL_TUCK = 16.dp
 
-/** How far the rank numeral overlaps the poster's left edge (mockup: ~38% of the card width). */
-private val RANK_NUMERAL_OVERLAP = 44.dp
+/** Space under a ranked poster for its focus scale-up and the numeral's shadow. */
+private val RANK_ROW_OVERFLOW = 16.dp
 
 /** Glyph height of the beside-the-card rank numeral (mockup: ~77% of the poster height). */
 private val RANK_NUMERAL_HEIGHT = 128.dp

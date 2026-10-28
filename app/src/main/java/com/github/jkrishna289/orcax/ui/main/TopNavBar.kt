@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -37,7 +38,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -124,8 +127,17 @@ fun TopNavBar(
     contentFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
     navFocusRequester: FocusRequester? = null,
+    // Fades the bar out (unless it has focus) while content scrolls under it: the frost is only a
+    // gradient, so the icons and clock otherwise sat on top of posters and buttons.
+    hidden: Boolean = false,
     viewModel: TopNavViewModel = hiltViewModel(),
 ) {
+    var barFocused by remember { mutableStateOf(false) }
+    val barAlpha by animateFloatAsState(
+        targetValue = if (hidden && !barFocused) 0f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+        label = "topnav-alpha",
+    )
     val user by viewModel.currentUser.collectAsStateWithLifecycle(initialValue = null)
     val server by viewModel.currentServer.collectAsStateWithLifecycle(initialValue = null)
     val timeString by LocalClock.current.timeString
@@ -141,7 +153,13 @@ fun TopNavBar(
         label = "topnav-scrim",
     )
 
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .onFocusChanged { barFocused = it.hasFocus }
+                .graphicsLayer { alpha = barAlpha },
+    ) {
         // Frosted background layer (only this layer blurs — the icons stay crisp). Real blur on
         // API 31+, plain translucent gradient elsewhere / on the emulator.
         Box(

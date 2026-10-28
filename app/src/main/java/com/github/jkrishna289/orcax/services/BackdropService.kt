@@ -140,16 +140,24 @@ class BackdropService
          * Remove the backdrop, such as when switching pages
          */
         suspend fun clearBackdrop() {
+            clearedAt.incrementAndGet()
             _backdropFlow.update {
                 BackdropResult.NONE
             }
         }
+
+        /**
+         * Bumped by [clearBackdrop]. A color extraction started before a clear must not land after
+         * it: Home's last focused title used to reappear behind Search half a second after opening it.
+         */
+        private val clearedAt = java.util.concurrent.atomic.AtomicLong()
 
         private suspend fun extractColors(
             itemId: String,
             imageUrl: String?,
             hero: Boolean = false,
         ) {
+            val clearsBefore = clearedAt.get()
             delay(500)
             val backdropStyle =
                 preferences.data
@@ -166,7 +174,7 @@ class BackdropService
                     ExtractedColors.DEFAULT
                 }
             _backdropFlow.update {
-                if (it.itemId == itemId) {
+                if (it.itemId == itemId && clearedAt.get() == clearsBefore) {
                     BackdropResult(
                         itemId = itemId,
                         imageUrl = imageUrl,

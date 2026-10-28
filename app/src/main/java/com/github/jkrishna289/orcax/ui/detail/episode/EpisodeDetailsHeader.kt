@@ -89,6 +89,8 @@ fun EpisodeDetailsHeader(
             ep.data.people
                 ?.filter { it.type == PersonKind.DIRECTOR && it.name.isNotNullOrBlank() }
                 ?.joinToString(", ") { it.name!! }
+                // No director listed → no line (it used to read just "Directed by").
+                ?.takeIf { it.isNotNullOrBlank() }
                 ?.let {
                     Text(
                         text = stringResource(R.string.directed_by, it),

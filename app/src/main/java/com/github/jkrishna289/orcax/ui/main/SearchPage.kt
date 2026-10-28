@@ -352,8 +352,7 @@ fun SearchPage(
                     modifier =
                         Modifier
                             .focusGroup()
-                            .focusRestorer(textFieldFocusRequester)
-                            .focusRequester(focusRequesters[SEARCH_ROW]),
+                            .focusRestorer(textFieldFocusRequester),
                 ) {
                     VoiceSearchButton(
                         onSpeechResult = { spokenText ->
@@ -374,6 +373,10 @@ fun SearchPage(
                         modifier =
                             Modifier
                                 .focusRequester(textFieldFocusRequester)
+                                // The page opens here, not on the mic beside it (a requester on the
+                                // row landed on its first child, so typing went nowhere and OK
+                                // started voice search).
+                                .focusRequester(focusRequesters[SEARCH_ROW])
                                 .onFocusChanged { state ->
                                     isTextFieldFocused = state.isFocused
                                     if (!state.isFocused) isSearchActive = false

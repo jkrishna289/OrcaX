@@ -304,7 +304,12 @@ class EngineHomeViewModel
          */
         private fun applyBundle(bundle: com.github.jkrishna289.orcax.engine.RenderBundle) {
             val spotlight = bundle.rows.firstOrNull { it.id == SPOTLIGHT_ROW_ID }
-            val nextHeroes = spotlight?.items.orEmpty()
+            // One hero per title: a library holding a show twice (two folders, two libraries) gave it
+            // two billboard slots, and "Up next" then showed the same show twice.
+            val nextHeroes =
+                spotlight?.items.orEmpty().distinctBy { hero ->
+                    hero.media.tmdbId?.let { it to hero.media.mediaType } ?: hero.media.jellyfinId ?: hero
+                }
             val rows = bundle.rows.filterNot { it.id == SPOTLIGHT_ROW_ID }
 
             // Progressive loading re-applies the bundle as each row lands, so only re-seed the

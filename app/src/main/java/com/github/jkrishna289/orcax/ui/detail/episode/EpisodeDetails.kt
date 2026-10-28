@@ -297,6 +297,9 @@ fun EpisodeDetails(
 
 private const val HEADER_ROW = 0
 
+/** Matches the Home top bar's TV safe-area inset. */
+private val EPISODE_SAFE_EDGE = 48.dp
+
 @Composable
 fun EpisodeDetailsContent(
     preferences: UserPreferences,
@@ -323,7 +326,9 @@ fun EpisodeDetailsContent(
     Box(modifier = modifier) {
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 8.dp),
+            // TV safe area: the title, details and buttons sat flush against the screen's left edge,
+            // where overscan crops them on many TVs.
+            contentPadding = PaddingValues(start = EPISODE_SAFE_EDGE, end = EPISODE_SAFE_EDGE, bottom = 8.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             item {

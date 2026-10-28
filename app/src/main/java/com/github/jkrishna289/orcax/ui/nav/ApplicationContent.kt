@@ -2,14 +2,20 @@ package com.github.jkrishna289.orcax.ui.nav
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -50,6 +56,7 @@ class ApplicationContentViewModel
  * destination now renders [DestinationContent] full-size; Home is the hub and other screens are
  * reached from the top-nav and returned-from via Back (Apple-TV push model).
  */
+@OptIn(ExperimentalComposeUiApi::class) // saveFocusedChild / restoreFocusedChild
 @Composable
 fun ApplicationContent(
     server: JellyfinServer,
@@ -75,8 +82,23 @@ fun ApplicationContent(
         // handlers later and therefore take precedence while enabled.
         val activity = LocalActivity.current
         var showExitDialog by remember { mutableStateOf(false) }
-        BackHandler(enabled = navigationManager.backStack.size <= 1) { showExitDialog = true }
+        // Cancel used to drop focus on the first focusable (the top bar's Search) rather than where
+        // the viewer was; remember the focused element and put focus back there.
+        val content = remember { FocusRequester() }
+        var restoreFocus by remember { mutableStateOf(false) }
+        BackHandler(enabled = navigationManager.backStack.size <= 1) {
+            content.saveFocusedChild()
+            showExitDialog = true
+        }
+        LaunchedEffect(restoreFocus) {
+            if (restoreFocus) {
+                withFrameNanos { } // once the dialog's window has handed focus back
+                content.restoreFocusedChild()
+                restoreFocus = false
+            }
+        }
         NavDisplay(
+            modifier = Modifier.focusRequester(content).focusGroup(),
             backStack = navigationManager.backStack,
             onBack = { navigationManager.goBack() },
             entryDecorators =
@@ -100,7 +122,10 @@ fun ApplicationContent(
         if (showExitDialog) {
             ExitConfirmDialog(
                 onExit = { activity?.finish() },
-                onDismiss = { showExitDialog = false },
+                onDismiss = {
+                    showExitDialog = false
+                    restoreFocus = true
+                },
             )
         }
     }

@@ -262,15 +262,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The key whose press woke the screensaver. Its release still has to be eaten: Back and OK act
+     * on key-up, so waking with Back also opened "Leave Orca X?", and OK clicked whatever had focus.
+     */
+    private var wakeKey: Int? = null
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (screensaverService.state.value.show) {
             screensaverService.stop(false)
             screensaverService.pulse()
+            if (event.action == KeyEvent.ACTION_DOWN) wakeKey = event.keyCode
             return true
-        } else {
-            screensaverService.pulse()
-            return super.dispatchKeyEvent(event)
         }
+        screensaverService.pulse()
+        if (event.keyCode == wakeKey) {
+            if (event.action == KeyEvent.ACTION_UP) wakeKey = null
+            return true
+        }
+        wakeKey = null
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onResume() {
