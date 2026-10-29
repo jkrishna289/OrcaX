@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -261,6 +263,10 @@ fun EngineDetailsPage(
                                 maxLines = 4,
                                 overflow = TextOverflow.Ellipsis,
                                 style = Legible,
+                                // Gives up lines before anything else gives up room: with a logo, cast
+                                // and two-line buttons, four lines pushed the status chip off the top
+                                // and cut the fine print in half.
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                         }
 
@@ -281,7 +287,8 @@ fun EngineDetailsPage(
 
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(11.dp),
-                            modifier = Modifier.padding(top = 6.dp),
+                            // One height for both cards: "Find Streaming Sources" wraps to two lines.
+                            modifier = Modifier.padding(top = 6.dp).height(IntrinsicSize.Max),
                         ) {
                             when {
                                 // Already yours — the fork is over, and the only useful action is to go watch it.
@@ -292,7 +299,7 @@ fun EngineDetailsPage(
                                         iconStringRes = R.string.fa_play,
                                         onClick = viewModel::navigateToLibraryItem,
                                         enabled = libraryItemId != null,
-                                        modifier = Modifier.focusRequester(firstFocus),
+                                        modifier = Modifier.fillMaxHeight().focusRequester(firstFocus),
                                     )
 
                                 // Asked for already. Kept as a statement, not a button, so pressing it again
@@ -310,7 +317,7 @@ fun EngineDetailsPage(
                                         iconStringRes = R.string.fa_check,
                                         enabled = false,
                                         onClick = {},
-                                        modifier = Modifier.focusRequester(firstFocus),
+                                        modifier = Modifier.fillMaxHeight().focusRequester(firstFocus),
                                     )
 
                                 else ->
@@ -319,7 +326,7 @@ fun EngineDetailsPage(
                                         subtitle = R.string.request_subtitle,
                                         iconStringRes = if (requesting) R.string.fa_clock else R.string.fa_plus,
                                         onClick = viewModel::request,
-                                        modifier = Modifier.focusRequester(firstFocus),
+                                        modifier = Modifier.fillMaxHeight().focusRequester(firstFocus),
                                     )
                             }
 
@@ -331,6 +338,7 @@ fun EngineDetailsPage(
                                     subtitle = if (canResume) R.string.sources_picker_title else R.string.find_streaming_sources_subtitle,
                                     iconStringRes = null,
                                     onClick = viewModel.sources::findSources,
+                                    modifier = Modifier.fillMaxHeight(),
                                 )
                             }
                         }
@@ -355,10 +363,12 @@ fun EngineDetailsPage(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(start = 24.dp, bottom = 40.dp)
                                 .onFocusChanged { similarFocused = it.hasFocus }
                                 .alpha(peekAlpha)
-                                .blur(peekBlur),
+                                .blur(peekBlur)
+                                // Inside the dim/blur layer, which clips: outside it, the focused
+                                // card's scale lost its bottom border.
+                                .padding(start = 24.dp, bottom = 40.dp),
                     )
                 }
             }

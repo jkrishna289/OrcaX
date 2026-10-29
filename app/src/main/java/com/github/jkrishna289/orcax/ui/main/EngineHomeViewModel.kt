@@ -391,6 +391,10 @@ class EngineHomeViewModel
             // Feature A: a focus change ends the previous card's dwell — record it as a signal.
             trackFocusChange(item.media.jellyfinId)
 
+            // A late bundle or the billboard's re-seed can land after Search opened and cleared the
+            // backdrop; it put the first hero's art behind the search field.
+            if (navigationManager.backStack.lastOrNull() !is Destination.Home) return
+
             val url = ambientUrl(item)
             val key = item.media.jellyfinId ?: item.media.tmdbId?.let { "tmdb:$it" } ?: item.card.title ?: "sample"
             if (url == null) {

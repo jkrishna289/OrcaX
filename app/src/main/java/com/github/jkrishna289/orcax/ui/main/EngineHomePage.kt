@@ -148,6 +148,8 @@ fun EngineHomePage(
             val rowFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
             fun rowFocus(id: String): FocusRequester = rowFocusRequesters.getOrPut(id) { FocusRequester() }
             var lastFocusedRowId by rememberSaveable { mutableStateOf<String?>(null) }
+            // The top bar had focus when the viewer left (opened Search): Back returns there, not to Play.
+            var navHadFocus by rememberSaveable { mutableStateOf(false) }
 
             // When a popup overlay (feedback menu / request landing) dismisses, focus must land back on
             // the row the user was on. The overlay's own onDispose requestFocus() can fire a frame before
@@ -178,17 +180,15 @@ fun EngineHomePage(
             // exact card the user left. Fall back to the billboard if it never attaches.
             LaunchedEffect(Unit) {
                 delay(FOCUS_RESTORE_SETTLE_MS) // let the restored scroll position / composition settle
-                val rowId = lastFocusedRowId
-                if (rowId != null) {
+                val target = if (navHadFocus) navFocus else lastFocusedRowId?.let { rowFocus(it) }
+                if (target != null) {
                     repeat(FOCUS_RESTORE_ATTEMPTS) {
-                        if (rowFocus(rowId).tryRequestFocus()) return@LaunchedEffect
+                        if (target.tryRequestFocus()) return@LaunchedEffect
                         delay(FOCUS_RESTORE_RETRY_MS)
                     }
-                    // Never attached within budget → don't strand focus on the top nav.
-                    runCatching { billboardPlayFocus.requestFocus() }
-                } else {
-                    runCatching { billboardPlayFocus.requestFocus() }
                 }
+                // Never attached within budget → don't strand focus on the top nav.
+                runCatching { billboardPlayFocus.requestFocus() }
             }
 
             // Bar background follows scroll: transparent over the billboard (index 0), frosted below.
@@ -318,6 +318,9 @@ fun EngineHomePage(
                                                 if (it.hasFocus) {
                                                     billboardFocused = true
                                                     focusedRowId = null
+                                                    // Left from here, Back comes back here — not to a row visited earlier.
+                                                    lastFocusedRowId = null
+                                                    navHadFocus = false
                                                     scope.launch { listState.animateScrollToItem(0) }
                                                 } else {
                                                     billboardFocused = false
@@ -414,6 +417,7 @@ fun EngineHomePage(
                                             if (it.hasFocus) {
                                                 focusedRowId = row.id
                                                 billboardFocused = false
+                                                navHadFocus = false
                                                 scope.launch { rowBringIntoView.bringIntoView() }
                                             }
                                         }
@@ -498,7 +502,10 @@ fun EngineHomePage(
                             // the whole billboard shows under the (transparent-at-top) bar instead of
                             // being left half-scrolled beneath it. Mirrors the billboard/Back snap.
                             .onFocusChanged {
-                                if (it.hasFocus) scope.launch { listState.animateScrollToItem(0) }
+                                if (it.hasFocus) {
+                                    navHadFocus = true
+                                    scope.launch { listState.animateScrollToItem(0) }
+                                }
                             },
                 )
 

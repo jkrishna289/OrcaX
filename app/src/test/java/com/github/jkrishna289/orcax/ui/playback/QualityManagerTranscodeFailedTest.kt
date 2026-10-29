@@ -46,6 +46,8 @@ class QualityManagerTranscodeFailedTest {
     fun `a failed transcode lifts an AUTO cap once, then the error is real`() =
         runTest {
             startItem()
+            // Items start in Original; switching to Auto on a slow link is what caps it.
+            manager.selectMode(QualitySelection.Auto)
             assertFalse("AUTO should start capped to a transcode", manager.effectiveEnableDirectPlay)
 
             assertTrue(manager.onTranscodeFailed())
