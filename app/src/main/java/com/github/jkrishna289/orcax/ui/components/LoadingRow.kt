@@ -109,7 +109,9 @@ fun LoadingRowPlaceholder(
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.padding(bottom = 32.dp),
+        // Start padding matches ItemRow's, which this stands in for; without it Search's "No results"
+        // titles sat 8dp left of the rows around them.
+        modifier = modifier.padding(start = 8.dp, bottom = 32.dp),
     ) {
         Text(
             text = title,

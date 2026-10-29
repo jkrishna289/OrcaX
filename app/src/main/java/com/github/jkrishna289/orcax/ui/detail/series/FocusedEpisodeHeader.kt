@@ -54,6 +54,8 @@ fun FocusedEpisodeHeader(
             overview = dto?.overview ?: "",
             maxLines = 3,
             onClick = overviewOnClick,
+            // With no episode it's an empty box, and focus landing on it looked lost.
+            enabled = dto != null,
             modifier = Modifier.onFocusChanged(overviewOnFocus),
         )
     }

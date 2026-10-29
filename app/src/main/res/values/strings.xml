@@ -142,6 +142,7 @@
     <string name="name">Name</string>
     <string name="next_up">Next Up</string>
     <string name="no_data">No data</string>
+    <string name="no_episodes_yet">No episodes yet</string>
     <string name="no_results">No results</string>
     <string name="no_servers_found">No servers found</string>
     <string name="no_scheduled_recordings">No scheduled recordings</string>

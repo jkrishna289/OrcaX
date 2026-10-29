@@ -5,7 +5,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,7 +26,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -43,7 +41,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.engine.RenderItem
@@ -58,6 +55,7 @@ import com.github.jkrishna289.orcax.ui.SlimItemFields
 import com.github.jkrishna289.orcax.ui.cards.EpisodeCard
 import com.github.jkrishna289.orcax.ui.cards.ItemRow
 import com.github.jkrishna289.orcax.ui.cards.SeasonCard
+import com.github.jkrishna289.orcax.ui.components.LoadingRowPlaceholder
 import com.github.jkrishna289.orcax.ui.components.SearchEditTextBox
 import com.github.jkrishna289.orcax.ui.components.VoiceInputManager
 import com.github.jkrishna289.orcax.ui.components.VoiceSearchButton
@@ -567,7 +565,7 @@ fun LazyListScope.searchResultRow(
     item {
         when (val r = result) {
             is SearchResult.Error -> {
-                SearchResultPlaceholder(
+                LoadingRowPlaceholder(
                     title = stringResource(title),
                     message = r.ex.localizedMessage ?: "Error occurred during search",
                     messageColor = MaterialTheme.colorScheme.error,
@@ -580,7 +578,7 @@ fun LazyListScope.searchResultRow(
             }
 
             SearchResult.Searching -> {
-                SearchResultPlaceholder(
+                LoadingRowPlaceholder(
                     title = stringResource(title),
                     message = stringResource(R.string.searching),
                     modifier = modifier,
@@ -589,7 +587,7 @@ fun LazyListScope.searchResultRow(
 
             is SearchResult.Success -> {
                 if (r.items.isEmpty()) {
-                    SearchResultPlaceholder(
+                    LoadingRowPlaceholder(
                         title = stringResource(title),
                         message = stringResource(R.string.no_results),
                         modifier = modifier,
@@ -620,11 +618,11 @@ fun LazyListScope.notInLibraryRow(
         val title = stringResource(R.string.not_in_your_library)
         when (val r = result) {
             SearchResult.Searching ->
-                SearchResultPlaceholder(title = title, message = stringResource(R.string.searching), modifier = modifier)
+                LoadingRowPlaceholder(title = title, message = stringResource(R.string.searching), modifier = modifier)
 
             is SearchResult.Titles ->
                 if (r.row.items.isEmpty()) {
-                    SearchResultPlaceholder(title = title, message = stringResource(R.string.no_results), modifier = modifier)
+                    LoadingRowPlaceholder(title = title, message = stringResource(R.string.no_results), modifier = modifier)
                 } else {
                     DynamicCardRow(
                         row = r.row.copy(title = title),
@@ -636,29 +634,5 @@ fun LazyListScope.notInLibraryRow(
 
             else -> Unit
         }
-    }
-}
-
-@Composable
-fun SearchResultPlaceholder(
-    title: String,
-    message: String,
-    modifier: Modifier = Modifier,
-    messageColor: Color = MaterialTheme.colorScheme.onBackground,
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.padding(bottom = 32.dp),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Text(
-            text = message,
-            style = MaterialTheme.typography.titleMedium,
-            color = messageColor,
-        )
     }
 }

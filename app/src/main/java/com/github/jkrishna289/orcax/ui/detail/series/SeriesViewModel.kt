@@ -154,7 +154,7 @@ class SeriesViewModel
                                         null,
                                         null,
                                     )
-                                } ?: EpisodeList.Error(message = "Could not determine season")
+                                } ?: EpisodeList.Empty
                             }
                         }
                     } else {
@@ -639,6 +639,10 @@ class SeriesViewModel
 
 sealed interface EpisodeList {
     data object Loading : EpisodeList
+
+    // No seasons at all: a series Sonarr set up before anything downloaded. It showed as an error,
+    // asking to send logs.
+    data object Empty : EpisodeList
 
     data class Error(
         val message: String? = null,
