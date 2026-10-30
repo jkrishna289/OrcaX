@@ -4,6 +4,7 @@ import com.github.jkrishna289.orcax.engine.FeatureFlags
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.PlaybackIdentity
 import com.github.jkrishna289.orcax.engine.ServerPlaybackProgress
+import com.github.jkrishna289.orcax.engine.SourceGroups
 import com.github.jkrishna289.orcax.engine.StreamSessionStatus
 import com.github.jkrishna289.orcax.engine.TorrentSourceDto
 import com.github.jkrishna289.orcax.services.NavigationManager
@@ -12,6 +13,7 @@ import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
 import com.github.jkrishna289.orcax.services.torrent.TorrentStream
 import com.github.jkrishna289.orcax.ui.detail.discover.SourceSearchState
 import com.github.jkrishna289.orcax.ui.detail.discover.SourceStreamingController
+import com.github.jkrishna289.orcax.ui.detail.discover.StopKind
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -31,6 +33,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -215,6 +219,30 @@ class TestSourceStreamingController {
      * A series has no episode to pass, and the engine picks blind from a season pack without one.
      * The entry point stays hidden rather than offering a button that plays the wrong episode.
      */
+    /**
+     * An indexer sweep can outlast a minute. What comes back after it is still the answer — measured
+     * on a real server, 20 sources after 88s were thrown away and reported as the server going quiet.
+     * Only a search that fails that late reads as the server having stopped answering.
+     */
+    @Test
+    fun `a slow search keeps its answer and only a slow failure reads as a timeout`() {
+        var answer: SourceGroups? = SourceGroups(all = listOf(source))
+        coEvery { engine.getSources(any(), any(), any(), any(), any(), any()) } answers {
+            ShadowSystemClock.advanceBy(Duration.ofSeconds(88))
+            answer
+        }
+        controller.attach(scope, title = "Night of the Living Dead", year = 1968)
+
+        controller.findSources()
+        awaitTrue("the late answer was dropped") { controller.state.value is SourceSearchState.Found }
+
+        answer = null
+        controller.findSources()
+        awaitTrue("a late failure wasn't reported as a timeout") {
+            (controller.state.value as? SourceSearchState.Stopped)?.kind == StopKind.TIMED_OUT
+        }
+    }
+
     @Test
     fun `the entry point is offered for films and withheld for series`() {
         controller.attach(scope, title = "Sintel", year = 2010, mediaType = MediaType.MOVIE)

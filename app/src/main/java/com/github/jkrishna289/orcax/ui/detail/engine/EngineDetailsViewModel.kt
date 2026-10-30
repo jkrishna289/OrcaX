@@ -112,7 +112,12 @@ class EngineDetailsViewModel
             refreshAvailability()
             item.media.tmdbId?.takeIf { it > 0 }?.let { tmdbId ->
                 viewModelScope.launchIO {
-                    engineClient.getTitleDetails(tmdbId, item.media.mediaType)?.let { found -> details.update { found } }
+                    engineClient.getTitleDetails(tmdbId, item.media.mediaType)?.let { found ->
+                        details.update { found }
+                        // A search result's card has no year badge, so this is the first the page
+                        // hears of one.
+                        if (sources.year == null) sources.year = found.year
+                    }
                 }
             }
         }

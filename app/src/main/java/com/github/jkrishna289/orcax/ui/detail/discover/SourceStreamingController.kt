@@ -20,7 +20,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import javax.inject.Inject
 
@@ -54,7 +53,12 @@ class SourceStreamingController
         var title: String = ""
             private set
 
-        private var year: Int? = null
+        /**
+         * Sent with the search: indexers match release names, and without it a remake's sources bury
+         * the original's. Settable after [attach] because a details page may only learn it once the
+         * engine's title details load.
+         */
+        var year: Int? = null
 
         private var playbackIdentity: PlaybackIdentity? = null
 
@@ -123,37 +127,38 @@ class SourceStreamingController
             job?.cancel()
             job = scope.launchIO {
                 // The engine swallows transport failures into a null, which reads the same as "not set
-                // up for this". A deadline here is what separates the two: past it the server stopped
-                // answering, and that is worth different words and a retry button.
-                val completed =
-                    withTimeoutOrNull(SEARCH_DEADLINE_MS) {
-                        val groups =
-                            orcaEngineClient.getSources(
-                                title = title,
-                                year = year,
-                                mediaType = mediaType,
+                // up for this". How long it took is what separates the two: a null this late means the
+                // server stopped answering, and that is worth different words and a retry button.
+                // Measured, not enforced: the HTTP call can't be interrupted, so a deadline here only
+                // threw away answers that arrived after it — 20 sources after an 88s indexer sweep,
+                // reported as "your server stopped answering".
+                val startedAt = SystemClock.elapsedRealtime()
+                val groups =
+                    orcaEngineClient.getSources(
+                        title = title,
+                        year = year,
+                        mediaType = mediaType,
+                    )
+                candidates = groups?.all.orEmpty().sortedWith(pickerOrder)
+                ensureActive()
+
+                state.update {
+                    when {
+                        groups == null && SystemClock.elapsedRealtime() - startedAt >= SEARCH_DEADLINE_MS ->
+                            SourceSearchState.Stopped(StopKind.TIMED_OUT)
+
+                        groups == null -> SourceSearchState.Stopped(StopKind.SERVER_NOT_READY)
+
+                        candidates.isEmpty() -> SourceSearchState.Stopped(StopKind.NO_SOURCES)
+
+                        else ->
+                            SourceSearchState.Found(
+                                sources = candidates,
+                                // Where the D-pad starts, not a verdict: the engine's own top
+                                // pick when it has one, otherwise the head of the list.
+                                focusId = groups.recommended?.id ?: candidates.first().id,
                             )
-                        candidates = groups?.all.orEmpty().sortedWith(pickerOrder)
-                        ensureActive()
-
-                        state.update {
-                            when {
-                                groups == null -> SourceSearchState.Stopped(StopKind.SERVER_NOT_READY)
-
-                                candidates.isEmpty() -> SourceSearchState.Stopped(StopKind.NO_SOURCES)
-
-                                else ->
-                                    SourceSearchState.Found(
-                                        sources = candidates,
-                                        // Where the D-pad starts, not a verdict: the engine's own top
-                                        // pick when it has one, otherwise the head of the list.
-                                        focusId = groups.recommended?.id ?: candidates.first().id,
-                                    )
-                            }
-                        }
                     }
-                if (completed == null) {
-                    state.update { SourceSearchState.Stopped(StopKind.TIMED_OUT) }
                 }
             }
         }
@@ -380,9 +385,9 @@ private const val STATUS_POLL_INTERVAL_MS = 1_000L
 private const val MAX_STATUS_MISSES = 5
 
 /**
- * How long a search may run before the server is treated as having stopped answering. Generous —
- * an indexer sweep across a dozen places genuinely takes a while, and cutting it short would turn a
- * slow-but-working setup into an error screen.
+ * How long a failed search has to have run to count as the server having stopped answering rather
+ * than not being set up. A misconfigured server says so at once; one that fails after a minute was
+ * working on it. Not a limit on the search — the HTTP client's own timeout is that.
  */
 private const val SEARCH_DEADLINE_MS = 60_000L
 
