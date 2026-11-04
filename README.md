@@ -146,7 +146,7 @@ And thank you to the **[Jellyfin](https://jellyfin.org)** project and its commun
 
 ## License
 
-OrcaX is released under the [GNU General Public License v2.0](LICENSE), the same license as Wholphin upstream. It builds on Wholphin (see [Acknowledgements](#acknowledgements)), the Jellyfin community, and a number of open-source libraries; run the app's about screen, or the `aboutLibraries` report, for the full attribution list.
+OrcaX is released under the [GNU General Public License v2.0](LICENSE), the same license as Wholphin upstream. It builds on Wholphin (see [Acknowledgements](#acknowledgements), and [NOTICE](NOTICE) for which Wholphin code it started from), the Jellyfin community, and a number of open-source libraries; run the app's about screen, or the `aboutLibraries` report, for the full attribution list.
 
 <p align="center">
   <sub>A client that renders. An engine that decides. Your library, your server, your call.</sub>

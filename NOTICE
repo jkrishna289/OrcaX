@@ -1,0 +1,21 @@
+OrcaX
+Copyright (C) 2026 jkrishna289
+
+OrcaX is a modified version of Wholphin, the Android TV client for Jellyfin
+created by damontecres: https://github.com/damontecres/Wholphin
+
+Code that came from Wholphin is Copyright (C) damontecres and the Wholphin
+contributors. jkrishna289 has modified it since; this repository's commit
+history records those changes and their dates.
+
+OrcaX started from Wholphin's develop branch as it stood in late May / early
+June 2026, after Wholphin v0.6.2. The first commit here, dated 2026-06-27,
+holds that code with its package renamed from com.github.damontecres.wholphin
+to com.github.jkrishna289.orcax. Wholphin's own history was not carried over,
+so `git blame` in this repository does not show who wrote the code that came
+from Wholphin. Wholphin's repository does.
+
+Both Wholphin and OrcaX are licensed under the GNU General Public License,
+version 2. See LICENSE. Files that carry their own copyright header, such as
+code from the Android Open Source Project under the Apache License 2.0, keep
+that header's terms.
