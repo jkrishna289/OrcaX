@@ -141,6 +141,12 @@ sealed class Destination(
         val item: RenderItem,
     ) : Destination(false)
 
+    /** A show that isn't in the library, as a series page: Stream now on its [EngineItem] page. */
+    @Serializable
+    data class EngineSeries(
+        val item: RenderItem,
+    ) : Destination(false)
+
     @Serializable
     data object NowPlaying : Destination(true)
 

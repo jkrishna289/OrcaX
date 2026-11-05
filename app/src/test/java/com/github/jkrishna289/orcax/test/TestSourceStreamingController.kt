@@ -254,6 +254,25 @@ class TestSourceStreamingController {
         assertTrue("source streaming was offered for a series", !series.enabled.value)
     }
 
+    /**
+     * An indexer answers "Welcome to Waikiki S01E01" with whatever it has for "S01E01", other shows
+     * included. Picked by mistake, that plays the wrong show; an episode's list keeps only its own.
+     */
+    @Test
+    fun `an episode's streams are only the show's own, and the episode goes into the search and the session`() {
+        val ours = TorrentSourceDto(title = "Welcome.to.Waikiki.S01E01.720p.WEB", id = "ours")
+        val other = TorrentSourceDto(title = "The.Torment.S01e01.Amzn.Web.H264", id = "other", seeders = 46)
+        coEvery { engine.getSources("Welcome to Waikiki", any(), MediaType.SERIES, 1, 1, any()) } returns SourceGroups(all = listOf(other, ours))
+        val episode = SourceStreamingController(engine, navigation, watchTracker)
+        episode.attach(scope, title = "Welcome to Waikiki", year = 2018, mediaType = MediaType.SERIES, tmdbId = 76557, season = 1, episode = 1)
+        awaitTrue("an episode with a season and number wasn't offered") { episode.enabled.value }
+
+        episode.findSources()
+        awaitTrue("the search never finished") { episode.state.value is SourceSearchState.Found }
+
+        assertEquals(listOf("ours"), (episode.state.value as SourceSearchState.Found).sources.map { it.id })
+    }
+
     /** Polls a real-time condition; the loop under test runs on its own dispatcher and clock. */
     private fun awaitTrue(
         message: String,

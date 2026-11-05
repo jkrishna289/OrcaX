@@ -33,6 +33,8 @@ data class TorrentPlaybackArgs(
      * exactly the kind of quiet breakage that took a day to find last time.
      */
     val token: String = "",
+    /** The search result this stream came from; asked for the next episode first, since packs hold it. */
+    val sourceId: String? = null,
     val playbackIdentity: PlaybackIdentity? = null,
     val playbackSessionId: String? = null,
     val resumePositionMs: Long = 0,

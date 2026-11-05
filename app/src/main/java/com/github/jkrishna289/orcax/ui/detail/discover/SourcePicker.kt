@@ -1,6 +1,7 @@
 package com.github.jkrishna289.orcax.ui.detail.discover
 
 import android.text.format.Formatter
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -137,12 +138,16 @@ fun SourcePickerDialog(
     logoUrl: String? = null,
     onPick: (TorrentSourceDto) -> Unit,
     onRetry: () -> Unit,
-    onRequest: () -> Unit,
+    // Null hides "Request instead": a show in the library is already requested
+    onRequest: (() -> Unit)?,
     onNextStream: () -> Unit,
     onChooseAnother: () -> Unit,
     onKeepWaiting: () -> Unit,
     onDismiss: () -> Unit,
+    // An episode of a show: Back returns to the show, not "the film"
+    forShow: Boolean = false,
 ) {
+    val backLabel = if (forShow) R.string.sources_back_to_show else R.string.sources_back_to_film
     when (state) {
         SourceSearchState.Idle -> Unit
 
@@ -159,6 +164,7 @@ fun SourcePickerDialog(
                 title = title,
                 onPick = onPick,
                 onDismiss = onDismiss,
+                hint = if (forShow) R.string.sources_picker_hint_show else R.string.sources_picker_hint,
             )
 
         // BACK here stops the connection and reopens the list rather than leaving the flow: a viewer
@@ -181,6 +187,7 @@ fun SourcePickerDialog(
                 onNextStream = onNextStream,
                 onChooseAnother = onChooseAnother,
                 onDismiss = onDismiss,
+                backLabel = backLabel,
             )
     }
 }
@@ -217,6 +224,7 @@ private fun StreamPickerScreen(
     title: String,
     onPick: (TorrentSourceDto) -> Unit,
     onDismiss: () -> Unit,
+    @StringRes hint: Int,
 ) {
     FullScreenStage(onDismiss = onDismiss) {
         val listState = rememberLazyListState()
@@ -309,7 +317,7 @@ private fun StreamPickerScreen(
             }
 
             Text(
-                text = stringResource(R.string.sources_picker_hint),
+                text = stringResource(hint),
                 color = OnStage.copy(alpha = 0.4f),
                 fontSize = 11.sp,
             )
@@ -591,10 +599,11 @@ internal fun StageButton(
 private fun SourceStoppedScreen(
     state: SourceSearchState.Stopped,
     onRetry: () -> Unit,
-    onRequest: () -> Unit,
+    onRequest: (() -> Unit)?,
     onNextStream: () -> Unit,
     onChooseAnother: () -> Unit,
     onDismiss: () -> Unit,
+    @StringRes backLabel: Int,
 ) {
     val title =
         when (state.kind) {
@@ -657,10 +666,10 @@ private fun SourceStoppedScreen(
                         text = stringResource(R.string.sources_choose_another),
                         onClick = onChooseAnother,
                     )
-                    StageButton(text = stringResource(R.string.sources_request_instead), onClick = onRequest)
+                    onRequest?.let { StageButton(text = stringResource(R.string.sources_request_instead), onClick = it) }
                 } else {
-                    val retryFirst = state.kind == StopKind.TIMED_OUT
                     val retryable = state.kind != StopKind.SERVER_NOT_READY
+                    val retryFirst = state.kind == StopKind.TIMED_OUT || onRequest == null
                     if (retryFirst && retryable) {
                         StageButton(
                             text = stringResource(R.string.sources_try_again),
@@ -668,8 +677,8 @@ private fun SourceStoppedScreen(
                             primary = true,
                             modifier = Modifier.focusRequester(firstFocus),
                         )
-                        StageButton(text = stringResource(R.string.sources_back_to_film), onClick = onDismiss)
-                    } else {
+                        StageButton(text = stringResource(backLabel), onClick = onDismiss)
+                    } else if (onRequest != null) {
                         StageButton(
                             text = stringResource(R.string.sources_request_instead),
                             onClick = onRequest,
@@ -679,7 +688,14 @@ private fun SourceStoppedScreen(
                         if (retryable) {
                             StageButton(text = stringResource(R.string.sources_try_again), onClick = onRetry)
                         }
-                        StageButton(text = stringResource(R.string.sources_back_to_film), onClick = onDismiss)
+                        StageButton(text = stringResource(backLabel), onClick = onDismiss)
+                    } else {
+                        StageButton(
+                            text = stringResource(backLabel),
+                            onClick = onDismiss,
+                            primary = true,
+                            modifier = Modifier.focusRequester(firstFocus),
+                        )
                     }
                 }
             }

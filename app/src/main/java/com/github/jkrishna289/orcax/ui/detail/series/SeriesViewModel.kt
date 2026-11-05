@@ -17,8 +17,13 @@ import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.ExtrasService
 import com.github.jkrishna289.orcax.services.FavoriteWatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
+import com.github.jkrishna289.orcax.R
+import com.github.jkrishna289.orcax.engine.EpisodeProgress
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.NavigationManager
+import com.github.jkrishna289.orcax.services.OrcaEngineClient
+import com.github.jkrishna289.orcax.ui.detail.discover.SourceStreamingController
+import com.github.jkrishna289.orcax.ui.seasonEpisode
 import com.github.jkrishna289.orcax.services.PeopleFavorites
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.ThemeSongPlayer
@@ -96,6 +101,9 @@ class SeriesViewModel
         private val userPreferencesService: UserPreferencesService,
         private val backdropService: BackdropService,
         private val mediaManagementService: MediaManagementService,
+        private val engineClient: OrcaEngineClient,
+        /** Finds torrents for an episode with no file, and plays the one picked */
+        val sources: SourceStreamingController,
         @Assisted val seriesId: UUID,
         @Assisted val seasonEpisodeIds: SeasonEpisodeIds?,
         @Assisted val seriesPageType: SeriesPageType,
@@ -126,6 +134,14 @@ class SeriesViewModel
 
         val position = MutableStateFlow(SeriesOverviewPosition(0, 0))
 
+        /** The show's TMDB id: its seasons that aren't in the library, streamed progress and theme go by it */
+        var tmdbId: Int? = null
+            private set
+        private var seriesName: String? = null
+
+        /** This user's streamed episodes of the show, most recent first */
+        private var streamedProgress: List<EpisodeProgress> = emptyList()
+
         init {
             viewModelScope.launch(
                 LoadingExceptionHandler(
@@ -138,6 +154,11 @@ class SeriesViewModel
                 val item = fetchItem(seriesId)
                 canDeleteSeries.update { mediaManagementService.canDelete(item) }
                 backdropService.submit(item)
+                seriesName = item.name
+                tmdbId = item.data.providerIds?.get("Tmdb")?.toIntOrNull()
+                if (seriesPageType == SeriesPageType.OVERVIEW) {
+                    streamedProgress = tmdbId?.let { engineClient.getSeriesProgress(it) }.orEmpty()
+                }
 
                 val seasonsDeferred = getSeasons(item, seasonEpisodeIds?.seasonNumber)
                 val playTargetDeferred =
@@ -153,18 +174,41 @@ class SeriesViewModel
                             if (seasonEpisodeIds != null) {
                                 loadEpisodesInternal(
                                     seasonEpisodeIds.seasonId,
+                                    seasonEpisodeIds.seasonNumber,
                                     seasonEpisodeIds.episodeId,
                                     seasonEpisodeIds.episodeNumber,
                                 )
                             } else {
-                                // Open on the episode Play would start, else the first season
+                                // Open on the episode you were in the middle of: in the library first,
+                                // then one you streamed; else the next one up; else S1 E1
                                 val target = playTargetDeferred.await()
                                 val seasons = seasonsDeferred.await()
+                                val resume = if (target == null) streamedResumeAt(streamedProgress) else null
                                 val season =
-                                    seasons.firstOrNull { it?.id == target?.data?.seasonId } ?: seasons.firstOrNull()
+                                    seasons.firstOrNull { it?.id == target?.data?.seasonId }
+                                        ?: resume?.let { r -> seasons.firstOrNull { it?.indexNumber == r.season } }
+                                        ?: seasons.firstOrNull()
                                 season?.let {
                                     val onTarget = target?.takeIf { t -> t.data.seasonId == it.id }
-                                    loadEpisodesInternal(it.id, onTarget?.id, onTarget?.indexNumber)
+                                    val episodeNumber =
+                                        onTarget?.indexNumber ?: resume?.takeIf { r -> r.season == it.indexNumber }?.episode
+                                    val eps = loadEpisodesInternal(it.id, it.indexNumber, onTarget?.id, episodeNumber)
+                                    val finishedLast =
+                                        resume?.after == true && onTarget == null && eps is EpisodeList.Success &&
+                                            eps.episodes !is ApiRequestPager<*> &&
+                                            eps.episodes.none { e -> e?.indexNumber == resume.episode }
+                                    if (finishedLast) {
+                                        // The last episode of a season: the next season's first. Of the
+                                        // whole show: stay on it.
+                                        val next = seasons.getOrNull(seasons.indexOf(it) + 1)?.takeIf { s -> s.indexNumber != 0 }
+                                        if (next != null) {
+                                            loadEpisodesInternal(next.id, next.indexNumber, null, 1)
+                                        } else {
+                                            (eps as EpisodeList.Success).copy(initialEpisodeIndex = eps.episodes.lastIndex.coerceAtLeast(0))
+                                        }
+                                    } else {
+                                        eps
+                                    }
                                 } ?: EpisodeList.Empty
                             }
                         }
@@ -257,7 +301,7 @@ class SeriesViewModel
                         userPreferencesService
                             .getCurrent()
                             .appPreferences.interfacePreferences.playThemeSongs
-                    themeSongPlayer.playThemeFor(seriesId, playThemeSongs)
+                    themeSongPlayer.playThemeFor(seriesId, playThemeSongs, tmdbId)
                 }
                 if (seriesPageType == SeriesPageType.OVERVIEW) refreshPlayTarget()
             }
@@ -374,6 +418,7 @@ class SeriesViewModel
 
         private suspend fun loadEpisodesInternal(
             seasonId: UUID,
+            seasonNumber: Int?,
             episodeId: UUID?,
             episodeNumber: Int?,
         ): EpisodeList {
@@ -399,6 +444,25 @@ class SeriesViewModel
             )
             val pager = ApiRequestPager(api, request, GetEpisodesRequestHandler, viewModelScope)
             pager.init(episodeNumber ?: 0)
+            val tmdb = tmdbId
+            if (pager.isEmpty() && tmdb != null && seasonNumber != null) {
+                // Nothing of this season in Jellyfin: it was never requested. Its episodes come from
+                // TMDB through the engine, and OK on one finds a stream for it.
+                val fromTmdb =
+                    engineClient.getEpisodes(tmdb, seasonNumber).orEmpty().map { ep ->
+                        ep.toEpisodeItem(
+                            tmdbId = tmdb,
+                            seriesName = seriesName,
+                            seriesId = seriesId,
+                            seasonId = seasonId,
+                            progress = streamedProgress.firstOrNull { it.season == ep.seasonNumber && it.episode == ep.episodeNumber },
+                        )
+                    }
+                if (fromTmdb.isNotEmpty()) {
+                    val index = fromTmdb.indexOfFirst { it.indexNumber == episodeNumber }.coerceAtLeast(0)
+                    return EpisodeList.Success(seasonId, fromTmdb, index)
+                }
+            }
             val initialIndex =
                 if (episodeId != null || episodeNumber != null) {
                     findIndexOf(episodeNumber, episodeId, pager)
@@ -423,7 +487,8 @@ class SeriesViewModel
             viewModelScope.launchIO(ExceptionHandler(true)) {
                 val episodes =
                     try {
-                        loadEpisodesInternal(seasonId, null, null)
+                        val seasonNumber = seasons.value?.firstOrNull { it?.id == seasonId }?.indexNumber
+                        loadEpisodesInternal(seasonId, seasonNumber, null, null)
                     } catch (e: Exception) {
                         Timber.e(e, "Error loading episodes for $seriesId for season $seasonId")
                         EpisodeList.Error(e)
@@ -488,7 +553,7 @@ class SeriesViewModel
         ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
             val eps = episodes.value
             if (eps is EpisodeList.Success) {
-                eps.episodes.refreshItem(listIndex, itemId)
+                (eps.episodes as? ApiRequestPager<*>)?.refreshItem(listIndex, itemId)
                 withContext(Dispatchers.Main) {
                     episodes.value = eps
                 }
@@ -520,6 +585,37 @@ class SeriesViewModel
                         "Could not find an episode to play",
                         Toast.LENGTH_SHORT,
                     )
+                }
+            }
+        }
+
+        /**
+         * OK on an episode with no file: find torrents for it, if the server streams. One that hasn't
+         * aired, or a server that doesn't stream, just says so.
+         */
+        fun streamEpisode(episode: BaseItem) {
+            val code = episode.data.seasonEpisode ?: episode.name.orEmpty()
+            viewModelScope.launchIO {
+                when {
+                    episode.notAiredYet() ->
+                        showToast(context, context.getString(R.string.episode_not_aired, code), Toast.LENGTH_SHORT)
+
+                    engineClient.getFeatures()?.sourceStreaming != true ->
+                        showToast(context, context.getString(R.string.episode_not_requested, code), Toast.LENGTH_SHORT)
+
+                    else ->
+                        withContext(Dispatchers.Main) {
+                            sources.attach(
+                                scope = viewModelScope,
+                                title = seriesName.orEmpty(),
+                                year = item.value?.data?.productionYear,
+                                mediaType = com.github.jkrishna289.orcax.engine.MediaType.SERIES,
+                                tmdbId = tmdbId,
+                                season = episode.data.parentIndexNumber,
+                                episode = episode.indexNumber,
+                            )
+                            sources.findSources()
+                        }
                 }
             }
         }
@@ -655,8 +751,8 @@ class SeriesViewModel
                     } else {
                         position.value.let { (_, episodeIndex) ->
                             val eps = episodes.value as? EpisodeList.Success
-                            if (eps != null) {
-                                val pager = eps.episodes
+                            val pager = eps?.episodes as? ApiRequestPager<*>
+                            if (eps != null && pager != null) {
                                 val lastIndex = pager.lastIndex
                                 pager.refreshPagesAfter(episodeIndex)
                                 if (pager.isEmpty()) {
@@ -713,7 +809,9 @@ sealed interface EpisodeList {
 
     data class Success(
         val seasonId: UUID,
-        val episodes: ApiRequestPager<GetEpisodesRequest>,
+        // Jellyfin's episodes page in as they're needed; a season that isn't in the library is a
+        // plain list from TMDB
+        val episodes: List<BaseItem?>,
         val initialEpisodeIndex: Int,
     ) : EpisodeList
 }

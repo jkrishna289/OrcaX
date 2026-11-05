@@ -107,6 +107,7 @@ fun EngineDetailsPage(
     val requesting by viewModel.requesting.collectAsState()
     val sourceSearch by viewModel.sources.state.collectAsState()
     val canFindSources by viewModel.sources.enabled.collectAsState()
+    val canStreamSeries by viewModel.canStreamSeries.collectAsState()
     val keepPrompt by viewModel.keepPrompt.collectAsState()
     val details by viewModel.details.collectAsState()
 
@@ -338,6 +339,16 @@ fun EngineDetailsPage(
                                     subtitle = if (canResume) R.string.sources_picker_title else R.string.find_streaming_sources_subtitle,
                                     iconStringRes = null,
                                     onClick = viewModel.sources::findSources,
+                                    modifier = Modifier.fillMaxHeight(),
+                                )
+                            }
+                            // A show streams an episode at a time: its own series page, from TMDB
+                            if (canStreamSeries && libraryItemId == null) {
+                                DecisionCard(
+                                    title = R.string.stream_now,
+                                    subtitle = R.string.stream_now_subtitle,
+                                    iconStringRes = null,
+                                    onClick = viewModel::openStreamSeries,
                                     modifier = Modifier.fillMaxHeight(),
                                 )
                             }

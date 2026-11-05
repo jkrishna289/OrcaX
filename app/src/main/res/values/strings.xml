@@ -479,7 +479,15 @@
     <string name="guest_stars">Guest stars</string>
     <string name="play_episode">Play %1$s</string>
     <string name="resume_episode">Resume %1$s</string>
-    <string name="not_downloaded">Not downloaded</string>
+    <string name="engine_cannot_list_seasons">Your server\'s Orca Engine can\'t list this show\'s seasons yet. It needs updating.</string>
+    <string name="find_streams">Find streams</string>
+    <string name="episode_not_aired">%1$s hasn\'t aired yet</string>
+    <string name="episode_not_requested">%1$s isn\'t requested yet</string>
+    <string name="sources_back_to_show">Back to the show</string>
+    <string name="stream_now">Stream now</string>
+    <string name="stream_now_subtitle">Pick an episode to watch</string>
+    <string name="sources_picker_hint_show">OK plays · BACK returns to the show</string>
+    <string name="not_downloaded">Not requested</string>
     <string name="edge_size">Edge size</string>
     <string name="refresh_rate_switching">Refresh rate switching</string>
     <string name="automatic">Automatic</string>

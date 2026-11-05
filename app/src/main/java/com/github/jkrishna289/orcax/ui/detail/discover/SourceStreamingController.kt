@@ -9,6 +9,7 @@ import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
 import com.github.jkrishna289.orcax.services.torrent.TorrentStream
 import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
+import com.github.jkrishna289.orcax.services.torrent.namedAfter
 import com.github.jkrishna289.orcax.ui.launchIO
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +69,10 @@ class SourceStreamingController
          */
         private var mediaType: MediaType = MediaType.MOVIE
 
+        /** The episode being streamed, for a series; searched for, and picked out of a season pack. */
+        private var season: Int? = null
+        private var episode: Int? = null
+
         /**
          * Every source the last search returned, highest resolution first — the picker's display
          * order, and the order [nextStream] walks when a stream has to be replaced.
@@ -99,22 +104,30 @@ class SourceStreamingController
             year: Int?,
             mediaType: MediaType = MediaType.MOVIE,
             tmdbId: Int? = null,
+            season: Int? = null,
+            episode: Int? = null,
         ) {
             this.scope = scope
             this.title = title
             this.year = year
             this.mediaType = mediaType
+            this.season = season
+            this.episode = episode
+            val oneEpisode = mediaType == MediaType.SERIES && season != null && episode != null
             playbackIdentity =
-                tmdbId?.takeIf { it > 0 && mediaType == MediaType.MOVIE }?.let {
-                    PlaybackIdentity(tmdbId = it, title = title, year = year)
+                tmdbId?.takeIf { it > 0 }?.let {
+                    when {
+                        mediaType == MediaType.MOVIE -> PlaybackIdentity(tmdbId = it, title = title, year = year)
+                        oneEpisode -> PlaybackIdentity(tmdbId = it, mediaType = "tv", title = title, year = year, season = season, episode = episode)
+                        else -> null
+                    }
                 }
             scope.launchIO {
-                // Series stay hidden. Nothing on a details page has picked an episode, and the
-                // engine's file selector needs one — handed a season pack without it, it plays
-                // whichever file sorts first. An entry point that plays the wrong episode is worse
-                // than no entry point; lift this when there is a season and episode to pass through.
+                // A series stays hidden until something has picked an episode: the engine's file
+                // selector needs one, and handed a season pack without it plays whichever file is
+                // biggest. An entry point that plays the wrong episode is worse than none.
                 enabled.update {
-                    mediaType == MediaType.MOVIE && orcaEngineClient.getFeatures()?.sourceStreaming == true
+                    (mediaType == MediaType.MOVIE || oneEpisode) && orcaEngineClient.getFeatures()?.sourceStreaming == true
                 }
             }
         }
@@ -138,8 +151,17 @@ class SourceStreamingController
                         title = title,
                         year = year,
                         mediaType = mediaType,
+                        season = season,
+                        episode = episode,
                     )
-                candidates = groups?.all.orEmpty().sortedWith(pickerOrder)
+                candidates =
+                    groups?.all.orEmpty()
+                        // "Show S01E03" also finds other shows with this one's name in theirs, or a
+                        // different show altogether ("The.Torment.S01e01" for Welcome to Waikiki). An
+                        // episode's list keeps only releases named after the show; a film's list stays
+                        // whole, as before.
+                        .filter { episode == null || namedAfter(it.title, title) }
+                        .sortedWith(pickerOrder)
                 ensureActive()
 
                 state.update {
@@ -193,7 +215,7 @@ class SourceStreamingController
                 // Keep the response even if BACK arrives during the bounded HTTP call, so
                 // finally can release the lease instead of losing the returned token.
                 withContext(NonCancellable) {
-                    opened = orcaEngineClient.openStreamSession(sourceId = source.id)
+                    opened = orcaEngineClient.openStreamSession(sourceId = source.id, season = season, episode = episode)
                 }
                 ensureActive()
                 val stream = opened
@@ -289,6 +311,7 @@ class SourceStreamingController
                                     sizeBytes = ready.sizeBytes,
                                     mediaInfo = ready.mediaInfo,
                                     token = ready.token,
+                                    sourceId = source.id,
                                     playbackIdentity = identity,
                                     playbackSessionId = progress?.sessionId?.takeIf { it.isNotBlank() },
                                     resumePositionMs = resumePositionMs,

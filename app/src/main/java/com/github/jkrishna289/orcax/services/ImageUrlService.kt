@@ -180,7 +180,10 @@ class ImageUrlService
             fillHeight: Int? = null,
             useSeriesForPrimary: Boolean? = null,
         ): String? =
-            if (item != null) {
+            // An item with no Jellyfin images of its own (a streamed episode's TMDB still) carries its picture here
+            if (item?.imageUrlOverride != null && imageType == ImageType.PRIMARY) {
+                item.imageUrlOverride
+            } else if (item != null) {
                 getItemImageUrl(
                     itemId = item.id,
                     itemType = item.type,

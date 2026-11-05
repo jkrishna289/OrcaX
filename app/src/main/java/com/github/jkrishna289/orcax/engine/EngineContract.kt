@@ -100,6 +100,53 @@ data class SourceGroups(
     @SerialName("All") val all: List<TorrentSourceDto> = emptyList(),
 )
 
+/** When one part of a streamed title runs. A null [endMs] runs to the end of the file. */
+@Serializable
+data class SkipTimes(
+    @SerialName("StartMs") val startMs: Long,
+    @SerialName("EndMs") val endMs: Long? = null,
+)
+
+/** `GET /Metadata/Segments`: the skippable parts of a streamed movie or episode, from IntroDB. */
+@Serializable
+data class SkipSegments(
+    @SerialName("Intro") val intro: SkipTimes? = null,
+    @SerialName("Recap") val recap: SkipTimes? = null,
+    @SerialName("Outro") val outro: SkipTimes? = null,
+)
+
+/** One row of `GET /Metadata/Episodes`: a season's episode as TMDB lists it. */
+@Serializable
+data class EpisodeInfo(
+    @SerialName("SeasonNumber") val seasonNumber: Int,
+    @SerialName("EpisodeNumber") val episodeNumber: Int,
+    @SerialName("Name") val name: String? = null,
+    @SerialName("Overview") val overview: String? = null,
+    @SerialName("AirDate") val airDate: String? = null,
+    @SerialName("RuntimeMinutes") val runtimeMinutes: Int? = null,
+    @SerialName("StillUrl") val stillUrl: String? = null,
+    @SerialName("CommunityRating") val communityRating: Double? = null,
+    @SerialName("GuestStars") val guestStars: List<String> = emptyList(),
+)
+
+/** One row of `GET /Metadata/Seasons`. */
+@Serializable
+data class SeasonInfo(
+    @SerialName("SeasonNumber") val seasonNumber: Int,
+    @SerialName("Name") val name: String? = null,
+    @SerialName("EpisodeCount") val episodeCount: Int = 0,
+)
+
+/** One row of `GET /Playback/Progress/Series`: how far a streamed episode got. */
+@Serializable
+data class EpisodeProgress(
+    @SerialName("Season") val season: Int,
+    @SerialName("Episode") val episode: Int,
+    @SerialName("PositionMs") val positionMs: Long = 0,
+    @SerialName("DurationMs") val durationMs: Long = 0,
+    @SerialName("Completed") val completed: Boolean = false,
+)
+
 /**
  * Body for `POST /Stream/Sessions`. Supply [sourceId] from a prior search, or [magnet] to stream a
  * magnet link directly (the debug path). Season/episode only matter for a season-pack source.

@@ -84,6 +84,8 @@ fun ExpandablePlayButtons(
     modifier: Modifier = Modifier,
     // Shown on Play/Resume all the time, e.g. "Resume S2 E15" for a show
     playLabel: String? = null,
+    // A series page plays from its episode row, so its own buttons have no Play
+    showPlay: Boolean = true,
 ) {
     val firstFocus = remember { FocusRequester() }
     LazyRow(
@@ -94,7 +96,9 @@ fun ExpandablePlayButtons(
                 .focusGroup()
                 .focusRestorer(firstFocus),
     ) {
-        if (resumePosition > Duration.ZERO) {
+        if (!showPlay) {
+            // nothing: the row starts at Watched
+        } else if (resumePosition > Duration.ZERO) {
             item("play") {
                 ExpandablePlayButton(
                     title = R.string.resume,
@@ -140,7 +144,10 @@ fun ExpandablePlayButtons(
                 title = if (watched) R.string.mark_unwatched else R.string.mark_watched,
                 iconStringRes = if (watched) R.string.fa_eye else R.string.fa_eye_slash,
                 onClick = watchOnClick,
-                modifier = Modifier.onFocusChanged(buttonOnFocusChanged),
+                modifier =
+                    Modifier
+                        .onFocusChanged(buttonOnFocusChanged)
+                        .then(if (showPlay) Modifier else Modifier.focusRequester(firstFocus)),
             )
         }
 

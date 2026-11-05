@@ -81,6 +81,11 @@ class EngineDetailsViewModel
         /** True while a request is in flight, so the button can say so instead of looking dead. */
         val requesting = MutableStateFlow(false)
 
+        /** A show streams an episode at a time, from its own series page; offered when the server streams. */
+        val canStreamSeries = MutableStateFlow(false)
+
+        fun openStreamSeries() = navigationManager.navigateTo(Destination.EngineSeries(item))
+
         /** Non-null while the "Keep it?" prompt is up, after returning from a streamed playback. */
         val keepPrompt = MutableStateFlow<StreamWatch?>(null)
 
@@ -110,6 +115,9 @@ class EngineDetailsViewModel
                 tmdbId = item.media.tmdbId,
             )
             refreshAvailability()
+            if (item.media.mediaType == MediaType.SERIES && (item.media.tmdbId ?: 0) > 0) {
+                viewModelScope.launchIO { canStreamSeries.update { engineClient.getFeatures()?.sourceStreaming == true } }
+            }
             item.media.tmdbId?.takeIf { it > 0 }?.let { tmdbId ->
                 viewModelScope.launchIO {
                     engineClient.getTitleDetails(tmdbId, item.media.mediaType)?.let { found ->

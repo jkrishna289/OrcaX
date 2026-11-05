@@ -99,8 +99,6 @@ fun SeriesOverviewContent(
     chosenStreams: ChosenStreams?,
     peopleInEpisode: PeopleInItem,
     people: List<Person>,
-    playTarget: BaseItem?,
-    trailers: List<Trailer>,
     position: SeriesOverviewPosition,
     headerFocusRequester: FocusRequester,
     firstItemFocusRequester: FocusRequester,
@@ -110,14 +108,14 @@ fun SeriesOverviewContent(
     onFocusEpisode: (Int) -> Unit,
     onClick: (BaseItem) -> Unit,
     onLongClick: (BaseItem) -> Unit,
-    playOnClick: (Duration) -> Unit,
-    watchOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
-    moreOnClick: () -> Unit,
-    trailerOnClick: (Trailer) -> Unit,
     overviewOnClick: () -> Unit,
     personOnClick: (Person) -> Unit,
+    // The show's buttons, given the modifier that keeps the header in view while they have focus.
+    // No Play: the episode row is how you play, and focus starts on it.
+    headerButtons: @Composable (Modifier) -> Unit,
     modifier: Modifier = Modifier,
+    // A show that isn't in the library finds its More Like This by TMDB id
+    similarTmdbId: Int? = null,
 ) {
     val scope = rememberCoroutineScope()
     val headerInView = remember { BringIntoViewRequester() }
@@ -167,6 +165,9 @@ fun SeriesOverviewContent(
                 .takeIf { it.itemId == focusedEpisode?.id }
                 ?.people
                 ?.filter { it.type == PersonKind.GUEST_STAR }
+                ?.mapNotNull { it.name }
+                // An episode from TMDB carries its own guest stars
+                ?: focusedEpisode?.data?.people?.filter { it.type == PersonKind.GUEST_STAR }?.mapNotNull { it.name }
         }
 
     Box(
@@ -195,40 +196,17 @@ fun SeriesOverviewContent(
             ) {
                 SeriesDetailsHeader(
                     series = series,
-                    showLogo = preferences.appPreferences.interfacePreferences.showLogos,
+                    // A show that isn't in the library has no logo in Jellyfin: its name instead
+                    showLogo = preferences.appPreferences.interfacePreferences.showLogos && !series.fromTmdb,
                     overviewOnClick = overviewOnClick,
                     bringIntoViewRequester = headerInView,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                val playLabel =
-                    playTarget?.let { target ->
-                        target.data.seasonEpisode?.let {
-                            stringResource(
-                                if (target.playbackPosition > Duration.ZERO) R.string.resume_episode else R.string.play_episode,
-                                it,
-                            )
-                        }
-                    }
-                ExpandablePlayButtons(
-                    resumePosition = playTarget?.playbackPosition ?: Duration.ZERO,
-                    watched = series.played,
-                    favorite = series.favorite,
-                    canDelete = false,
-                    trailers = trailers,
-                    playOnClick = playOnClick,
-                    watchOnClick = watchOnClick,
-                    favoriteOnClick = favoriteOnClick,
-                    moreOnClick = moreOnClick,
-                    trailerOnClick = trailerOnClick,
-                    deleteOnClick = {},
-                    buttonOnFocusChanged = {
-                        if (it.isFocused) scope.launch { headerInView.bringIntoView() }
-                    },
-                    playLabel = playLabel,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .focusRequester(headerFocusRequester),
+                headerButtons(
+                    Modifier
+                        .fillMaxWidth()
+                        .focusRequester(headerFocusRequester)
+                        .onFocusChanged { if (it.hasFocus) scope.launch { headerInView.bringIntoView() } },
                 )
             }
 
@@ -417,7 +395,8 @@ fun SeriesOverviewContent(
 
             // "More Like This" powered by the Orca Engine (content-based similar series).
             EngineSimilarRow(
-                itemId = series.id,
+                itemId = if (similarTmdbId != null) null else series.id,
+                tmdbId = similarTmdbId,
                 // With no seasons it's the only thing to focus, so hold its place while it loads.
                 placeholderWhileLoading = seasons.isEmpty(),
                 modifier = Modifier.fillMaxWidth().focusRequester(similarFocusRequester),
@@ -434,7 +413,7 @@ fun SeriesOverviewContent(
 private fun EpisodePanel(
     ep: BaseItem?,
     chosenStreams: ChosenStreams?,
-    guestStars: List<Person>?,
+    guestStars: List<String>?,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(12.dp)
@@ -458,12 +437,13 @@ private fun EpisodePanel(
 private fun EpisodePanelContent(
     ep: BaseItem,
     chosenStreams: ChosenStreams?,
-    guestStars: List<Person>?,
+    guestStars: List<String>?,
 ) {
     val dto = ep.data
     EpisodeName(dto)
-    QuickDetails(ep.ui.quickDetails, ep.timeRemainingOrRuntime)
-    if (dto.locationType == LocationType.VIRTUAL || dto.mediaSources.isNullOrEmpty()) {
+    // No "Ends at" for an episode that can't play yet
+    QuickDetails(ep.ui.quickDetails, if (ep.hasFile) ep.timeRemainingOrRuntime else null)
+    if (!ep.hasFile) {
         // Not a "None" audio chip: there's simply no file yet
         Text(
             text = stringResource(R.string.not_downloaded),
@@ -493,7 +473,7 @@ private fun EpisodePanelContent(
                         append(label)
                     }
                     append("  ")
-                    append(guestStars.mapNotNull { it.name }.joinToString(", "))
+                    append(guestStars.joinToString(", "))
                 },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f),

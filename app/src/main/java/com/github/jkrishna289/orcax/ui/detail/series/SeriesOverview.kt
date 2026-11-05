@@ -43,6 +43,8 @@ import com.github.jkrishna289.orcax.ui.detail.MoreDialogActions
 import com.github.jkrishna289.orcax.ui.detail.PlaylistDialog
 import com.github.jkrishna289.orcax.ui.detail.PlaylistLoadingState
 import com.github.jkrishna289.orcax.ui.detail.buildMoreDialogItems
+import com.github.jkrishna289.orcax.ui.detail.discover.SourcePickerDialog
+import com.github.jkrishna289.orcax.ui.components.ExpandablePlayButtons
 import com.github.jkrishna289.orcax.ui.launchDefault
 import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.ui.rememberInt
@@ -110,9 +112,11 @@ fun SeriesOverview(
     val episodes by viewModel.episodes.observeAsState(EpisodeList.Loading)
     val peopleInEpisode by viewModel.peopleInEpisode.observeAsState(PeopleInItem())
     val people by viewModel.people.observeAsState(listOf())
-    val playTarget by viewModel.playTarget.observeAsState(null)
     val trailers by viewModel.trailers.observeAsState(listOf())
     val canDeleteSeries by viewModel.canDeleteSeries.collectAsState()
+    val sourceSearch by viewModel.sources.state.collectAsState()
+    // What the stream screens are finding streams for, e.g. "Welcome to Waikiki · S1 E3"
+    var streaming by remember { mutableStateOf("") }
 
     val position by viewModel.position.collectAsState(SeriesOverviewPosition(0, 0))
     LaunchedEffect(Unit) {
@@ -129,8 +133,9 @@ fun SeriesOverview(
     var showPlaylistDialog by remember { mutableStateOf<UUID?>(null) }
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
 
-    // Opened from an episode card, focus starts on that episode; otherwise on the show's Play button
-    var rowFocused by rememberInt(if (initialSeasonEpisode?.episodeId != null) EPISODE_ROW else HEADER_ROW)
+    // Focus starts on an episode: the one opened from, the one you were in the middle of, the next one
+    // up, else S1 E1. There's no Play button for the show: the episode row is how you play.
+    var rowFocused by rememberInt(EPISODE_ROW)
     var showDeleteDialog by remember { mutableStateOf<BaseItem?>(null) }
     var showWatchConfirmation by remember { mutableStateOf(false) }
 
@@ -184,6 +189,12 @@ fun SeriesOverview(
                     }
                 }
 
+                fun streamEpisode(ep: BaseItem) {
+                    rowFocused = EPISODE_ROW
+                    streaming = listOfNotNull(series.name, ep.data.seasonEpisode).joinToString(" · ")
+                    viewModel.streamEpisode(ep)
+                }
+
                 suspend fun buildMoreForEpisode(
                     ep: BaseItem,
                     chosenStreams: ChosenStreams?,
@@ -193,7 +204,13 @@ fun SeriesOverview(
                         fromLongClick = fromLongClick,
                         title = series.name + " - " + ep.data.seasonEpisode,
                         items =
-                            buildMoreDialogItems(
+                            // A missing episode can be streamed from here too
+                            listOfNotNull(
+                                DialogItem(context.getString(R.string.find_streams), R.string.fa_magnifying_glass_plus) {
+                                    streamEpisode(ep)
+                                }.takeIf { !ep.hasFile },
+                            ) +
+                                buildMoreDialogItems(
                                 context = context,
                                 item = ep,
                                 watched = ep.data.userData?.played ?: false,
@@ -289,8 +306,6 @@ fun SeriesOverview(
                     chosenStreams = chosenStreams,
                     peopleInEpisode = peopleInEpisode,
                     people = people,
-                    playTarget = playTarget,
-                    trailers = trailers,
                     position = position,
                     headerFocusRequester = headerFocusRequester,
                     firstItemFocusRequester = firstItemFocusRequester,
@@ -313,6 +328,11 @@ fun SeriesOverview(
                     },
                     onClick = {
                         rowFocused = EPISODE_ROW
+                        if (!it.hasFile) {
+                            // Not downloaded, or not even requested: find a stream for it
+                            streamEpisode(it)
+                            return@SeriesOverviewContent
+                        }
                         val resumePosition =
                             it.data.userData
                                 ?.playbackPositionTicks
@@ -325,52 +345,63 @@ fun SeriesOverview(
                         )
                     },
                     onLongClick = { ep ->
-                        scope.launchDefault {
-                            moreDialog = buildMoreForEpisode(ep, chosenStreams, true)
+                        // A TMDB episode has nothing in Jellyfin to mark, favorite or delete
+                        if (!ep.fromTmdb) {
+                            scope.launchDefault {
+                                moreDialog = buildMoreForEpisode(ep, chosenStreams, true)
+                            }
                         }
                     },
                     // The show's buttons; an episode's actions are on its card's long press
-                    playOnClick = { start ->
-                        rowFocused = HEADER_ROW
-                        playTarget?.let {
-                            viewModel.navigateTo(Destination.Playback(it.id, start.inWholeMilliseconds))
-                        } ?: viewModel.playNextUp()
-                    },
-                    watchOnClick = { showWatchConfirmation = true },
-                    favoriteOnClick = { viewModel.setFavorite(series.id, !series.favorite, null) },
-                    moreOnClick = {
-                        moreDialog =
-                            DialogParams(
-                                fromLongClick = false,
-                                title = series.name ?: "",
-                                items =
-                                    buildList {
-                                        add(
-                                            DialogItem(context.getString(R.string.shuffle), R.string.fa_shuffle) {
-                                                viewModel.navigateTo(Destination.PlaybackList(itemId = series.id, shuffle = true))
+                    headerButtons = { buttonsModifier ->
+                        ExpandablePlayButtons(
+                            resumePosition = Duration.ZERO,
+                            watched = series.played,
+                            favorite = series.favorite,
+                            canDelete = false,
+                            trailers = trailers,
+                            playOnClick = {},
+                            watchOnClick = { showWatchConfirmation = true },
+                            favoriteOnClick = { viewModel.setFavorite(series.id, !series.favorite, null) },
+                            moreOnClick = {
+                                moreDialog =
+                                    DialogParams(
+                                        fromLongClick = false,
+                                        title = series.name ?: "",
+                                        items =
+                                            buildList {
+                                                add(
+                                                    DialogItem(context.getString(R.string.shuffle), R.string.fa_shuffle) {
+                                                        viewModel.navigateTo(Destination.PlaybackList(itemId = series.id, shuffle = true))
+                                                    },
+                                                )
+                                                add(
+                                                    DialogItem(R.string.add_to_playlist, R.string.fa_list_ul) {
+                                                        playlistViewModel.loadPlaylists(MediaType.VIDEO)
+                                                        showPlaylistDialog = series.id
+                                                    },
+                                                )
+                                                if (canDeleteSeries) {
+                                                    add(
+                                                        DialogItem(
+                                                            context.getString(R.string.delete),
+                                                            Icons.Default.Delete,
+                                                            iconColor = Color.Red.copy(alpha = .8f),
+                                                        ) { showDeleteDialog = series },
+                                                    )
+                                                }
                                             },
-                                        )
-                                        add(
-                                            DialogItem(R.string.add_to_playlist, R.string.fa_list_ul) {
-                                                playlistViewModel.loadPlaylists(MediaType.VIDEO)
-                                                showPlaylistDialog = series.id
-                                            },
-                                        )
-                                        if (canDeleteSeries) {
-                                            add(
-                                                DialogItem(
-                                                    context.getString(R.string.delete),
-                                                    Icons.Default.Delete,
-                                                    iconColor = Color.Red.copy(alpha = .8f),
-                                                ) { showDeleteDialog = series },
-                                            )
-                                        }
-                                    },
-                            )
-                    },
-                    trailerOnClick = {
-                        rowFocused = HEADER_ROW
-                        TrailerService.onClick(context, it, viewModel::navigateTo)
+                                    )
+                            },
+                            trailerOnClick = {
+                                rowFocused = HEADER_ROW
+                                TrailerService.onClick(context, it, viewModel::navigateTo)
+                            },
+                            deleteOnClick = {},
+                            buttonOnFocusChanged = {},
+                            showPlay = false,
+                            modifier = buttonsModifier,
+                        )
                     },
                     overviewOnClick = { overviewDialog = ItemDetailsDialogInfo(series) },
                     personOnClick = {
@@ -449,6 +480,19 @@ fun SeriesOverview(
             elevation = 3.dp,
         )
     }
+    SourcePickerDialog(
+        state = sourceSearch,
+        title = streaming,
+        onPick = { viewModel.sources.playSource(it) },
+        onRetry = viewModel.sources::retry,
+        // The show is in the library already
+        onRequest = null,
+        onNextStream = { viewModel.sources.nextStream() },
+        onChooseAnother = viewModel.sources::chooseAnother,
+        onKeepWaiting = viewModel.sources::keepWaiting,
+        onDismiss = viewModel.sources::dismiss,
+        forShow = true,
+    )
     showDeleteDialog?.let { item ->
         ConfirmDeleteDialog(
             itemTitle = item.subtitle ?: "",

@@ -60,6 +60,11 @@ import com.github.jkrishna289.orcax.services.torrent.StreamProgressReporter
 import com.github.jkrishna289.orcax.services.torrent.StreamProgressPlaybackListener
 import com.github.jkrishna289.orcax.services.torrent.TorrentMediaSource
 import com.github.jkrishna289.orcax.services.torrent.TorrentPlaybackArgs
+import com.github.jkrishna289.orcax.services.torrent.NextEpisodeStream
+import com.github.jkrishna289.orcax.services.torrent.PREPARE_NEXT_STREAM_MS
+import com.github.jkrishna289.orcax.services.torrent.nextStreamItem
+import com.github.jkrishna289.orcax.services.torrent.toMediaSegments
+import com.github.jkrishna289.orcax.engine.PlaybackIdentity
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.QualityPreferenceDao
 import com.github.jkrishna289.orcax.services.hilt.StandardOkHttpClient
@@ -241,6 +246,15 @@ constructor(
     private var streamResumeApplied = false
     private var playerReleased = false
     private val jobs = mutableListOf<Job>()
+
+    /**
+     * A streamed show's next episode, opened and ready, once the end of this one is near. It is what
+     * the Next-episode card offers; a torrent stream has no playlist to take it from.
+     * ponytail: left for the engine's idle sweep when the viewer leaves without playing it, the same
+     * as the stream being watched; release it here if idle downloads ever matter.
+     */
+    @Volatile
+    private var nextStream: NextEpisodeStream.Ready? = null
 
     /**
      * True while a torrent source is playing, so the UI can drop controls that mean nothing here.
@@ -550,6 +564,7 @@ constructor(
                 ),
                 positionMs = positionMs,
             )
+            args.playbackIdentity?.takeIf { it.mediaType == "tv" && it.episode != null }?.let { prepareNextStream(args, it) }
             return
         }
 
@@ -1419,7 +1434,7 @@ constructor(
                 stallJob?.cancel()
                 stallJob = null
                 viewModelScope.launchIO {
-                    val nextItem = playlist.value?.peek()
+                    val nextItem = upcomingItem()
                     Timber.v("Setting next up to ${nextItem?.id}")
                     withContext(Dispatchers.Main) {
                         nextUp.value = nextItem
@@ -1461,14 +1476,18 @@ constructor(
         segmentJob =
             viewModelScope.launchIO {
                 val prefs = preferences.appPreferences.playbackPreferences
-                val segments by api.mediaSegmentsApi.getItemSegments(itemId)
-                if (segments.items.isNotEmpty()) {
+                // A stream isn't in Jellyfin, so its times come from the engine (IntroDB) instead
+                val segments =
+                    torrentPlayback?.let { args ->
+                        args.playbackIdentity?.let { engineClient.getSegments(it) }?.toMediaSegments(itemId).orEmpty()
+                    } ?: api.mediaSegmentsApi.getItemSegments(itemId).content.items
+                if (segments.isNotEmpty()) {
                     while (isActive) {
                         delay(500L)
                         val currentTicks =
                             onMain { player.currentPosition.milliseconds.inWholeTicks }
                         val currentSegment =
-                            segments.items
+                            segments
                                 .firstOrNull {
                                     it.type != MediaSegmentType.UNKNOWN && currentTicks >= it.startTicks && currentTicks < it.endTicks
                                 }
@@ -1488,14 +1507,14 @@ constructor(
                                     currentSegment.type,
                                 )
                             }
-                            val playlist = this@PlaybackViewModel.playlist.value
+                            val upcoming = upcomingItem()
 
                             if (currentSegment.type == MediaSegmentType.OUTRO &&
                                 prefs.showNextUpWhen == ShowNextUpWhen.DURING_CREDITS &&
-                                playlist != null && playlist.hasNext() &&
+                                upcoming != null &&
                                 outroShownSegments.add(currentSegment.id)
                             ) {
-                                val nextItem = playlist.peek()
+                                val nextItem = upcoming
                                 Timber.v("Setting next up during outro to ${nextItem?.id}")
                                 withContext(Dispatchers.Main) {
                                     nextUp.value = nextItem
@@ -1616,7 +1635,70 @@ constructor(
                     }
         }
 
+    /** What the Next card offers: the playlist's next item, else a streamed show's prepared next episode. */
+    private fun upcomingItem(): BaseItem? =
+        playlist.value?.takeIf { it.hasNext() }?.peek()
+            ?: nextStream?.let { ready -> nextStreamItem(ready, torrentPlayback?.title.orEmpty()) }
+
+    /**
+     * Opens the next episode of a streamed show once this one has [PREPARE_NEXT_STREAM_MS] left. Not
+     * sooner: opening it starts downloading it, alongside the episode being watched.
+     */
+    private fun prepareNextStream(
+        args: TorrentPlaybackArgs,
+        playing: PlaybackIdentity,
+    ) {
+        if (preferences.appPreferences.playbackPreferences.showNextUpWhen == ShowNextUpWhen.NEXT_UP_NEVER) return
+        viewModelScope.launchIO {
+            while (isActive) {
+                val (position, duration) = onMain { player.currentPosition to player.duration }
+                if (duration > 0 && duration - position <= PREPARE_NEXT_STREAM_MS) break
+                delay(5_000L)
+            }
+            nextStream = NextEpisodeStream(engineClient).prepare(playing, args.sourceId, args.title)
+            Timber.i("Next streamed episode ready: %s", nextStream?.episode)
+        }
+    }
+
+    /** Hands over to the prepared next episode the way the source picker hands over a first one. */
+    private fun playNextStream(ready: NextEpisodeStream.Ready) {
+        val args = torrentPlayback ?: return
+        viewModelScope.launchIO {
+            cancelUpNextEpisode()
+            val progress = engineClient.beginPlayback(ready.identity)
+            val resumeMs = progress?.takeUnless { it.completed }?.positionMs?.coerceAtLeast(0) ?: 0L
+            withContext(Dispatchers.Main) {
+                streamWatchTracker.begin(title = args.title, token = ready.stream.token, playbackSessionId = progress?.sessionId)
+                navigationManager.replaceCurrent(
+                    Destination.Playback(
+                        itemId = UUID.randomUUID(),
+                        positionMs = resumeMs,
+                        torrent =
+                            TorrentPlaybackArgs(
+                                url = ready.stream.url,
+                                title = args.title,
+                                fileName = ready.stream.fileName,
+                                sizeBytes = ready.stream.sizeBytes,
+                                mediaInfo = ready.stream.mediaInfo,
+                                token = ready.stream.token,
+                                sourceId = ready.sourceId,
+                                playbackIdentity = ready.identity,
+                                playbackSessionId = progress?.sessionId?.takeIf { it.isNotBlank() },
+                                resumePositionMs = resumeMs,
+                                resumeDurationMs = progress?.durationMs?.coerceAtLeast(0) ?: 0L,
+                            ),
+                    ),
+                )
+            }
+        }
+    }
+
     fun playNextUp() {
+        nextStream?.takeIf { torrentPlayback != null }?.let {
+            nextStream = null
+            playNextStream(it)
+            return
+        }
         playlist.value?.let {
             if (it.hasNext()) {
                 viewModelScope.launchIO {

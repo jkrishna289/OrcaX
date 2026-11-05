@@ -478,6 +478,43 @@ class OrcaEngineClient
             return get(query) { EngineJson.decodeFromString<ServerPlaybackProgress?>(it) }
         }
 
+        /** Intro, recap and credits times for a streamed title; null when the engine can't say. */
+        suspend fun getSegments(identity: PlaybackIdentity): com.github.jkrishna289.orcax.engine.SkipSegments? {
+            val tv = identity.mediaType == "tv"
+            if (tv && (identity.season == null || identity.episode == null)) return null
+            val query = "/Metadata/Segments?tmdbId=${identity.tmdbId}&type=${identity.mediaType}" +
+                if (tv) "&season=${identity.season}&episode=${identity.episode}" else ""
+            return get(query) { EngineJson.decodeFromString<com.github.jkrishna289.orcax.engine.SkipSegments>(it) }
+        }
+
+        /**
+         * A series' theme MP3 on the engine, for shows in the library or not. Built here rather than
+         * fetched through [get]: the engine answers 404 until it has the theme (and queues it), which
+         * [get] would read as the wrong engine path.
+         */
+        fun themeUrl(tmdbId: Int): String? = baseUrl()?.let { "$it${resolvedPath ?: ENGINE_PATHS.first()}/Themes/$tmdbId" }
+
+        /** A show's seasons from TMDB, Specials included; null when the engine is older or unreachable. */
+        suspend fun getSeasons(tmdbId: Int): List<com.github.jkrishna289.orcax.engine.SeasonInfo>? =
+            get("/Metadata/Seasons?tmdbId=$tmdbId") {
+                EngineJson.decodeFromString<List<com.github.jkrishna289.orcax.engine.SeasonInfo>>(it)
+            }
+
+        /** This user's progress on every streamed episode of a show, most recently touched first. */
+        suspend fun getSeriesProgress(tmdbId: Int): List<com.github.jkrishna289.orcax.engine.EpisodeProgress>? =
+            get("/Playback/Progress/Series?tmdbId=$tmdbId") {
+                EngineJson.decodeFromString<List<com.github.jkrishna289.orcax.engine.EpisodeProgress>>(it)
+            }
+
+        /** One season's episodes from TMDB, in order; null when the engine is older or unreachable. */
+        suspend fun getEpisodes(
+            tmdbId: Int,
+            season: Int,
+        ): List<com.github.jkrishna289.orcax.engine.EpisodeInfo>? =
+            get("/Metadata/Episodes?tmdbId=$tmdbId&season=$season") {
+                EngineJson.decodeFromString<List<com.github.jkrishna289.orcax.engine.EpisodeInfo>>(it)
+            }
+
         // Small, bounded requests: teardown gets a chance to flush without retaining a player or
         // waiting behind the multi-minute network budgets used for torrent discovery.
         private val progressHttpClient: OkHttpClient by lazy {

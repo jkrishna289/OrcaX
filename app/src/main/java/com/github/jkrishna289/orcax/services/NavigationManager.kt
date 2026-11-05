@@ -34,6 +34,20 @@ class NavigationManager
         }
 
         /**
+         * Swaps the current page for [destination], so Back skips what it replaced — a streamed
+         * episode's player handing over to the next episode's.
+         */
+        fun replaceCurrent(destination: Destination) {
+            synchronized(this) {
+                if (backStack.size > 1) {
+                    backStack.removeLastOrNull()
+                }
+                backStack.add(destination)
+            }
+            log()
+        }
+
+        /**
          * Go to the previous page
          */
         fun goBack() {
