@@ -51,6 +51,7 @@ fun TabRow(
     focusRequesters: List<FocusRequester>,
     onClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onFocus: ((Int) -> Unit)? = null,
 ) {
     val state = rememberLazyListState()
     LaunchedEffect(selectedTabIndex) {
@@ -63,6 +64,7 @@ fun TabRow(
     val currentSelectedTabIndex by rememberUpdatedState(selectedTabIndex)
     val currentFocusRequesters by rememberUpdatedState(focusRequesters)
     val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnFocus by rememberUpdatedState(onFocus)
 
     LazyRow(
         state = state,
@@ -104,7 +106,10 @@ fun TabRow(
                 rowActive = rowHasFocus,
                 interactionSource = interactionSource,
                 onClick = onTabClick,
-                modifier = Modifier.focusRequester(focusRequesters.getOrElse(index) { FocusRequester() }),
+                modifier =
+                    Modifier
+                        .focusRequester(focusRequesters.getOrElse(index) { FocusRequester() })
+                        .onFocusChanged { if (it.isFocused) currentOnFocus?.invoke(index) },
             )
         }
     }

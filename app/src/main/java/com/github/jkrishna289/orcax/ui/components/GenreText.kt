@@ -23,15 +23,16 @@ fun GenreText(
     textStyle: TextStyle = MaterialTheme.typography.bodyMedium,
     color: Color = MaterialTheme.colorScheme.onSurface,
     maxLines: Int = Int.MAX_VALUE,
+    separator: String = ", ",
 ) {
     val text =
-        remember(genres) {
+        remember(genres, separator) {
             if (genres.size <= MAX_TO_SHOW) {
-                genres.joinToString(", ")
+                genres.joinToString(separator)
             } else {
                 genres
                     .subList(0, MAX_TO_SHOW)
-                    .joinToString(", ") + ", +${genres.size - MAX_TO_SHOW}"
+                    .joinToString(separator) + "$separator+${genres.size - MAX_TO_SHOW}"
             }
         }
     Text(

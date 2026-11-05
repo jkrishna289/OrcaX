@@ -46,7 +46,9 @@ fun ChapterCard(
             AsyncImage(
                 model = imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                // Crop, not Fit: servers hand back 16:9 stills with the bars baked in, so Fit boxed a
+                // scope film's chapters on all four sides.
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
             Box(

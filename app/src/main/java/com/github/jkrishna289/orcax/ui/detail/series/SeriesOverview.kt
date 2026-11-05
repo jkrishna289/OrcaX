@@ -2,6 +2,8 @@
 
 package com.github.jkrishna289.orcax.ui.detail.series
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -13,18 +15,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import androidx.lifecycle.map
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.ChosenStreams
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.preferences.UserPreferences
+import com.github.jkrishna289.orcax.services.TrailerService
 import com.github.jkrishna289.orcax.ui.RequestOrRestoreFocus
 import com.github.jkrishna289.orcax.ui.components.ConfirmDeleteDialog
+import com.github.jkrishna289.orcax.ui.components.ConfirmDialog
+import com.github.jkrishna289.orcax.ui.components.DialogItem
 import com.github.jkrishna289.orcax.ui.components.DialogParams
 import com.github.jkrishna289.orcax.ui.components.DialogPopup
 import com.github.jkrishna289.orcax.ui.components.ErrorMessage
@@ -50,7 +55,6 @@ import kotlinx.serialization.UseSerializers
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.MediaStreamType
 import org.jellyfin.sdk.model.api.MediaType
-import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.extensions.ticks
 import org.jellyfin.sdk.model.serializer.UUIDSerializer
 import org.jellyfin.sdk.model.serializer.toUUID
@@ -94,18 +98,21 @@ fun SeriesOverview(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val headerFocusRequester = remember { FocusRequester() }
     val firstItemFocusRequester = remember { FocusRequester() }
     val episodeRowFocusRequester = remember { FocusRequester() }
     val castCrewRowFocusRequester = remember { FocusRequester() }
-    val guestStarRowFocusRequester = remember { FocusRequester() }
 
     val loading by viewModel.loading.observeAsState(LoadingState.Loading)
 
     val series by viewModel.item.observeAsState(null)
     val seasons by viewModel.seasons.observeAsState(listOf())
     val episodes by viewModel.episodes.observeAsState(EpisodeList.Loading)
-    val peopleInEpisode by viewModel.peopleInEpisode.map { it.people }.observeAsState(listOf())
-    val episodeList = (episodes as? EpisodeList.Success)?.episodes
+    val peopleInEpisode by viewModel.peopleInEpisode.observeAsState(PeopleInItem())
+    val people by viewModel.people.observeAsState(listOf())
+    val playTarget by viewModel.playTarget.observeAsState(null)
+    val trailers by viewModel.trailers.observeAsState(listOf())
+    val canDeleteSeries by viewModel.canDeleteSeries.collectAsState()
 
     val position by viewModel.position.collectAsState(SeriesOverviewPosition(0, 0))
     LaunchedEffect(Unit) {
@@ -122,8 +129,10 @@ fun SeriesOverview(
     var showPlaylistDialog by remember { mutableStateOf<UUID?>(null) }
     val playlistState by playlistViewModel.playlistState.observeAsState(PlaylistLoadingState.Pending)
 
-    var rowFocused by rememberInt()
+    // Opened from an episode card, focus starts on that episode; otherwise on the show's Play button
+    var rowFocused by rememberInt(if (initialSeasonEpisode?.episodeId != null) EPISODE_ROW else HEADER_ROW)
     var showDeleteDialog by remember { mutableStateOf<BaseItem?>(null) }
+    var showWatchConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(position, episodes) {
         val focusedEpisode =
@@ -161,9 +170,8 @@ fun SeriesOverview(
 
                 RequestOrRestoreFocus(
                     when (rowFocused) {
-                        EPISODE_ROW -> episodeRowFocusRequester
+                        HEADER_ROW -> headerFocusRequester
                         CAST_AND_CREW_ROW -> castCrewRowFocusRequester
-                        GUEST_STAR_ROW -> guestStarRowFocusRequester
                         else -> episodeRowFocusRequester
                     },
                     "series_overview",
@@ -280,11 +288,14 @@ fun SeriesOverview(
                     episodes = episodes,
                     chosenStreams = chosenStreams,
                     peopleInEpisode = peopleInEpisode,
+                    people = people,
+                    playTarget = playTarget,
+                    trailers = trailers,
                     position = position,
+                    headerFocusRequester = headerFocusRequester,
                     firstItemFocusRequester = firstItemFocusRequester,
                     episodeRowFocusRequester = episodeRowFocusRequester,
                     castCrewRowFocusRequester = castCrewRowFocusRequester,
-                    guestStarRowFocusRequester = guestStarRowFocusRequester,
                     onChangeSeason = { index ->
                         if (index != position.seasonTabIndex) {
                             seasons.getOrNull(index)?.let { season ->
@@ -318,45 +329,52 @@ fun SeriesOverview(
                             moreDialog = buildMoreForEpisode(ep, chosenStreams, true)
                         }
                     },
-                    playOnClick = { resume ->
-                        rowFocused = EPISODE_ROW
-                        episodeList?.getOrNull(position.episodeRowIndex)?.let {
-                            viewModel.release()
-                            viewModel.navigateTo(
-                                Destination.Playback(
-                                    it.id,
-                                    resume.inWholeMilliseconds,
-                                ),
-                            )
-                        }
+                    // The show's buttons; an episode's actions are on its card's long press
+                    playOnClick = { start ->
+                        rowFocused = HEADER_ROW
+                        playTarget?.let {
+                            viewModel.navigateTo(Destination.Playback(it.id, start.inWholeMilliseconds))
+                        } ?: viewModel.playNextUp()
                     },
-                    watchOnClick = {
-                        episodeList?.getOrNull(position.episodeRowIndex)?.let {
-                            val played = it.data.userData?.played ?: false
-                            viewModel.setWatched(it.id, !played, position.episodeRowIndex)
-                        }
-                    },
-                    favoriteOnClick = {
-                        episodeList?.getOrNull(position.episodeRowIndex)?.let {
-                            val favorite = it.data.userData?.isFavorite ?: false
-                            viewModel.setFavorite(it.id, !favorite, position.episodeRowIndex)
-                        }
-                    },
+                    watchOnClick = { showWatchConfirmation = true },
+                    favoriteOnClick = { viewModel.setFavorite(series.id, !series.favorite, null) },
                     moreOnClick = {
-                        episodeList?.getOrNull(position.episodeRowIndex)?.let { ep ->
-                            scope.launchDefault {
-                                moreDialog = buildMoreForEpisode(ep, chosenStreams, false)
-                            }
-                        }
+                        moreDialog =
+                            DialogParams(
+                                fromLongClick = false,
+                                title = series.name ?: "",
+                                items =
+                                    buildList {
+                                        add(
+                                            DialogItem(context.getString(R.string.shuffle), R.string.fa_shuffle) {
+                                                viewModel.navigateTo(Destination.PlaybackList(itemId = series.id, shuffle = true))
+                                            },
+                                        )
+                                        add(
+                                            DialogItem(R.string.add_to_playlist, R.string.fa_list_ul) {
+                                                playlistViewModel.loadPlaylists(MediaType.VIDEO)
+                                                showPlaylistDialog = series.id
+                                            },
+                                        )
+                                        if (canDeleteSeries) {
+                                            add(
+                                                DialogItem(
+                                                    context.getString(R.string.delete),
+                                                    Icons.Default.Delete,
+                                                    iconColor = Color.Red.copy(alpha = .8f),
+                                                ) { showDeleteDialog = series },
+                                            )
+                                        }
+                                    },
+                            )
                     },
-                    overviewOnClick = {
-                        episodeList?.getOrNull(position.episodeRowIndex)?.let {
-                            overviewDialog = ItemDetailsDialogInfo(it)
-                        }
+                    trailerOnClick = {
+                        rowFocused = HEADER_ROW
+                        TrailerService.onClick(context, it, viewModel::navigateTo)
                     },
+                    overviewOnClick = { overviewDialog = ItemDetailsDialogInfo(series) },
                     personOnClick = {
-                        rowFocused =
-                            if (it.type == PersonKind.GUEST_STAR) GUEST_STAR_ROW else CAST_AND_CREW_ROW
+                        rowFocused = CAST_AND_CREW_ROW
                         viewModel.navigateTo(
                             Destination.MediaItem(
                                 it.id,
@@ -364,10 +382,22 @@ fun SeriesOverview(
                             ),
                         )
                     },
-                    canDelete = { viewModel.canDelete(it, preferences.appPreferences) },
-                    deleteOnClick = { showDeleteDialog = it },
                     modifier = modifier,
                 )
+                if (showWatchConfirmation) {
+                    ConfirmDialog(
+                        title = series.name ?: "",
+                        body =
+                            stringResource(
+                                if (series.played) R.string.mark_entire_series_as_unplayed else R.string.mark_entire_series_as_played,
+                            ),
+                        onCancel = { showWatchConfirmation = false },
+                        onConfirm = {
+                            viewModel.setWatchedSeries(!series.played)
+                            showWatchConfirmation = false
+                        },
+                    )
+                }
             }
         }
     }
@@ -434,4 +464,4 @@ fun SeriesOverview(
 
 private const val EPISODE_ROW = 0
 private const val CAST_AND_CREW_ROW = EPISODE_ROW + 1
-private const val GUEST_STAR_ROW = CAST_AND_CREW_ROW + 1
+private const val HEADER_ROW = CAST_AND_CREW_ROW + 1

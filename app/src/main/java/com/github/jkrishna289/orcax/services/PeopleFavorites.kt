@@ -3,6 +3,7 @@ package com.github.jkrishna289.orcax.services
 import android.content.Context
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.data.model.Person
+import com.github.jkrishna289.orcax.data.model.oneCardPerPerson
 import com.github.jkrishna289.orcax.ui.letNotEmpty
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.jellyfin.sdk.api.client.ApiClient
@@ -42,6 +43,6 @@ class PeopleFavorites
                                 )
                             }
                         }.orEmpty()
-                people
+                people.oneCardPerPerson()
             }
     }

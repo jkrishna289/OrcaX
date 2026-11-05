@@ -82,6 +82,8 @@ fun ExpandablePlayButtons(
     deleteOnClick: () -> Unit,
     buttonOnFocusChanged: (FocusState) -> Unit,
     modifier: Modifier = Modifier,
+    // Shown on Play/Resume all the time, e.g. "Resume S2 E15" for a show
+    playLabel: String? = null,
 ) {
     val firstFocus = remember { FocusRequester() }
     LazyRow(
@@ -103,6 +105,7 @@ fun ExpandablePlayButtons(
                         Modifier
                             .onFocusChanged(buttonOnFocusChanged)
                             .focusRequester(firstFocus),
+                    label = playLabel,
                 )
             }
             item("restart") {
@@ -126,6 +129,7 @@ fun ExpandablePlayButtons(
                         Modifier
                             .onFocusChanged(buttonOnFocusChanged)
                             .focusRequester(firstFocus),
+                    label = playLabel,
                 )
             }
         }
@@ -201,6 +205,7 @@ fun ExpandablePlayButton(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     mirrorIcon: Boolean = false,
     enabled: Boolean = true,
+    label: String? = null,
 ) = ExpandablePlayButton(
     title = title,
     resume = resume,
@@ -218,6 +223,7 @@ fun ExpandablePlayButton(
     modifier = modifier,
     interactionSource = interactionSource,
     enabled = enabled,
+    label = label,
 )
 
 @Composable
@@ -258,6 +264,8 @@ fun ExpandablePlayButton(
     modifier: Modifier = Modifier,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     enabled: Boolean = true,
+    // Always shown instead of [title], which only shows on focus
+    label: String? = null,
 ) {
     val isFocused = interactionSource.collectIsFocusedAsState().value
     Button(
@@ -281,10 +289,10 @@ fun ExpandablePlayButton(
         ) {
             icon.invoke(this)
         }
-        AnimatedVisibility(isFocused) {
+        AnimatedVisibility(isFocused || label != null) {
             Spacer(Modifier.size(8.dp))
             Text(
-                text = stringResource(title),
+                text = label ?: stringResource(title),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(end = 4.dp),
             )

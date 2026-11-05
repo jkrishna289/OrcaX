@@ -100,7 +100,8 @@ data class BaseItem(
     val ui =
         BaseItemUi(
             episodeCornerText =
-                data.indexNumber?.let { "E$it" }
+                // Specials read SP1, not a second E1
+                data.indexNumber?.let { if (data.parentIndexNumber == 0) "SP$it" else "E$it" }
                     ?: data.premiereDate?.let(::formatDateTime),
             episodeUnplayedCornerText =
                 if (type == BaseItemKind.SERIES ||

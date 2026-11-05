@@ -121,6 +121,9 @@ class SeriesViewModel
 
         val peopleInEpisode = MutableLiveData<PeopleInItem>(PeopleInItem())
 
+        /** The episode the show's Play button starts, see [findPlayTarget] */
+        val playTarget = MutableLiveData<BaseItem?>(null)
+
         val position = MutableStateFlow(SeriesOverviewPosition(0, 0))
 
         init {
@@ -137,6 +140,12 @@ class SeriesViewModel
                 backdropService.submit(item)
 
                 val seasonsDeferred = getSeasons(item, seasonEpisodeIds?.seasonNumber)
+                val playTargetDeferred =
+                    if (seriesPageType == SeriesPageType.OVERVIEW) {
+                        viewModelScope.async(Dispatchers.IO) { findPlayTarget() }
+                    } else {
+                        CompletableDeferred(value = null)
+                    }
 
                 val episodeListDeferred =
                     if (seriesPageType == SeriesPageType.OVERVIEW) {
@@ -148,12 +157,14 @@ class SeriesViewModel
                                     seasonEpisodeIds.episodeNumber,
                                 )
                             } else {
-                                seasonsDeferred.await().firstOrNull()?.let {
-                                    loadEpisodesInternal(
-                                        it.id,
-                                        null,
-                                        null,
-                                    )
+                                // Open on the episode Play would start, else the first season
+                                val target = playTargetDeferred.await()
+                                val seasons = seasonsDeferred.await()
+                                val season =
+                                    seasons.firstOrNull { it?.id == target?.data?.seasonId } ?: seasons.firstOrNull()
+                                season?.let {
+                                    val onTarget = target?.takeIf { t -> t.data.seasonId == it.id }
+                                    loadEpisodesInternal(it.id, onTarget?.id, onTarget?.indexNumber)
                                 } ?: EpisodeList.Empty
                             }
                         }
@@ -162,36 +173,35 @@ class SeriesViewModel
                     }
                 val seasons = seasonsDeferred.await()
                 val episodes = episodeListDeferred.await()
+                val playTarget = playTargetDeferred.await()
                 Timber.v("Done")
 
-                if (seriesPageType == SeriesPageType.OVERVIEW && seasonEpisodeIds != null) {
-                    viewModelScope.launchIO {
-                        val index =
-                            (seasons as? ApiRequestPager<*>)?.let {
-                                findIndexOf(
-                                    seasonEpisodeIds.seasonNumber,
-                                    seasonEpisodeIds.seasonId,
-                                    it,
-                                )
-                            } ?: 0
-                        Timber.v("Got initial season index: $index")
-                        position.update {
-                            it.copy(seasonTabIndex = index.coerceAtLeast(0))
-                        }
-                    }
-                }
                 val remoteTrailers = trailerService.getRemoteTrailers(item)
                 withContext(Dispatchers.Main) {
                     this@SeriesViewModel.trailers.value = remoteTrailers
                     this@SeriesViewModel.position.update {
+                        val seasonId = (episodes as? EpisodeList.Success)?.seasonId
                         it.copy(
+                            // The overview's seasons are a plain list (see getSeasons), so find the tab here
+                            seasonTabIndex =
+                                if (seriesPageType == SeriesPageType.OVERVIEW) {
+                                    seasons.indexOfFirst { s -> s?.id == seasonId }.coerceAtLeast(0)
+                                } else {
+                                    it.seasonTabIndex
+                                },
                             episodeRowIndex =
                                 (episodes as? EpisodeList.Success)?.initialEpisodeIndex ?: 0,
                         )
                     }
+                    this@SeriesViewModel.playTarget.value = playTarget
                     this@SeriesViewModel.seasons.value = seasons
                     this@SeriesViewModel.episodes.value = episodes
                     loading.value = LoadingState.Success
+                }
+                // The overview shows the show's own cast now too, not just the focused episode's
+                viewModelScope.launchIO {
+                    val people = peopleFavorites.getPeopleFor(item)
+                    this@SeriesViewModel.people.setValueOnMain(people)
                 }
                 if (seriesPageType == SeriesPageType.DETAILS) {
                     viewModelScope.launchIO {
@@ -200,10 +210,6 @@ class SeriesViewModel
                                 this@SeriesViewModel.trailers.value = localTrailers + remoteTrailers
                             }
                         }
-                    }
-                    viewModelScope.launchIO {
-                        val people = peopleFavorites.getPeopleFor(item)
-                        this@SeriesViewModel.people.setValueOnMain(people)
                     }
                     viewModelScope.launchIO {
                         val extras = extrasService.getExtras(item.id)
@@ -253,8 +259,51 @@ class SeriesViewModel
                             .appPreferences.interfacePreferences.playThemeSongs
                     themeSongPlayer.playThemeFor(seriesId, playThemeSongs)
                 }
+                if (seriesPageType == SeriesPageType.OVERVIEW) refreshPlayTarget()
             }
         }
+
+        private fun refreshPlayTarget() {
+            viewModelScope.launchIO { playTarget.setValueOnMain(findPlayTarget()) }
+        }
+
+        /**
+         * The last episode touched if it was stopped partway, else next up. Next up alone skips an
+         * unfinished episode for the one after the last finished episode, so the show's Play button
+         * disagreed with Continue Watching.
+         */
+        private suspend fun findPlayTarget(): BaseItem? =
+            try {
+                val touched =
+                    GetItemsRequestHandler
+                        .execute(
+                            api,
+                            GetItemsRequest(
+                                userId = serverRepository.currentUser.value?.id,
+                                parentId = seriesId,
+                                recursive = true,
+                                includeItemTypes = listOf(BaseItemKind.EPISODE),
+                                sortBy = listOf(ItemSortBy.DATE_PLAYED),
+                                sortOrder = listOf(SortOrder.DESCENDING),
+                                limit = 1,
+                            ),
+                        ).content.items
+                        .firstOrNull()
+                val unfinished = touched?.userData?.let { !it.played && it.playbackPositionTicks > 0 } == true
+                val dto =
+                    if (unfinished) {
+                        touched
+                    } else {
+                        api.tvShowsApi
+                            .getNextUp(seriesId = seriesId, limit = 1)
+                            .content.items
+                            .firstOrNull()
+                    }
+                dto?.let { BaseItem.from(it, api) }
+            } catch (ex: Exception) {
+                Timber.w(ex, "Could not find what to play for series %s", seriesId)
+                null
+            }
 
         fun refresh() {
             item.value?.let { item ->
@@ -295,6 +344,15 @@ class SeriesViewModel
                                 )
                             },
                     )
+                if (seriesPageType == SeriesPageType.OVERVIEW) {
+                    // All of them (one tab each), with Specials moved to the end: as the first tab, a
+                    // series opened on Specials instead of Season 1.
+                    return@async GetItemsRequestHandler
+                        .execute(api, request)
+                        .content.items
+                        .map { BaseItem.from(it, api) }
+                        .sortedBy { it.indexNumber == 0 }
+                }
                 val pager =
                     ApiRequestPager(
                         api,
@@ -385,6 +443,7 @@ class SeriesViewModel
             listIndex?.let {
                 refreshEpisode(itemId, listIndex)
             }
+            if (seriesPageType == SeriesPageType.OVERVIEW) refreshPlayTarget()
         }
 
         fun setFavorite(
@@ -420,6 +479,7 @@ class SeriesViewModel
                 val series = fetchItem(seriesId)
                 val seasons = getSeasons(series, null).await()
                 this@SeriesViewModel.seasons.setValueOnMain(seasons)
+                if (seriesPageType == SeriesPageType.OVERVIEW) refreshPlayTarget()
             }
 
         fun refreshEpisode(

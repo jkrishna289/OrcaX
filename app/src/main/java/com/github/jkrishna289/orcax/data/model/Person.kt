@@ -56,6 +56,22 @@ data class Person(
     }
 }
 
+/**
+ * One entry per person, in the order they first appear, with all their roles joined. Jellyfin lists
+ * someone once per role, so a voice actor could fill a row with copies of the same face.
+ */
+fun List<Person>.oneCardPerPerson(): List<Person> =
+    groupBy { it.id }.values.map { same ->
+        same.first().copy(
+            role =
+                same
+                    .mapNotNull { it.role?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .joinToString(" / ")
+                    .ifEmpty { null },
+        )
+    }
+
 private fun personRole(
     context: Context,
     role: String?,
