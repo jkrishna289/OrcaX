@@ -148,11 +148,12 @@ fun Backdrop(
                     },
         )
     }
-    // Dynamic-color mode renders the extracted color wash ONLY (above). The sharp, top-right
-    // backdrop image is intentionally NOT drawn here, so a focused card tints the home/detail
-    // surfaces with just its colors instead of bleeding a hard thumbnail behind the content
-    // (problem #7 — "use the colours only"). The literal image is reserved for IMAGE_ONLY style.
-    if (backdropStyle == BackdropStyle.BACKDROP_IMAGE_ONLY && backdrop.hero) {
+    // Dynamic-color mode renders the extracted color wash (above) and no inset image, so a focused
+    // card tints the home/detail surfaces with just its colors instead of bleeding a hard thumbnail
+    // behind the content (problem #7 — "use the colours only"). The movie page's hero is the one
+    // exception: its layout is built around the image, and with only a wash it had no backdrop at
+    // all, so it shows in both styles. Only "None" turns it off.
+    if (backdrop.hero && backdropStyle != BackdropStyle.BACKDROP_NONE) {
         // Movie Details v2 hero (movie details only, via BackdropResult.hero): backdrop framed
         // like the home billboard — rounded top corners, hairline border, slim side/top insets,
         // open at the bottom — with a left/bottom scrim stack so the text block always sits on a
