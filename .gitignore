@@ -87,3 +87,11 @@ graphify-out/
 hs_err_pid*.log
 replay_pid*.log
 .claudeignore
+# AI assistants' files never go to GitHub
+AGENTS.md
+.codex/
+.impeccable/
+.graphifyignore
+.mcp.json
+claude-bug-bounty/
+.gradle-review/
