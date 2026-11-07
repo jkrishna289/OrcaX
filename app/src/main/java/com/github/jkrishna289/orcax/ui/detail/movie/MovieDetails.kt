@@ -24,6 +24,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import com.github.jkrishna289.orcax.ui.nav.HeroFrame
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
@@ -425,12 +427,23 @@ fun MovieDetailsContent(
 
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
 
-    Box(modifier = modifier) {
+    // The page lives inside its hero backdrop's frame: text 16dp inside the border (it sat at 8dp from
+    // the screen edge, on and outside the border), and rows scrolled sideways or the page scrolled up
+    // clip at the frame rather than running over it.
+    Box(
+        modifier =
+            modifier
+                .padding(
+                    top = HeroFrame.top,
+                    start = HeroFrame.side + HeroFrame.border,
+                    end = HeroFrame.side + HeroFrame.border,
+                ).clip(HeroFrame.contentShape),
+    ) {
         @OptIn(ExperimentalFoundationApi::class)
         CompositionLocalProvider(LocalBringIntoViewSpec provides DetailsRowFocusSpec) {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 8.dp),
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 8.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item {

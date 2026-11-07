@@ -159,14 +159,14 @@ fun Backdrop(
         // open at the bottom — with a left/bottom scrim stack so the text block always sits on a
         // darkened surface. Scrims and the ambient trailer render inside the clip, and blend into
         // the theme background so the hero melts into the page rather than ending at a hard edge.
-        val heroShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        val heroShape = HeroFrame.shape
         Box(
             modifier =
                 modifier
                     .fillMaxSize()
-                    .padding(top = 8.dp, start = 14.dp, end = 14.dp)
+                    .padding(top = HeroFrame.top, start = HeroFrame.side, end = HeroFrame.side)
                     .clip(heroShape)
-                    .border(1.dp, Color.White.copy(alpha = .06f), heroShape)
+                    .border(HeroFrame.border, Color.White.copy(alpha = .06f), heroShape)
                     .drawWithContent {
                         drawContent()
                         // Left scrim (text protection): background → transparent by 55%.
@@ -347,4 +347,19 @@ fun Backdrop(
             }
         }
     }
+}
+
+/**
+ * Where the movie page's framed hero backdrop sits on screen. The movie page lays its content out
+ * inside this same frame (see MovieDetailsContent), so its text and rows can never run over the
+ * frame's border: change one and the other follows.
+ */
+object HeroFrame {
+    val top = 8.dp
+    val side = 14.dp
+    val border = 1.dp
+    val shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+
+    /** The frame's inside: the area the movie page's content fills. */
+    val contentShape = RoundedCornerShape(topStart = 20.dp - border, topEnd = 20.dp - border)
 }
