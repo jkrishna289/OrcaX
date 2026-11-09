@@ -340,6 +340,9 @@ class EngineHomeViewModel
                 spotlight?.items.orEmpty().distinctBy { hero ->
                     hero.media.tmdbId?.let { it to hero.media.mediaType } ?: hero.media.jellyfinId ?: hero
                 }
+                    // A cold engine build (right after a server restart) can drop the spotlight row,
+                    // and the billboard sat empty and grey; the picks already on screen beat nothing.
+                    .ifEmpty { heroes }
             val rows = withLibraries(bundle.rows.filterNot { it.id == SPOTLIGHT_ROW_ID })
 
             // Progressive loading re-applies the bundle as each row lands, so only re-seed the

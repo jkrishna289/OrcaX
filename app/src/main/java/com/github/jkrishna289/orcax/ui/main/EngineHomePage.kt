@@ -316,6 +316,10 @@ fun EngineHomePage(
                                             // shows again — the 80%-tall card keeps the focused button
                                             // on screen, so this doesn't fight the focus.
                                             .onFocusChanged {
+                                                // A closing popup parks focus here for a frame. Treated as a
+                                                // visit, it forgot the row and scrolled it off screen, so the
+                                                // pending restore could never land and Back left you at the top.
+                                                if (it.hasFocus && overlayRestoreRowId != null) return@onFocusChanged
                                                 if (it.hasFocus) {
                                                     billboardFocused = true
                                                     focusedRowId = null
@@ -495,7 +499,15 @@ fun EngineHomePage(
                     // Rows scroll content up under the bar (and the first row leaves the billboard's
                     // metadata under it), so step out of the way unless the billboard has the screen.
                     hidden = !(isAtTop && focusedRowId == null),
-                    contentFocusRequester = billboardPlayFocus,
+                    // With no billboard there is no Play to move to, and a Down aimed at it went nowhere:
+                    // the bar trapped focus and no row could be reached. Aim at the first row instead
+                    // (plain focus search from the bar didn't find it either).
+                    contentFocusRequester =
+                        if (heroes.isNotEmpty()) {
+                            billboardPlayFocus
+                        } else {
+                            s.rows.firstOrNull { it.items.isNotEmpty() }?.let { rowFocus(it.id) } ?: FocusRequester.Default
+                        },
                     navFocusRequester = navFocus,
                     modifier =
                         Modifier
@@ -505,7 +517,8 @@ fun EngineHomePage(
                             // the whole billboard shows under the (transparent-at-top) bar instead of
                             // being left half-scrolled beneath it. Mirrors the billboard/Back snap.
                             .onFocusChanged {
-                                if (it.hasFocus) {
+                                // Same frame-long handoff as the billboard's when a popup closes.
+                                if (it.hasFocus && overlayRestoreRowId == null) {
                                     navHadFocus = true
                                     scope.launch { listState.animateScrollToItem(0) }
                                 }
