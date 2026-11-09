@@ -33,8 +33,6 @@ import androidx.compose.ui.unit.dp
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.cards.EngineCardHeight
 import com.github.jkrishna289.orcax.ui.cards.ItemRowTitle
-import androidx.compose.ui.text.TextStyle
-import androidx.tv.material3.MaterialTheme
 
 /**
  * The pulsing block every skeleton surface paints with. Rigid, linear pulse only (per the design
@@ -71,14 +69,13 @@ fun BillboardSkeleton(modifier: Modifier = Modifier) {
 fun SkeletonRow(
     title: String,
     modifier: Modifier = Modifier,
-    titleStyle: TextStyle = MaterialTheme.typography.titleLarge,
 ) {
     val block = skeletonBlock()
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier,
     ) {
-        ItemRowTitle(title, style = titleStyle)
+        ItemRowTitle(title)
         Row(
             horizontalArrangement = Arrangement.spacedBy(28.dp),
             modifier = Modifier.fillMaxWidth().padding(PaddingValues(horizontal = 16.dp, vertical = 8.dp)),

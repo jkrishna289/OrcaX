@@ -23,7 +23,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -53,7 +52,6 @@ fun <T> ItemRow(
     titleExtra: (@Composable () -> Unit)? = null,
     // Gap between cards; the row's edge padding stays [horizontalPadding].
     itemSpacing: Dp = horizontalPadding,
-    titleStyle: TextStyle = MaterialTheme.typography.titleLarge,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
@@ -78,13 +76,13 @@ fun <T> ItemRow(
             },
     ) {
         if (titleExtra == null) {
-            ItemRowTitle(title, style = titleStyle)
+            ItemRowTitle(title)
         } else {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                ItemRowTitle(title, style = titleStyle)
+                ItemRowTitle(title)
                 titleExtra()
             }
         }
@@ -144,10 +142,9 @@ fun <T> ItemRow(
 fun ItemRowTitle(
     title: String,
     modifier: Modifier = Modifier,
-    style: TextStyle = MaterialTheme.typography.titleLarge,
 ) = Text(
     text = title,
-    style = style,
+    style = MaterialTheme.typography.titleLarge,
     color = MaterialTheme.colorScheme.onBackground,
     modifier = modifier.padding(start = 8.dp),
 )
