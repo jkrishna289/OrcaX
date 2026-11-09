@@ -73,7 +73,6 @@ import androidx.tv.material3.Text
 import coil3.compose.SubcomposeAsyncImage
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.AvailabilityState
-import com.github.jkrishna289.orcax.engine.CardAction
 import com.github.jkrishna289.orcax.engine.CardAspectRatio
 import com.github.jkrishna289.orcax.engine.CardBadge
 import com.github.jkrishna289.orcax.engine.CardSize
@@ -373,6 +372,7 @@ private fun EngineCardBody(
     val card = item.card
     val accent = EngineHomeArt.parseAccent(card.accentColorHint)
     val isWide = card.aspectRatio == CardAspectRatio.WIDE
+    val episode = if (isWide && card.showProgress) episodeLabel(card.subtitle) else null
     // Continue Watching (wide) cards render ~25% smaller than the standard poster row (problem #3);
     // engine-tagged "Large" cards (the featured For You row) render bigger for visual variety.
     val baseScale = if (isWide) WIDE_CARD_SCALE else 1f
@@ -489,16 +489,25 @@ private fun EngineCardBody(
                         )
                     }
 
-                    // Dim base so the progress track / title read over the art.
+                    // Dim base so the progress track / title read over the art. Deeper on an episode card,
+                    // whose big season/episode number sits bottom-left: on bright art ("Family Guy") the
+                    // small "SEASON 2" line was lost against the picture.
                     Box(
                         modifier =
                             Modifier
                                 .fillMaxSize()
                                 .background(
-                                    Brush.verticalGradient(
-                                        0.55f to Color.Transparent,
-                                        1f to Color.Black.copy(alpha = 0.55f),
-                                    ),
+                                    if (episode != null && !trailerShowing) {
+                                        Brush.verticalGradient(
+                                            0.35f to Color.Transparent,
+                                            1f to Color.Black.copy(alpha = 0.8f),
+                                        )
+                                    } else {
+                                        Brush.verticalGradient(
+                                            0.55f to Color.Transparent,
+                                            1f to Color.Black.copy(alpha = 0.55f),
+                                        )
+                                    },
                                 ),
                     )
                     val progress = card.progress
@@ -535,7 +544,11 @@ private fun EngineCardBody(
 
                         // Resume affordances hide while an inline trailer is actually showing.
                         if (!trailerShowing) {
-                            // "24 min left" chip (TIMELEFT badge), just above the progress bar.
+                            // An episode shows its season and episode big, bottom-left; the progress bar
+                            // already says it's mid-way, so the old "▶ Resume" pill is gone.
+                            episode?.let { EpisodeNumber(it, Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 14.dp)) }
+                            // "24 min left" chip (TIMELEFT badge), just above the progress bar; it moves
+                            // right when the episode number takes the left.
                             card.badges
                                 .firstOrNull { it.kind.equals("TIMELEFT", ignoreCase = true) }
                                 ?.text
@@ -544,8 +557,8 @@ private fun EngineCardBody(
                                     Box(
                                         modifier =
                                             Modifier
-                                                .align(Alignment.BottomStart)
-                                                .padding(start = 10.dp, bottom = 14.dp)
+                                                .align(if (episode != null) Alignment.BottomEnd else Alignment.BottomStart)
+                                                .padding(start = 10.dp, end = 10.dp, bottom = 14.dp)
                                                 .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(5.dp))
                                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                                     ) {
@@ -559,14 +572,6 @@ private fun EngineCardBody(
                                         )
                                     }
                                 }
-                            if (CardAction.RESUME in card.actions) {
-                                ResumePill(
-                                    modifier =
-                                        Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .padding(end = 10.dp, bottom = 14.dp),
-                                )
-                            }
                         }
                     }
 
@@ -683,9 +688,11 @@ private fun EngineCardBody(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.fillMaxWidth().enableMarquee(focusedAfterDelay),
                 )
-                if (!card.subtitle.isNullOrBlank()) {
+                // An episode's numbers are on the image, so this line keeps only its own name (if any).
+                val subtitle = if (episode != null) episode.name else card.subtitle
+                if (!subtitle.isNullOrBlank()) {
                     Text(
-                        text = card.subtitle!!,
+                        text = subtitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
@@ -1353,27 +1360,49 @@ private fun TrailerVolumeChip(modifier: Modifier = Modifier) {
     }
 }
 
-/** The "▶ Resume" pill on a Continue Watching card (accent-tinted, bottom-right). */
+/** An episode card's season and episode, read from its "S1:E3 · Name" subtitle. */
+internal data class EpisodeLabel(val season: Int, val episode: Int, val name: String?)
+
+private val EpisodeSubtitle = Regex("""^S(\d+):E(\d+)(?:\s*·\s*(.+))?$""")
+private val GenericEpisodeName = Regex("""^episode\s+\d+$""", RegexOption.IGNORE_CASE)
+
+/**
+ * Parses the engine's episode subtitle (JellyfinResumeProvider.FormatEpisode). A name that is only
+ * "Episode 3" repeats the number shown on the card, so it's dropped.
+ */
+internal fun episodeLabel(subtitle: String?): EpisodeLabel? {
+    val match = EpisodeSubtitle.matchEntire(subtitle?.trim().orEmpty()) ?: return null
+    val (season, episode, name) = match.destructured
+    return EpisodeLabel(season.toInt(), episode.toInt(), name.trim().takeIf { it.isNotEmpty() && !GenericEpisodeName.matches(it) })
+}
+
+/** The season and episode, large, bottom-left on a Continue Watching episode card (replaced the Resume pill). */
 @Composable
-private fun ResumePill(modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(6.dp)
-    val accent = MaterialTheme.colorScheme.primary
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier =
-            modifier
-                .background(accent.copy(alpha = 0.18f), shape)
-                .border(1.dp, accent.copy(alpha = 0.55f), shape)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Text(text = "▶", color = accent, fontSize = 9.sp, maxLines = 1, softWrap = false)
+private fun EpisodeNumber(
+    label: EpisodeLabel,
+    modifier: Modifier = Modifier,
+) {
+    val shadow = Shadow(color = Color.Black.copy(alpha = 0.8f), blurRadius = 20f)
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = modifier) {
         Text(
-            text = stringResource(R.string.resume).uppercase(),
-            color = accent,
-            fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
-            letterSpacing = 0.5.sp,
+            text = stringResource(R.string.season_number, label.season).uppercase(),
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 9.sp,
+            lineHeight = 9.sp,
+            letterSpacing = 2.2.sp,
+            style = TextStyle(shadow = shadow),
+            maxLines = 1,
+            softWrap = false,
+        )
+        Text(
+            text = stringResource(R.string.p2_episode_number, label.episode),
+            color = Color.White,
+            fontWeight = FontWeight.Black,
+            fontSize = 28.sp,
+            lineHeight = 28.sp,
+            letterSpacing = (-0.5).sp,
+            style = TextStyle(shadow = shadow),
             maxLines = 1,
             softWrap = false,
         )
@@ -1486,7 +1515,6 @@ fun DynamicCardRow(
         // each item's TOP_RANKED card type — rowStyle stays an advisory hint).
         titleExtra = if (row.rowStyle == RowStyle.TOP10) ({ Top10Chip() }) else null,
         itemSpacing = ENGINE_CARD_SPACING,
-        titleStyle = rowTitleStyle(row.id),
         onClickItem = { _, item -> onClickItem(item) },
         onLongClickItem = { _, item -> onLongClickItem(item) },
         cardContent = { _, item, cardModifier, onClick, onLongClick ->

@@ -25,6 +25,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.roundToInt
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import timber.log.Timber
@@ -63,6 +66,7 @@ class BackdropService
         suspend fun submit(
             item: BaseItem,
             hero: Boolean = false,
+            detail: Boolean = false,
         ) = withContext(Dispatchers.IO) {
             val imageUrl =
                 if (item.type == BaseItemKind.GENRE) {
@@ -70,7 +74,7 @@ class BackdropService
                 } else {
                     imageUrlService.getItemImageUrl(item, ImageType.BACKDROP)
                 }
-            submit(item.id.toString(), imageUrl, hero)
+            submit(item.id.toString(), imageUrl, hero, detail)
             if (hero) resolveTrailerUrl(item)
         }
 
@@ -88,27 +92,30 @@ class BackdropService
         }
 
         /**
-         * Update the backdrop to use the specified URL
+         * Update the backdrop to use the specified URL. [detail] marks a title page (see
+         * [BackdropResult.detail]).
          */
         suspend fun submit(
             itemId: String,
             imageUrl: String?,
             hero: Boolean = false,
+            detail: Boolean = false,
         ) = withContext(Dispatchers.IO) {
             val current = backdropFlow.firstOrNull()
-            // Also re-submit when only the hero layout changes (e.g. the same item focused on a
-            // home row right after its details page), so the frame doesn't leak between screens.
-            if (current?.imageUrl != imageUrl || current?.hero != hero) {
+            // Also re-submit when only the page kind changes (e.g. the same item focused on a home
+            // row right after its details page), so the frame doesn't leak between screens.
+            if (current?.imageUrl != imageUrl || current?.hero != hero || current?.detail != detail) {
                 _backdropFlow.update {
                     it.copy(
                         itemId = itemId,
                         imageUrl = null,
                         hero = hero,
+                        detail = detail,
                         // A new item never inherits the previous item's ambient trailer.
                         trailerUrl = null,
                     )
                 }
-                extractColors(itemId, imageUrl, hero)
+                extractColors(itemId, imageUrl, hero, detail)
             }
         }
 
@@ -156,6 +163,7 @@ class BackdropService
             itemId: String,
             imageUrl: String?,
             hero: Boolean = false,
+            detail: Boolean = false,
         ) {
             val clearsBefore = clearedAt.get()
             delay(500)
@@ -167,8 +175,9 @@ class BackdropService
             val dynamicEnabled =
                 backdropStyle == BackdropStyle.BACKDROP_DYNAMIC_COLOR ||
                     backdropStyle == BackdropStyle.UNRECOGNIZED
+            // Title pages are image only, so their colours would never be painted.
             val (primaryColor, secondaryColor, tertiaryColor) =
-                if (dynamicEnabled) {
+                if (dynamicEnabled && !hero && !detail) {
                     extractColorsFromBackdrop(imageUrl)
                 } else {
                     ExtractedColors.DEFAULT
@@ -182,6 +191,7 @@ class BackdropService
                         secondaryColor = secondaryColor,
                         tertiaryColor = tertiaryColor,
                         hero = hero,
+                        detail = detail,
                     )
                 } else {
                     it
@@ -225,62 +235,21 @@ class BackdropService
             }
 
         /**
-         * Helper function to determine if a color is "cool" (blue/purple/green) vs "warm" (red/orange/yellow)
-         *
-         * Cool colors have more blue/green than red
-         */
-        private val Palette.Swatch.coolColor: Boolean
-            get() {
-                val r = (rgb shr 16) and 0xFF
-                val g = (rgb shr 8) and 0xFF
-                val b = rgb and 0xFF
-                return b > r && (b + g) > (r * 1.5f)
-            }
-
-        private fun toColor(
-            swatch: Palette.Swatch?,
-            alpha: Float,
-        ): Color = swatch?.rgb?.let(::Color)?.copy(alpha = alpha) ?: Color.Transparent
-
-        /**
-         * Extracts colors from a bitmap using Android's Palette API.
-         *
-         * - Primary (Bottom-Right): darkVibrant -> darkMuted -> default
-         * - Secondary (Top-Left): Smart selection based on color temperature (prefers cool colors)
-         * - Tertiary (Top-Right): vibrant -> lightVibrant -> default
-         *
-         * @param bitmap The bitmap to extract colors from
-         * @return ExtractedColors containing primary, secondary, and tertiary colors
+         * Extracts the art's own colour scheme (see [colorScheme]): its most present colour fills the
+         * big top-left glow (secondary), the next two the right (tertiary) and bottom (primary) ones.
+         * Generic vibrant/muted targets, with a preference for cool tones top-left, gave titles washes
+         * that weren't in their art.
          */
         private suspend fun extractColorsFromBitmap(bitmap: Bitmap): ExtractedColors =
             try {
                 val palette = Palette.from(bitmap).generate()
+                val scheme = colorScheme(palette.swatches.map { it.rgb to it.population })
+                if (scheme.isEmpty()) return ExtractedColors.DEFAULT
+                val (main, second, third) = scheme
 
-                val vibrant = palette.vibrantSwatch
-                val darkVibrant = palette.darkVibrantSwatch
-                val lightVibrant = palette.lightVibrantSwatch
-                val muted = palette.mutedSwatch
-                val darkMuted = palette.darkMutedSwatch
-                val lightMuted = palette.lightMutedSwatch
-                val dominant = palette.dominantSwatch
-
-                // Primary (Bottom-Right)
-                val primaryColor = toColor(darkVibrant ?: darkMuted, .4f)
-
-                // Secondary (Top-Left): Smart selection based on color properties
-                // If Vibrant is cool (blue/purple), use it. If Vibrant is warm (yellow/orange) and Muted is cool, use Muted.
-                // This ensures we get cool tones (blue/purple) for top-left when available
-                val secondaryColor =
-                    when {
-                        vibrant != null && vibrant.coolColor -> vibrant
-                        muted != null && muted.coolColor -> muted
-                        vibrant != null -> vibrant
-                        muted != null -> muted
-                        else -> null
-                    }.let { toColor(it, .4f) }
-
-                // Tertiary (Top-Right under image)
-                val tertiaryColor = toColor(vibrant ?: lightVibrant, .35f)
+                val primaryColor = Color(third).copy(alpha = .42f)
+                val secondaryColor = Color(main).copy(alpha = .5f)
+                val tertiaryColor = Color(second).copy(alpha = .45f)
 
                 Timber.v(
                     "Colors extracted: primary=%s, secondary=%s, tertiary=%s",
@@ -318,7 +287,15 @@ data class BackdropResult(
      * of the default top-right inset (see [BackdropService.submit]).
      */
     val hero: Boolean = false,
+    /**
+     * A title page (series; the movie hero is one too): it shows the title's image and no colour
+     * wash. Home and the other browsing screens are the reverse: the wash, no image.
+     */
+    val detail: Boolean = false,
 ) {
+    /** A movie or series page: image only. */
+    val titlePage: Boolean get() = hero || detail
+
     val hasColors: Boolean =
         primaryColor.isSpecified ||
             secondaryColor.isSpecified ||
@@ -344,4 +321,75 @@ data class ExtractedColors(
     companion object {
         val DEFAULT = ExtractedColors(Color.Unspecified, Color.Unspecified, Color.Unspecified)
     }
+}
+
+/**
+ * A title's colour scheme for the home wash: its most present colours, kept distinct from each other
+ * (hue more than 24° apart, or clearly different saturation or lightness), most present first, three
+ * long. Hue and saturation stay as in the art; only lightness moves into 0.30–0.60, so a near-black
+ * tone shows as a glow on the dark base and a near-white one doesn't wash the screen out. A one-colour
+ * poster stays one colour. Empty when the art has no usable colour.
+ *
+ * @param swatches each colour as (0xAARRGGBB, population)
+ * @return up to three opaque 0xAARRGGBB colours
+ */
+internal fun colorScheme(swatches: List<Pair<Int, Int>>): List<Int> {
+    val picks = mutableListOf<FloatArray>()
+    swatches
+        .map { (rgb, population) -> rgbToHsl(rgb) to population }
+        .filter { (hsl, _) -> hsl[2] > .05f && hsl[2] < .95f }
+        .sortedByDescending { it.second }
+        .forEach { (hsl, _) -> if (picks.size < 3 && picks.all { distinct(it, hsl) }) picks += hsl }
+    while (picks.isNotEmpty() && picks.size < 3) picks += picks.last()
+    return picks.map { (h, s, l) -> hslToRgb(h, s, l.coerceIn(.3f, .6f)) }
+}
+
+private fun distinct(
+    a: FloatArray,
+    b: FloatArray,
+): Boolean {
+    val dh = abs(a[0] - b[0])
+    return min(dh, 360 - dh) > 24 || abs(a[1] - b[1]) > .3f || abs(a[2] - b[2]) > .2f
+}
+
+/** 0xAARRGGBB to (hue 0–360, saturation 0–1, lightness 0–1). */
+internal fun rgbToHsl(rgb: Int): FloatArray {
+    val r = ((rgb shr 16) and 0xFF) / 255f
+    val g = ((rgb shr 8) and 0xFF) / 255f
+    val b = (rgb and 0xFF) / 255f
+    val max = maxOf(r, g, b)
+    val min = minOf(r, g, b)
+    val d = max - min
+    val l = (max + min) / 2
+    val h =
+        when {
+            d == 0f -> 0f
+            max == r -> ((g - b) / d).mod(6f)
+            max == g -> (b - r) / d + 2
+            else -> (r - g) / d + 4
+        } * 60
+    return floatArrayOf(h, if (d == 0f) 0f else d / (1 - abs(2 * l - 1)), l)
+}
+
+/** (hue 0–360, saturation 0–1, lightness 0–1) to an opaque 0xAARRGGBB colour. */
+internal fun hslToRgb(
+    h: Float,
+    s: Float,
+    l: Float,
+): Int {
+    val c = (1 - abs(2 * l - 1)) * s
+    val x = c * (1 - abs((h / 60).mod(2f) - 1))
+    val m = l - c / 2
+    val (r, g, b) =
+        when {
+            h < 60 -> Triple(c, x, 0f)
+            h < 120 -> Triple(x, c, 0f)
+            h < 180 -> Triple(0f, c, x)
+            h < 240 -> Triple(0f, x, c)
+            h < 300 -> Triple(x, 0f, c)
+            else -> Triple(c, 0f, x)
+        }
+
+    fun channel(v: Float) = ((v + m) * 255).roundToInt().coerceIn(0, 255)
+    return (0xFF shl 24) or (channel(r) shl 16) or (channel(g) shl 8) or channel(b)
 }

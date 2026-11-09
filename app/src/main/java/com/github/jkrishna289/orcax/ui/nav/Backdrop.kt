@@ -85,9 +85,10 @@ fun Backdrop(
     crossfadeDuration: Duration = 800.milliseconds,
 ) {
     val baseBackgroundColor = MaterialTheme.colorScheme.background
-    if (backdrop.hasColors &&
-        (backdropStyle == BackdropStyle.BACKDROP_DYNAMIC_COLOR || backdropStyle == BackdropStyle.UNRECOGNIZED)
-    ) {
+    val dynamic = backdropStyle == BackdropStyle.BACKDROP_DYNAMIC_COLOR || backdropStyle == BackdropStyle.UNRECOGNIZED
+    // Home and the other browsing screens: colour only, from the focused title's own scheme (see
+    // colorScheme). Movie and series pages: image only, so no wash there.
+    if (backdrop.hasColors && dynamic && !backdrop.titlePage) {
         val animPrimary by animateColorAsState(
             backdrop.primaryColor,
             animationSpec = tween(1250),
@@ -108,55 +109,42 @@ fun Backdrop(
                 modifier
                     .fillMaxSize()
                     .drawBehind {
+                        val reach = size.width * 0.8f
+                        fun glow(
+                            color: Color,
+                            x: Float,
+                            y: Float,
+                            radius: Float,
+                            fadeAt: Float,
+                        ) = drawRect(
+                            brush =
+                                Brush.radialGradient(
+                                    colorStops = arrayOf(0f to color, fadeAt to Color.Transparent),
+                                    center = Offset(size.width * x, size.height * y),
+                                    radius = radius,
+                                ),
+                        )
                         drawRect(color = baseBackgroundColor)
-                        // Top Left (Vibrant/Muted)
+                        // Large soft glows: the third colour low across the bottom, the second on the
+                        // right, the title's most present colour as the big one top-left.
+                        glow(animPrimary, .62f, 1.18f, reach * 1.1f, .72f)
+                        glow(animTertiary, 1.04f, .28f, reach * .9f, .70f)
+                        glow(animSecondary, .08f, -.08f, reach * 1.05f, .72f)
+                        // The lower half calms down so rows stay readable over the glows.
                         drawRect(
                             brush =
-                                Brush.radialGradient(
-                                    colors = listOf(animSecondary, Color.Transparent),
-                                    center = Offset(0f, 0f),
-                                    radius = size.width * 0.8f,
-                                ),
-                        )
-                        // Bottom Right (DarkVibrant/DarkMuted)
-                        drawRect(
-                            brush =
-                                Brush.radialGradient(
-                                    colors = listOf(animPrimary, Color.Transparent),
-                                    center = Offset(size.width, size.height),
-                                    radius = size.width * 0.8f,
-                                ),
-                        )
-                        // Bottom Left (Dark / Bridge)
-                        drawRect(
-                            brush =
-                                Brush.radialGradient(
-                                    colors =
-                                        listOf(
-                                            baseBackgroundColor,
-                                            Color.Transparent,
+                                Brush.verticalGradient(
+                                    colorStops =
+                                        arrayOf(
+                                            .45f to Color.Transparent,
+                                            1f to Color(0xFF100D16).copy(alpha = .5f),
                                         ),
-                                    center = Offset(0f, size.height),
-                                    radius = size.width * 0.8f,
-                                ),
-                        )
-                        // Top Right (Under Image - Vibrant/Bright)
-                        drawRect(
-                            brush =
-                                Brush.radialGradient(
-                                    colors = listOf(animTertiary, Color.Transparent),
-                                    center = Offset(size.width, 0f),
-                                    radius = size.width * 0.8f,
                                 ),
                         )
                     },
         )
     }
-    // Dynamic-color mode renders the extracted color wash (above) and no inset image, so a focused
-    // card tints the home/detail surfaces with just its colors instead of bleeding a hard thumbnail
-    // behind the content (problem #7 — "use the colours only"). The movie page's hero is the one
-    // exception: its layout is built around the image, and with only a wash it had no backdrop at
-    // all, so it shows in both styles. Only "None" turns it off.
+    // The movie page's framed hero image shows in Dynamic color and Image alike; only "None" turns it off.
     if (backdrop.hero && backdropStyle != BackdropStyle.BACKDROP_NONE) {
         // Movie Details v2 hero (movie details only, via BackdropResult.hero): backdrop framed
         // like the home billboard — rounded top corners, hairline border, slim side/top insets,
@@ -285,8 +273,8 @@ fun Backdrop(
             }
         }
     }
-    if (backdropStyle == BackdropStyle.BACKDROP_IMAGE_ONLY && !backdrop.hero) {
-        // Every non-hero surface (home, categories, series, grids): the original image-only look —
+    if (!backdrop.hero && (backdropStyle == BackdropStyle.BACKDROP_IMAGE_ONLY || (dynamic && backdrop.detail))) {
+        // The series page (Dynamic color or Image), and every non-hero surface in the Image style: the
         // still image inset top-right, edge-faded into the background by DstIn gradients.
         Box(
             modifier = modifier.fillMaxSize(),

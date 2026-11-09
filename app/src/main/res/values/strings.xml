@@ -39,6 +39,7 @@
     <string name="p2_more_count">+%1$d MORE</string>
     <string name="p2_watching">WATCHING</string>
     <string name="p2_episode_number">Episode %1$d</string>
+    <string name="season_number">Season %1$d</string>
     <string name="p2_ep_short">EP %1$d</string>
     <string name="p2_header_audio">AUDIO</string>
     <string name="p2_header_subtitles">SUBTITLES</string>
@@ -815,7 +816,7 @@
         <!--        <item>Banner</item>-->
     </string-array>
 
-    <string name="backdrop_style_dynamic">Image with dynamic color</string>
+    <string name="backdrop_style_dynamic">Colour on home, image on title pages</string>
     <string name="backdrop_style_image">Image only</string>
     <string name="enter_url_api_key"><![CDATA[Enter URL & API Key]]></string>
     <string name="api_key">API Key</string>

@@ -153,7 +153,7 @@ class SeriesViewModel
                 addCloseable { themeSongPlayer.stop() }
                 val item = fetchItem(seriesId)
                 canDeleteSeries.update { mediaManagementService.canDelete(item) }
-                backdropService.submit(item)
+                backdropService.submit(item, detail = true)
                 seriesName = item.name
                 tmdbId = item.data.providerIds?.get("Tmdb")?.toIntOrNull()
                 if (seriesPageType == SeriesPageType.OVERVIEW) {
@@ -295,7 +295,7 @@ class SeriesViewModel
 
         fun onResumePage() {
             item.value?.let { item ->
-                viewModelScope.launchDefault { backdropService.submit(item) }
+                viewModelScope.launchDefault { backdropService.submit(item, detail = true) }
                 viewModelScope.launchIO {
                     val playThemeSongs =
                         userPreferencesService
@@ -559,7 +559,7 @@ class SeriesViewModel
                 }
             }
             // Kind of hack to ensure the backdrop is reloaded if needed
-            item.value?.let { backdropService.submit(it) }
+            item.value?.let { backdropService.submit(it, detail = true) }
         }
 
         /**

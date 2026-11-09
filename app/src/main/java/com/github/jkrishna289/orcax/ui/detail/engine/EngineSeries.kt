@@ -171,7 +171,7 @@ class EngineSeriesViewModel
 
         fun onResume() {
             viewModelScope.launchIO {
-                backdropService.submit("tmdb:$tmdbId", imageUrlService.engineImageUrl(item.card.backdropImageUrl ?: item.card.imageUrl))
+                backdropService.submit("tmdb:$tmdbId", imageUrlService.engineImageUrl(item.card.backdropImageUrl ?: item.card.imageUrl), detail = true)
                 val volume = userPreferencesService.getCurrent().appPreferences.interfacePreferences.playThemeSongs
                 themeSongPlayer.playThemeFor(null, volume, tmdbId)
             }
