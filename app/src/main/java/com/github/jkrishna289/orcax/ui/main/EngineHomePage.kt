@@ -65,6 +65,7 @@ import com.github.jkrishna289.orcax.ui.LocalTrailerLanguage
 import com.github.jkrishna289.orcax.ui.LocalTrailerPlayerPool
 import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
 import com.github.jkrishna289.orcax.ui.cards.DynamicCardRow
+import com.github.jkrishna289.orcax.ui.cards.rowTitleStyle
 import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -354,7 +355,7 @@ fun EngineHomePage(
                         // real title, so content lands in the space already reserved for it — and
                         // skip the focus machinery below, since there's nothing to focus.
                         if (row.items.isEmpty()) {
-                            SkeletonRow(title = row.title)
+                            SkeletonRow(title = row.title, titleStyle = rowTitleStyle(row.id))
                             return@items
                         }
 
@@ -478,6 +479,8 @@ fun EngineHomePage(
                                 trailerStatusProvider = { viewModel.trailerStatusFor(it) },
                                 // Discover cards' focus panel (rating, age rating, synopsis).
                                 titleDetailsFor = { viewModel.titleDetailsFor(it) },
+                                // Impressions: a title shown on many days and never touched sinks.
+                                onShowItem = { viewModel.onCardShown(it) },
                             )
                             }
                         }

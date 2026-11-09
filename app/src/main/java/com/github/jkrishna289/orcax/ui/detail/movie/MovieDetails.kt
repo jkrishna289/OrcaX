@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -23,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.github.jkrishna289.orcax.ui.nav.HeroFrame
@@ -427,6 +430,16 @@ fun MovieDetailsContent(
 
     RequestOrRestoreFocus(focusRequesters.getOrNull(position))
 
+    // Tell the hero backdrop when the page is scrolled down, so it can blur behind the lower rows.
+    val listState = rememberLazyListState()
+    LaunchedEffect(listState) {
+        try {
+            snapshotFlow { listState.canScrollBackward }.collect { HeroFrame.scrolled = it }
+        } finally {
+            HeroFrame.scrolled = false
+        }
+    }
+
     // The page lives inside its hero backdrop's frame: text 16dp inside the border (it sat at 8dp from
     // the screen edge, on and outside the border), and rows scrolled sideways or the page scrolled up
     // clip at the frame rather than running over it.
@@ -442,6 +455,7 @@ fun MovieDetailsContent(
         @OptIn(ExperimentalFoundationApi::class)
         CompositionLocalProvider(LocalBringIntoViewSpec provides DetailsRowFocusSpec) {
             LazyColumn(
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 8.dp),
                 modifier = Modifier.fillMaxSize(),

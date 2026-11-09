@@ -39,6 +39,13 @@ class TestContinueWatchingRefresh {
         assertEquals(listOf(discovery, recent), completed)
     }
 
+    @Test
+    fun `a first watch puts Continue Watching under In library, not above it`() {
+        val libraries = RenderRow(id = "libraries", title = "In library")
+        val result = replaceContinueWatchingRow(listOf(libraries, discovery), listOf(continueRow(progress = 0.4)))
+        assertEquals(listOf("libraries", "continue", "discover"), result.map { it.id })
+    }
+
     private fun continueRow(progress: Double): RenderRow =
         RenderRow(
             id = "continue",

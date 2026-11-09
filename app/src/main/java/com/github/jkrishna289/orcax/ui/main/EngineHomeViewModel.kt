@@ -4,7 +4,12 @@ import android.os.SystemClock
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.CardAction
+import com.github.jkrishna289.orcax.engine.CardAspectRatio
+import com.github.jkrishna289.orcax.engine.CardDescriptor
+import com.github.jkrishna289.orcax.engine.CardType
+import com.github.jkrishna289.orcax.engine.MediaId
 import com.github.jkrishna289.orcax.engine.MediaType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RenderRow
@@ -15,11 +20,13 @@ import com.github.jkrishna289.orcax.services.FavoriteWatchManager
 import com.github.jkrishna289.orcax.services.HomeBundleCache
 import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.services.LocalHomeBundleBuilder
+import com.github.jkrishna289.orcax.services.NavDrawerService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.torrent.StreamWatchTracker
 import com.github.jkrishna289.orcax.ui.DEFAULT_TRAILER_PREVIEW_VOLUME
 import com.github.jkrishna289.orcax.ui.nav.Destination
+import com.github.jkrishna289.orcax.ui.nav.ServerNavDrawerItem
 import com.github.jkrishna289.orcax.ui.toTrailerVolume
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,6 +37,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -42,6 +55,8 @@ import org.jellyfin.sdk.api.client.extensions.itemsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
+import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
 import java.util.UUID
@@ -65,6 +80,7 @@ class EngineHomeViewModel
         private val imageUrlService: ImageUrlService,
         private val api: ApiClient,
         private val favoriteWatchManager: FavoriteWatchManager,
+        navDrawerService: NavDrawerService,
         streamWatchTracker: StreamWatchTracker,
         // Shared, reusable inline-trailer players (Phase 10) — provided to the UI via LocalTrailerPlayerPool.
         val trailerPlayerPool: com.github.jkrishna289.orcax.services.trailer.TrailerPlayerPool,
@@ -96,6 +112,11 @@ class EngineHomeViewModel
         private fun langHint(): String? = trailerLanguage.value.takeIf { it.isNotBlank() }
 
         private var heroes: List<RenderItem> = emptyList()
+
+        // "In library": one tile per server library (the Categories page's list), always the first
+        // row under the billboard. Built here rather than by the engine, so it never moves.
+        private var libraryRow: RenderRow? = null
+        private var libraryDestinations: Map<RenderItem, Destination> = emptyMap()
 
         // Favorite state for every hero, fetched in one call when the heroes change, so the
         // billboard's rotation reads it locally instead of hitting the server every few seconds.
@@ -135,6 +156,15 @@ class EngineHomeViewModel
 
         init {
             load()
+            viewModelScope.launch {
+                navDrawerService.state
+                    .map { s -> (s.items + s.moreItems).filterIsInstance<ServerNavDrawerItem>() }
+                    // The drawer empties itself on every user refresh (one follows playback) before
+                    // refilling; passing that through dropped the row, and its focus and scroll with it.
+                    .filter { it.isNotEmpty() }
+                    .distinctUntilChanged()
+                    .collectLatest { showLibraries(it) }
+            }
             // Periodically flush buffered home telemetry to the engine.
             viewModelScope.launch {
                 while (true) {
@@ -310,7 +340,7 @@ class EngineHomeViewModel
                 spotlight?.items.orEmpty().distinctBy { hero ->
                     hero.media.tmdbId?.let { it to hero.media.mediaType } ?: hero.media.jellyfinId ?: hero
                 }
-            val rows = bundle.rows.filterNot { it.id == SPOTLIGHT_ROW_ID }
+            val rows = withLibraries(bundle.rows.filterNot { it.id == SPOTLIGHT_ROW_ID })
 
             // Progressive loading re-applies the bundle as each row lands, so only re-seed the
             // billboard when the spotlight itself actually changed — otherwise every arriving row
@@ -344,6 +374,49 @@ class EngineHomeViewModel
 
             // Resolve favorite / ambient for the first hero item.
             if (heroesChanged && heroes.isNotEmpty()) onHeroActive(0)
+        }
+
+        private fun withLibraries(rows: List<RenderRow>): List<RenderRow> =
+            listOfNotNull(libraryRow) + rows.filterNot { it.id == LIBRARIES_ROW_ID }
+
+        private suspend fun showLibraries(libraries: List<ServerNavDrawerItem>) {
+            val tiles = coroutineScope { libraries.map { async { libraryTile(it) to it.destination } }.awaitAll() }
+            libraryDestinations = tiles.toMap()
+            libraryRow = tiles.takeIf { it.isNotEmpty() }?.let { RenderRow(id = LIBRARIES_ROW_ID, title = "In library", items = it.map { (tile, _) -> tile }) }
+            _state.update { if (it is EngineHomeState.Success) it.copy(rows = withLibraries(it.rows)) else it }
+        }
+
+        /**
+         * A library's tile: its name over the backdrop of the newest title in it. Jellyfin's own
+         * library image has the name drawn in, which doubled the label. No Jellyfin or TMDB id, so
+         * focus telemetry, trailers and the details router all pass it by; [onItemClick] opens it.
+         */
+        private suspend fun libraryTile(library: ServerNavDrawerItem): RenderItem {
+            val newest =
+                runCatching {
+                    api.itemsApi
+                        .getItems(
+                            userId = currentUserId,
+                            parentId = library.itemId,
+                            recursive = true,
+                            limit = 1,
+                            imageTypes = listOf(ImageType.BACKDROP),
+                            sortBy = listOf(ItemSortBy.DATE_CREATED),
+                            sortOrder = listOf(SortOrder.DESCENDING),
+                        ).content.items
+                        .firstOrNull()
+                        ?.id
+                }.getOrNull()
+            return RenderItem(
+                media = MediaId(availability = AvailabilityState.WATCH_NOW),
+                card =
+                    CardDescriptor(
+                        type = CardType.GENRE,
+                        aspectRatio = CardAspectRatio.WIDE,
+                        title = library.name,
+                        imageUrl = newest?.let { imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 360) },
+                    ),
+            )
         }
 
         /**
@@ -389,7 +462,7 @@ class EngineHomeViewModel
 
         private fun trackAndIlluminate(item: RenderItem) {
             // Feature A: a focus change ends the previous card's dwell — record it as a signal.
-            trackFocusChange(item.media.jellyfinId)
+            trackFocusChange(telemetryKey(item))
 
             // A late bundle or the billboard's re-seed can land after Search opened and cleared the
             // backdrop; it put the first hero's art behind the search field.
@@ -520,7 +593,8 @@ class EngineHomeViewModel
         }
 
         fun onItemClick(item: RenderItem) {
-            item.media.jellyfinId?.let { recordTelemetry(it, "CardClicked", 1.0) }
+            libraryDestinations[item]?.let { return navigationManager.navigateTo(it) }
+            telemetryKey(item)?.let { recordTelemetry(it, "CardClicked", 1.0) }
 
             // The badge never changes what Enter does — every card opens details. Firing the request
             // straight off the card used to be the only option because unowned titles had nowhere to
@@ -622,14 +696,34 @@ class EngineHomeViewModel
             }
         }
 
+        /**
+         * A home row card came on screen. Reported once per card per visit; the engine counts the days a
+         * title was shown, and one shown on many days that's never focused, clicked or played sinks.
+         */
+        fun onCardShown(item: RenderItem) {
+            val key = telemetryKey(item) ?: return
+            // Once per card per day: Home can stay open for days on a TV, and the engine counts days.
+            val day = System.currentTimeMillis() / DAY_MS
+            if (shownToday.add("$day|$key")) recordTelemetry(key, "CardImpression", 0.0)
+        }
+
+        private val shownToday = mutableSetOf<String>()
+
+        /**
+         * Who a telemetry event is about: the Jellyfin id, or "tmdb:<id>" for a title outside the
+         * library. Those used to send nothing at all, so with impressions reported they'd have looked
+         * shown-but-never-focused. Null for cards with neither (the "In library" tiles).
+         */
+        private fun telemetryKey(item: RenderItem): String? =
+            item.media.jellyfinId ?: item.media.tmdbId?.takeIf { it > 0 }?.let { "$TMDB_KEY_PREFIX$it" }
+
         private fun recordTelemetry(
-            itemId: String,
+            key: String,
             type: String,
             value: Double,
         ) {
-            synchronized(telemetryBuffer) {
-                telemetryBuffer.add(TelemetryEvent(itemId = itemId, eventType = type, value = value))
-            }
+            val event = telemetryEvent(key, type, value)
+            synchronized(telemetryBuffer) { telemetryBuffer.add(event) }
         }
 
         private suspend fun flushTelemetry() {
@@ -713,14 +807,40 @@ class EngineHomeViewModel
 
             /** How often buffered telemetry is flushed to the engine. */
             private const val TELEMETRY_FLUSH_MS = 10_000L
+
+            private const val DAY_MS = 86_400_000L
         }
     }
 
-/** Keep existing row positions; a first watch adds Continue Watching at the front of the feed. */
+/** The app-built "In library" row's id; it stays the first row under the billboard. */
+internal const val LIBRARIES_ROW_ID = "libraries"
+
+private const val TMDB_KEY_PREFIX = "tmdb:"
+private const val EMPTY_GUID = "00000000-0000-0000-0000-000000000000"
+
+/** A telemetry event for a key from telemetryKey: a Jellyfin id, or "tmdb:<id>" (sent by TMDB id). */
+internal fun telemetryEvent(
+    key: String,
+    type: String,
+    value: Double,
+): TelemetryEvent {
+    val tmdbId = if (key.startsWith(TMDB_KEY_PREFIX)) key.removePrefix(TMDB_KEY_PREFIX).toIntOrNull() else null
+    return if (tmdbId != null) {
+        TelemetryEvent(itemId = EMPTY_GUID, eventType = type, value = value, tmdbId = tmdbId)
+    } else {
+        TelemetryEvent(itemId = key, eventType = type, value = value)
+    }
+}
+
+/** Keep existing row positions; a first watch adds Continue Watching at the front of the feed (after "In library"). */
 internal fun replaceContinueWatchingRow(current: List<RenderRow>, fresh: List<RenderRow>): List<RenderRow> {
     val refreshed = fresh.firstOrNull { it.id == "continue" }?.takeIf { it.items.isNotEmpty() }
     val existingIndex = current.indexOfFirst { it.id == "continue" }
-    if (existingIndex < 0) return if (refreshed == null) current else listOf(refreshed) + current
+    if (existingIndex < 0) {
+        if (refreshed == null) return current
+        val at = if (current.firstOrNull()?.id == LIBRARIES_ROW_ID) 1 else 0
+        return current.toMutableList().apply { add(at, refreshed) }
+    }
     return current.toMutableList().apply {
         if (refreshed == null) removeAt(existingIndex) else set(existingIndex, refreshed)
     }

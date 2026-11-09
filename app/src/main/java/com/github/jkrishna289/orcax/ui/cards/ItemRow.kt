@@ -18,10 +18,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -51,6 +53,7 @@ fun <T> ItemRow(
     titleExtra: (@Composable () -> Unit)? = null,
     // Gap between cards; the row's edge padding stays [horizontalPadding].
     itemSpacing: Dp = horizontalPadding,
+    titleStyle: TextStyle = MaterialTheme.typography.titleLarge,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
@@ -67,16 +70,21 @@ fun <T> ItemRow(
                 onEnter = {
                     enterFocus.tryRequestFocus()
                 }
+                // A row's end is a wall: past the last card, the nearest thing to the right was the
+                // profile button in the top bar, so Right on a short row jumped the page to the top.
+                onExit = {
+                    if (requestedFocusDirection == FocusDirection.Right) cancelFocusChange()
+                }
             },
     ) {
         if (titleExtra == null) {
-            ItemRowTitle(title)
+            ItemRowTitle(title, style = titleStyle)
         } else {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                ItemRowTitle(title)
+                ItemRowTitle(title, style = titleStyle)
                 titleExtra()
             }
         }
@@ -136,9 +144,10 @@ fun <T> ItemRow(
 fun ItemRowTitle(
     title: String,
     modifier: Modifier = Modifier,
+    style: TextStyle = MaterialTheme.typography.titleLarge,
 ) = Text(
     text = title,
-    style = MaterialTheme.typography.titleLarge,
+    style = style,
     color = MaterialTheme.colorScheme.onBackground,
     modifier = modifier.padding(start = 8.dp),
 )

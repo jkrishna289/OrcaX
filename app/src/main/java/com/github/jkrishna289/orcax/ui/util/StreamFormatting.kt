@@ -159,9 +159,11 @@ object StreamFormatting {
         if (includeFlags) {
             val flags =
                 buildList {
-                    if (stream.isDefault) add(stream.localizedDefault)
-                    if (stream.isForced) add(stream.localizedForced)
-                    if (stream.isExternal) add(stream.localizedExternal)
+                    // The server only localizes these for subtitles: a forced audio track read
+                    // "Hindi DD+ 5.1 (Default, null)".
+                    if (stream.isDefault) add(stream.localizedDefault ?: context.getString(R.string.default_track))
+                    if (stream.isForced) add(stream.localizedForced ?: context.getString(R.string.forced_track))
+                    if (stream.isExternal) add(stream.localizedExternal ?: context.getString(R.string.external_track))
                 }.joinToString(", ")
             if (flags.isNotEmpty()) {
                 return "$name ($flags)"

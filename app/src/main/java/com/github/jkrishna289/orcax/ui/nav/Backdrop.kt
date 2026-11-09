@@ -3,6 +3,7 @@
 package com.github.jkrishna289.orcax.ui.nav
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -13,8 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -160,6 +164,9 @@ fun Backdrop(
         // darkened surface. Scrims and the ambient trailer render inside the clip, and blend into
         // the theme background so the hero melts into the page rather than ending at a hard edge.
         val heroShape = HeroFrame.shape
+        // Scrolled past the header (cast, more like this), the image softens and darkens so those
+        // rows read well over it. Blur needs Android 12; older devices just get the darkening.
+        val veil by animateFloatAsState(if (HeroFrame.scrolled) 1f else 0f, tween(400), label = "hero_veil")
         Box(
             modifier =
                 modifier
@@ -167,8 +174,10 @@ fun Backdrop(
                     .padding(top = HeroFrame.top, start = HeroFrame.side, end = HeroFrame.side)
                     .clip(heroShape)
                     .border(HeroFrame.border, Color.White.copy(alpha = .06f), heroShape)
+                    .blur((veil * 10).dp)
                     .drawWithContent {
                         drawContent()
+                        if (veil > 0f) drawRect(Color.Black, alpha = .35f * veil)
                         // Left scrim (text protection): background → transparent by 55%.
                         drawRect(
                             brush =
@@ -362,4 +371,8 @@ object HeroFrame {
 
     /** The frame's inside: the area the movie page's content fills. */
     val contentShape = RoundedCornerShape(topStart = 20.dp - border, topEnd = 20.dp - border)
+
+    /** Set by the movie page while it is scrolled down; the hero blurs and darkens behind it. */
+    // ponytail: one global flag, fine while the movie page is the only hero page at a time.
+    var scrolled by mutableStateOf(false)
 }

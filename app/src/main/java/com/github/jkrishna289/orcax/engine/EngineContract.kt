@@ -337,6 +337,9 @@ data class TelemetryEvent(
     @SerialName("EventType") val eventType: String,
     @SerialName("Value") val value: Double = 0.0,
     @SerialName("Context") val context: String? = null,
+    // A title outside the library has no Jellyfin id: ItemId is then the empty GUID and the engine
+    // attributes the event by TMDB id instead.
+    @SerialName("TmdbId") val tmdbId: Int? = null,
 )
 
 /** A batch of telemetry events for one user. */

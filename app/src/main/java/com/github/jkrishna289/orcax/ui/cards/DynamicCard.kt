@@ -140,13 +140,15 @@ fun DynamicCard(
             )
 
         CardType.GENRE ->
+            // Sized like the other 16:9 cards (Continue Watching); the engine never sends Genre cards,
+            // so this is the home's "In library" tiles.
             GenreCard(
                 genreId = null,
                 name = card.title,
                 imageUrl = resolvedImageUrl,
                 onClick = onClick,
                 onLongClick = onLongClick,
-                modifier = modifier.width(width),
+                modifier = modifier.width(EngineCardHeight * WIDE_CARD_SCALE * AspectRatios.WIDE),
             )
 
         CardType.STUDIO ->
@@ -1451,12 +1453,15 @@ fun DynamicCardRow(
     trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
     // Details for a Discover card's focus panel. Null = no panel.
     titleDetailsFor: (suspend (RenderItem) -> TitleDetails?)? = null,
+    // Called once when a card is composed — i.e. on screen (rows lay out lazily).
+    onShowItem: (RenderItem) -> Unit = {},
 ) {
     if (row.rowStyle == RowStyle.SPOTLIGHT) {
         // Exactly one item by contract; an empty row is a server bug, so render nothing rather
         // than crashing on first().
         val feature = row.items.firstOrNull()
         if (feature != null) {
+            LaunchedEffect(feature) { onShowItem(feature) }
             SpotlightCard(
                 item = feature,
                 onClick = { onClickItem(feature) },
@@ -1481,10 +1486,12 @@ fun DynamicCardRow(
         // each item's TOP_RANKED card type — rowStyle stays an advisory hint).
         titleExtra = if (row.rowStyle == RowStyle.TOP10) ({ Top10Chip() }) else null,
         itemSpacing = ENGINE_CARD_SPACING,
+        titleStyle = rowTitleStyle(row.id),
         onClickItem = { _, item -> onClickItem(item) },
         onLongClickItem = { _, item -> onLongClickItem(item) },
         cardContent = { _, item, cardModifier, onClick, onLongClick ->
             if (item != null) {
+                LaunchedEffect(item) { onShowItem(item) }
                 DynamicCard(
                     item = item,
                     onClick = onClick,
