@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -406,17 +409,29 @@ private fun MediaType.heroLabel(): String =
     }
 
 /**
- * The styled hero title fallback used when an item has no logo art: a small, letter-spaced lead-in
- * (everything but the last word) over a large final word, mirroring the "PROJECT / LOKI" treatment.
+ * A hero title's small lead-in and large main line: split after a colon when there is one ("LAW &
+ * ORDER:" over "Organized Crime"), else before the last word ("PROJECT" over "Loki"). Splitting
+ * before the last word cut "Law & Order: Organized Crime" into "LAW & ORDER: ORGANIZ…" over "Crime".
  */
+internal fun heroTitleParts(title: String): Pair<String?, String> {
+    val trimmed = title.trim()
+    val colon = trimmed.indexOf(':')
+    val space = trimmed.lastIndexOf(' ')
+    return when {
+        colon in 1 until trimmed.lastIndex -> trimmed.substring(0, colon + 1) to trimmed.substring(colon + 1).trim()
+        space > 0 -> trimmed.substring(0, space) to trimmed.substring(space + 1)
+        else -> null to trimmed
+    }
+}
+
+/** The styled hero title fallback used when an item has no logo art; see [heroTitleParts]. */
 @Composable
 private fun HeroTitle(title: String) {
-    val trimmed = title.trim()
-    val split = trimmed.lastIndexOf(' ')
+    val (lead, main) = heroTitleParts(title)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        if (split > 0) {
+        if (lead != null) {
             Text(
-                text = trimmed.substring(0, split).uppercase(),
+                text = lead.uppercase(),
                 color = Color.White.copy(alpha = 0.9f),
                 fontWeight = FontWeight.Bold,
                 fontSize = 19.sp,
@@ -425,14 +440,14 @@ private fun HeroTitle(title: String) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Text(
-            text = trimmed.substring(split + 1),
-            color = Color.White,
-            fontWeight = FontWeight.Black,
-            fontSize = 60.sp,
-            lineHeight = 60.sp,
+        // Shrinks to fit rather than cutting off: "Organized Crime" read "Organized …" at 60sp. The
+        // fixed line height keeps the buttons below from moving as the size changes.
+        BasicText(
+            text = main,
+            style = TextStyle(color = Color.White, fontWeight = FontWeight.Black, fontSize = 60.sp, lineHeight = 60.sp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 32.sp, maxFontSize = 60.sp),
         )
     }
 }
@@ -544,18 +559,19 @@ private fun BillboardActions(
     val playFocus = playFocusRequester ?: remember { FocusRequester() }
 
     // Primary CTA driven by the hero's actions: Resume > Request (Discover) > Play.
+    val requests = CardAction.REQUEST in actions && CardAction.PLAY !in actions && CardAction.RESUME !in actions
     val (primaryLabel, primaryAction) =
         when {
             CardAction.RESUME in actions -> stringResource(R.string.resume) to onPlay
-            CardAction.REQUEST in actions && CardAction.PLAY !in actions ->
-                stringResource(R.string.request) to onRequest
+            requests -> stringResource(R.string.request) to onRequest
             else -> stringResource(R.string.play) to onPlay
         }
 
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         BillboardButton(
             label = primaryLabel,
-            leading = "▶",
+            // A play arrow on Request promised playback; the title page's own button reads "+ Request".
+            leading = if (requests) "+" else "▶",
             primary = true,
             onClick = primaryAction,
             // Up from the primary action returns to the top nav, so the bar is always reachable (#1).

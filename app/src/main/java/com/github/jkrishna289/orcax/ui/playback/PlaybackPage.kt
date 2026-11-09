@@ -388,7 +388,8 @@ fun PlaybackPageContent(
                 )
             }
         }
-        phaseViewModel.updateUpNext(items)
+        // The title being watched alone isn't "up next"; with nothing after it, the rail stays hidden.
+        phaseViewModel.updateUpNext(items.takeIf { it.size > 1 }.orEmpty())
     }
 
     // ── Phase 2 COMPACT ambient info (cast + all metadata) ──────────────────

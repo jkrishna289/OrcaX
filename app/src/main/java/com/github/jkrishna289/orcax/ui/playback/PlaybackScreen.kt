@@ -516,7 +516,7 @@ private fun Phase2OverlayLayer(
                         skipFwdFR   = skipFwdFR,
                         audioChipFR = audioChipFR,
                         ccChipFR    = ccChipFR,
-                        firstCardFR = cardFRs[0],
+                        firstCardFR = if (state.upNextItems.isNotEmpty()) cardFRs[0] else FocusRequester.Cancel,
                         canFocus    = !isCompact,
                     )
 
@@ -549,7 +549,7 @@ private fun Phase2OverlayLayer(
                             focusPropertiesBlock = {
                                 left  = audioChipFR
                                 up    = skipFwdFR
-                                right = cardFRs[0]
+                                right = if (state.upNextItems.isNotEmpty()) cardFRs[0] else FocusRequester.Cancel
                                 down  = seekBarFR
                             }
                         )
@@ -604,160 +604,163 @@ private fun Phase2OverlayLayer(
                 label         = "chevron_rotate"
             )
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .fillMaxWidth(0.36f)
-                    .fillMaxHeight()
-                    .graphicsLayer { alpha = chromeAlpha }
-                    // Top inset clears the title; bottom inset reserves the seek-bar /
-                    // timestamp / subtitle zone so cards never collide with "1:02:02".
-                    .padding(
-                        top    = 90.dp,
-                        end    = PlaybackDimens.SafeH,
-                        bottom = PlaybackDimens.SafeV + 96.dp
-                    )
-                    .onFocusChanged { focusState ->
-                        if (!focusState.hasFocus && isRailExpanded) isRailExpanded = false
-                    }
-            ) {
-                Column(
-                    // Scrolls when the expanded rail outgrows the reserved height; the
-                    // horizontal padding gives the focus ring/scale room inside the clip.
+            // Hidden when nothing follows: a movie showed itself here under an "Up next" header.
+            if (state.upNextItems.isNotEmpty()) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .align(Alignment.TopEnd)
+                        .fillMaxWidth(0.36f)
+                        .fillMaxHeight()
+                        .graphicsLayer { alpha = chromeAlpha }
+                        // Top inset clears the title; bottom inset reserves the seek-bar /
+                        // timestamp / subtitle zone so cards never collide with "1:02:02".
+                        .padding(
+                            top    = 90.dp,
+                            end    = PlaybackDimens.SafeH,
+                            bottom = PlaybackDimens.SafeV + 96.dp
+                        )
+                        .onFocusChanged { focusState ->
+                            if (!focusState.hasFocus && isRailExpanded) isRailExpanded = false
+                        }
                 ) {
-                    // Header row
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment     = Alignment.CenterVertically
+                    Column(
+                        // Scrolls when the expanded rail outgrows the reserved height; the
+                        // horizontal padding gives the focus ring/scale room inside the clip.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text          = stringResource(R.string.p2_up_next),
-                            fontSize      = 12.sp,
-                            fontWeight    = FontWeight.Bold,
-                            letterSpacing = (0.14f * 12).sp,
-                            color         = Color.White.copy(alpha = 0.68f)
-                        )
-                        Text(
-                            text     = "▾",
-                            fontSize = 14.sp,
-                            color    = Color.White.copy(alpha = 0.68f),
-                            modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }
-                        )
-                        if (hiddenCount > 0) {
-                            AnimatedVisibility(
-                                visible = !isRailExpanded,
-                                enter   = fadeIn(tween(200)),
-                                exit    = fadeOut(tween(200))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(PlaybackColors.Purple.copy(alpha = 0.22f))
-                                        .border(1.dp, PlaybackColors.Purple.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
-                                        .padding(horizontal = 9.dp, vertical = 2.dp)
+                        // Header row
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment     = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text          = stringResource(R.string.p2_up_next),
+                                fontSize      = 12.sp,
+                                fontWeight    = FontWeight.Bold,
+                                letterSpacing = (0.14f * 12).sp,
+                                color         = Color.White.copy(alpha = 0.68f)
+                            )
+                            Text(
+                                text     = "▾",
+                                fontSize = 14.sp,
+                                color    = Color.White.copy(alpha = 0.68f),
+                                modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }
+                            )
+                            if (hiddenCount > 0) {
+                                AnimatedVisibility(
+                                    visible = !isRailExpanded,
+                                    enter   = fadeIn(tween(200)),
+                                    exit    = fadeOut(tween(200))
                                 ) {
-                                    Text(
-                                        text       = stringResource(R.string.p2_more_count, hiddenCount),
-                                        fontSize   = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color      = PlaybackColors.Purple
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(PlaybackColors.Purple.copy(alpha = 0.22f))
+                                            .border(1.dp, PlaybackColors.Purple.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                                            .padding(horizontal = 9.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text       = stringResource(R.string.p2_more_count, hiddenCount),
+                                            fontSize   = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color      = PlaybackColors.Purple
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-
-                    Spacer(Modifier.height(2.dp))
-
-                    // Card 0 — always visible (Watching). Its label/progress are derived
-                    // live from the player position so it reads "Xm left" with a real bar.
-                    state.upNextItems.getOrNull(0)?.let { item ->
-                        val displayItem = if (item.isCurrentlyWatching && state.durationMs > 0L) {
-                            val remaining = (state.durationMs - state.seekPositionMs).coerceAtLeast(0L)
-                            item.copy(
-                                durationLabel    = formatMinutesLeft(remaining),
-                                progressFraction = (state.seekPositionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
+    
+                        Spacer(Modifier.height(2.dp))
+    
+                        // Card 0 — always visible (Watching). Its label/progress are derived
+                        // live from the player position so it reads "Xm left" with a real bar.
+                        state.upNextItems.getOrNull(0)?.let { item ->
+                            val displayItem = if (item.isCurrentlyWatching && state.durationMs > 0L) {
+                                val remaining = (state.durationMs - state.seekPositionMs).coerceAtLeast(0L)
+                                item.copy(
+                                    durationLabel    = formatMinutesLeft(remaining),
+                                    progressFraction = (state.seekPositionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
+                                )
+                            } else {
+                                item
+                            }
+                            Phase2Card(
+                                item           = displayItem,
+                                onClick        = { onPlayUpNext(displayItem) },
+                                focusRequester = cardFRs[0],
+                                focusProperties = {
+                                    canFocus = !isCompact
+                                    up    = FocusRequester.Cancel
+                                    left  = skipFwdFR
+                                    right = FocusRequester.Cancel
+                                    down  = if (state.upNextItems.size > 1) cardFRs[1]
+                                            else FocusRequester.Default
+                                },
+                                onDownPressed  = if (state.upNextItems.size <= 1) ({ viewModel.dismissPhase2() }) else null,
+                                onFocused      = { isRailExpanded = true }
                             )
-                        } else {
-                            item
                         }
-                        Phase2Card(
-                            item           = displayItem,
-                            onClick        = { onPlayUpNext(displayItem) },
-                            focusRequester = cardFRs[0],
-                            focusProperties = {
-                                canFocus = !isCompact
-                                up    = FocusRequester.Cancel
-                                left  = skipFwdFR
-                                right = FocusRequester.Cancel
-                                down  = if (state.upNextItems.size > 1) cardFRs[1]
-                                        else FocusRequester.Default
-                            },
-                            onDownPressed  = if (state.upNextItems.size <= 1) ({ viewModel.dismissPhase2() }) else null,
-                            onFocused      = { isRailExpanded = true }
-                        )
-                    }
-
-                    // Card 1 — always visible
-                    state.upNextItems.getOrNull(1)?.let { item ->
-                        val card1Down = if (isRailExpanded && state.upNextItems.size > 2) cardFRs[2]
-                                        else FocusRequester.Default
-                        Phase2Card(
-                            item           = item,
-                            onClick        = { onPlayUpNext(item) },
-                            focusRequester = cardFRs[1],
-                            focusProperties = {
-                                canFocus = !isCompact
-                                up    = cardFRs[0]
-                                left  = ccChipFR
-                                right = FocusRequester.Cancel
-                                down  = card1Down
-                            },
-                            onDownPressed  = if (!isRailExpanded || state.upNextItems.size <= 2)
-                                             ({ viewModel.dismissPhase2() }) else null,
-                            onFocused      = { isRailExpanded = true }
-                        )
-                    }
-
-                    // Cards 2–4 — expanded only, staggered reveal
-                    val staggerDelays = listOf(0, 40, 100)
-                    state.upNextItems.drop(2).take(3).forEachIndexed { extraIdx, item ->
-                        val cardIdx = extraIdx + 2
-                        val delayMs = staggerDelays.getOrElse(extraIdx) { 160 }
-                        val isLast  = cardIdx == (state.upNextItems.size - 1).coerceAtMost(4)
-
-                        AnimatedVisibility(
-                            visible = isRailExpanded,
-                            enter   = fadeIn(tween(450, delayMillis = delayMs)) +
-                                      scaleIn(tween(450, delayMillis = delayMs), initialScale = 0.95f) +
-                                      slideInVertically(tween(450, delayMillis = delayMs)) { -(it / 5) },
-                            exit    = fadeOut(tween(200)) +
-                                      scaleOut(tween(200), targetScale = 0.95f) +
-                                      slideOutVertically(tween(200)) { -(it / 5) }
-                        ) {
-                            val prevFR = cardFRs[cardIdx - 1]
-                            val nextFR = if (cardIdx < 4 && state.upNextItems.size > cardIdx + 1)
-                                cardFRs[cardIdx + 1] else FocusRequester.Default
-
+    
+                        // Card 1 — always visible
+                        state.upNextItems.getOrNull(1)?.let { item ->
+                            val card1Down = if (isRailExpanded && state.upNextItems.size > 2) cardFRs[2]
+                                            else FocusRequester.Default
                             Phase2Card(
                                 item           = item,
                                 onClick        = { onPlayUpNext(item) },
-                                focusRequester = cardFRs[cardIdx],
+                                focusRequester = cardFRs[1],
                                 focusProperties = {
-                                    canFocus = isRailExpanded && !isCompact
-                                    up       = prevFR
-                                    left     = ccChipFR
-                                    right    = FocusRequester.Cancel
-                                    down     = nextFR
+                                    canFocus = !isCompact
+                                    up    = cardFRs[0]
+                                    left  = ccChipFR
+                                    right = FocusRequester.Cancel
+                                    down  = card1Down
                                 },
-                                onDownPressed  = if (isLast) ({ viewModel.dismissPhase2() }) else null,
-                                onFocused      = {}
+                                onDownPressed  = if (!isRailExpanded || state.upNextItems.size <= 2)
+                                                 ({ viewModel.dismissPhase2() }) else null,
+                                onFocused      = { isRailExpanded = true }
                             )
+                        }
+    
+                        // Cards 2–4 — expanded only, staggered reveal
+                        val staggerDelays = listOf(0, 40, 100)
+                        state.upNextItems.drop(2).take(3).forEachIndexed { extraIdx, item ->
+                            val cardIdx = extraIdx + 2
+                            val delayMs = staggerDelays.getOrElse(extraIdx) { 160 }
+                            val isLast  = cardIdx == (state.upNextItems.size - 1).coerceAtMost(4)
+    
+                            AnimatedVisibility(
+                                visible = isRailExpanded,
+                                enter   = fadeIn(tween(450, delayMillis = delayMs)) +
+                                          scaleIn(tween(450, delayMillis = delayMs), initialScale = 0.95f) +
+                                          slideInVertically(tween(450, delayMillis = delayMs)) { -(it / 5) },
+                                exit    = fadeOut(tween(200)) +
+                                          scaleOut(tween(200), targetScale = 0.95f) +
+                                          slideOutVertically(tween(200)) { -(it / 5) }
+                            ) {
+                                val prevFR = cardFRs[cardIdx - 1]
+                                val nextFR = if (cardIdx < 4 && state.upNextItems.size > cardIdx + 1)
+                                    cardFRs[cardIdx + 1] else FocusRequester.Default
+    
+                                Phase2Card(
+                                    item           = item,
+                                    onClick        = { onPlayUpNext(item) },
+                                    focusRequester = cardFRs[cardIdx],
+                                    focusProperties = {
+                                        canFocus = isRailExpanded && !isCompact
+                                        up       = prevFR
+                                        left     = ccChipFR
+                                        right    = FocusRequester.Cancel
+                                        down     = nextFR
+                                    },
+                                    onDownPressed  = if (isLast) ({ viewModel.dismissPhase2() }) else null,
+                                    onFocused      = {}
+                                )
+                            }
                         }
                     }
                 }
