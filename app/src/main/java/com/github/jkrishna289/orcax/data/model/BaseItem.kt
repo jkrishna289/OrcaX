@@ -138,12 +138,16 @@ data class BaseItem(
                             } else {
                                 data.productionYear?.let { add(it.toString()) }
                             }
+                            // Under half a minute rounds to zero, which printed as "0s": every series
+                            // page read "1999 - Present • 0s".
                             data.runTimeTicks
                                 ?.ticks
                                 ?.roundMinutes
+                                ?.takeIf { it.isPositive() }
                                 ?.let { add(it.toString()) }
                             data.timeRemaining
                                 ?.roundMinutes
+                                ?.takeIf { it.isPositive() }
                                 ?.let { add("$it left") }
                         }
                     details.forEachIndexed { index, string ->

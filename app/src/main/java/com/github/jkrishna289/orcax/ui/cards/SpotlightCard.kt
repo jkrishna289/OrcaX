@@ -454,7 +454,10 @@ private fun SpotlightActions(
             modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
         )
         BillboardButton(label = stringResource(R.string.info), primary = false, onClick = onClick)
-        BillboardButton(label = stringResource(R.string.billboard_watchlist), primary = false, onClick = onWatchlist)
+        // A Jellyfin favorite: nothing to add for a title outside the library.
+        if (item.media.jellyfinId != null) {
+            BillboardButton(label = stringResource(R.string.billboard_watchlist), primary = false, onClick = onWatchlist)
+        }
     }
 }
 

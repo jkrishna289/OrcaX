@@ -52,6 +52,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -220,6 +221,7 @@ fun Billboard(
             BillboardActions(
                 actions = card.actions,
                 isFavorite = isFavorite,
+                canWatchlist = media.jellyfinId != null,
                 onPlay = onPlay,
                 onRequest = onRequest,
                 onTrailer = onTrailer,
@@ -430,14 +432,21 @@ private fun HeroTitle(title: String) {
     val (lead, main) = heroTitleParts(title)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (lead != null) {
-            Text(
+            // Shrinks too: "MALCOLM IN THE MIDDLE:" read "MALCOLM IN THE MIDDL…". Spacing in em
+            // keeps the tracking in step with the size.
+            BasicText(
                 text = lead.uppercase(),
-                color = Color.White.copy(alpha = 0.9f),
-                fontWeight = FontWeight.Bold,
-                fontSize = 19.sp,
-                letterSpacing = 7.sp,
+                style =
+                    TextStyle(
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 19.sp,
+                        lineHeight = 24.sp,
+                        letterSpacing = 0.37.em,
+                    ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = 19.sp),
             )
         }
         // Shrinks to fit rather than cutting off: "Organized Crime" read "Organized …" at 60sp. The
@@ -545,6 +554,8 @@ private fun GenreBreadcrumb(item: RenderItem) {
 private fun BillboardActions(
     actions: List<CardAction>,
     isFavorite: Boolean,
+    // The watchlist is a Jellyfin favorite, so a title outside the library has none to add to.
+    canWatchlist: Boolean,
     onPlay: () -> Unit,
     onRequest: () -> Unit,
     onTrailer: () -> Unit,
@@ -587,16 +598,18 @@ private fun BillboardActions(
                     ),
         )
         BillboardButton(label = stringResource(R.string.trailer), primary = false, onClick = onTrailer)
-        BillboardButton(
-            label =
-                if (isFavorite) {
-                    stringResource(R.string.billboard_watchlisted)
-                } else {
-                    stringResource(R.string.billboard_watchlist)
-                },
-            primary = false,
-            onClick = onWatchlist,
-        )
+        if (canWatchlist) {
+            BillboardButton(
+                label =
+                    if (isFavorite) {
+                        stringResource(R.string.billboard_watchlisted)
+                    } else {
+                        stringResource(R.string.billboard_watchlist)
+                    },
+                primary = false,
+                onClick = onWatchlist,
+            )
+        }
         BillboardButton(label = stringResource(R.string.info), primary = false, onClick = onInfo)
     }
 }

@@ -491,7 +491,10 @@ class EngineHomeViewModel
         private fun ambientUrl(item: RenderItem): String? =
             imageUrlService.engineImageUrl(item.card.backdropImageUrl ?: item.card.imageUrl.takeIf { item.media.jellyfinId == null })
                 ?: item.media.jellyfinId?.toUUIDOrNull()?.let {
-                    imageUrlService.getItemImageUrl(itemId = it, imageType = ImageType.BACKDROP, fillHeight = 1080)
+                    // A Continue Watching card shows the item's PRIMARY (an episode's still). Episodes
+                    // have no backdrop of their own, so sampling BACKDROP gave them grey or no colour.
+                    val shown = if (item.card.showProgress) ImageType.PRIMARY else ImageType.BACKDROP
+                    imageUrlService.getItemImageUrl(itemId = it, imageType = shown, fillHeight = 1080)
                 }
 
         /** The server-cached trailer URL for a card (#11), or null when there's no TMDB id. */
@@ -630,10 +633,13 @@ class EngineHomeViewModel
 
         /** Optimistically toggles the spotlight item's Jellyfin favorite (the "watchlist"). */
         fun onWatchlist(item: RenderItem) {
-            val id = item.media.jellyfinId?.toUUIDOrNull() ?: return navigateToDetail(item)
-            val target = !_heroFavorite.value
-            _heroFavorite.value = target // optimistic; revert below on failure
-            heroFavorites[id] = target
+            // Outside the library there is no favorite to set. This used to open the title page,
+            // where Request has focus, so pressing twice sent a request.
+            val id = item.media.jellyfinId?.toUUIDOrNull() ?: return
+            // The Spotlight row's button lands here too: flip this item's state, not the hero's.
+            val target = heroFavorites[id] != true
+            heroFavorites[id] = target // optimistic; revert below on failure
+            if (activeHeroId == id) _heroFavorite.value = target
             viewModelScope.launch {
                 val ok = runCatching { favoriteWatchManager.setFavorite(id, target) }.isSuccess
                 if (!ok) {

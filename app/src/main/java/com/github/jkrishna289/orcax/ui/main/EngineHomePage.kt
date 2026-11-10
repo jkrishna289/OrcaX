@@ -66,7 +66,9 @@ import com.github.jkrishna289.orcax.ui.LocalTrailerPlayerPool
 import com.github.jkrishna289.orcax.ui.LocalTrailerVolume
 import com.github.jkrishna289.orcax.ui.cards.DynamicCardRow
 import com.github.jkrishna289.orcax.ui.tryRequestFocus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /**
@@ -231,8 +233,12 @@ fun EngineHomePage(
             // Plain artwork rotation: only with >1 hero and while the billboard is visible. Paused
             // once the viewer presses a key on it, so the title can't change under the button they
             // are about to press (Request has no confirm step here).
-            LaunchedEffect(heroes, activeHero, isAtTop, billboardEngaged) {
-                if (heroes.size <= 1 || !isAtTop || billboardEngaged) return@LaunchedEffect
+            // Moving between the billboard's buttons reports "no focus" for a moment, which used
+            // to clear the flag on every press, so the rotation never stopped. Only a row taking
+            // focus clears it now; the pause still needs the billboard focused.
+            LaunchedEffect(focusedRowId) { if (focusedRowId != null) billboardEngaged = false }
+            LaunchedEffect(heroes, activeHero, isAtTop, billboardEngaged, billboardFocused) {
+                if (heroes.size <= 1 || !isAtTop || (billboardEngaged && billboardFocused)) return@LaunchedEffect
                 delay(SPOTLIGHT_ROTATE_MS)
                 activeHero = (activeHero + 1) % heroes.size
             }
@@ -325,10 +331,18 @@ fun EngineHomePage(
                                                     // Left from here, Back comes back here — not to a row visited earlier.
                                                     lastFocusedRowId = null
                                                     navHadFocus = false
-                                                    scope.launch { listState.animateScrollToItem(0) }
+                                                    scope.launch {
+                                                        // The focused button's own bring-into-view can cancel this
+                                                        // halfway, leaving the top bar over the title: snap the rest.
+                                                        try {
+                                                            listState.animateScrollToItem(0)
+                                                        } catch (e: CancellationException) {
+                                                            ensureActive()
+                                                            if (billboardFocused) listState.scrollToItem(0)
+                                                        }
+                                                    }
                                                 } else {
                                                     billboardFocused = false
-                                                    billboardEngaged = false
                                                 }
                                             }.onPreviewKeyEvent {
                                                 if (it.type == KeyEventType.KeyDown) billboardEngaged = true

@@ -123,7 +123,8 @@ class EpisodeViewModel
                     this@EpisodeViewModel.item.value = item
                     chosenStreams.value = result
                     loading.value = LoadingState.Success
-                    backdropService.submit(item)
+                    // A title page: the series image, no colour wash (an episode has no backdrop of its own).
+                    backdropService.submit(item, detail = true)
                 }
             }
 
