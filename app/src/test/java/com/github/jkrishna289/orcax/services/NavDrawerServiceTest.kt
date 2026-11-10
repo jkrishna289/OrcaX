@@ -6,6 +6,7 @@ import com.github.jkrishna289.orcax.data.ServerPreferencesDao
 import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.data.model.JellyfinUser
 import com.github.jkrishna289.orcax.ui.nav.NavDrawerItem
+import com.github.jkrishna289.orcax.ui.nav.ServerNavDrawerItem
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -19,6 +20,8 @@ import kotlinx.coroutines.test.setMain
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.api.operations.UserViewsApi
+import org.jellyfin.sdk.model.api.BaseItemDto
+import org.jellyfin.sdk.model.api.CollectionType
 import org.jellyfin.sdk.model.api.UserDto
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -38,6 +41,12 @@ class NavDrawerServiceTest {
     private val currentUser = MutableLiveData<JellyfinUser?>()
     private val currentUserDto = MutableLiveData<UserDto?>()
     private val scope = CoroutineScope(Dispatchers.Unconfined)
+    private val movies =
+        mockk<BaseItemDto>(relaxed = true) {
+            every { id } returns UUID.fromString("f137a2dd-21bb-c1b9-9aa5-c0f6bf02a805")
+            every { name } returns "Movies"
+            every { collectionType } returns CollectionType.MOVIES
+        }
 
     @Before
     fun setUp() {
@@ -55,7 +64,7 @@ class NavDrawerServiceTest {
         val userViewsApi = mockk<UserViewsApi>()
         var calls = 0
         coEvery { userViewsApi.getUserViews(userId = userId) } answers {
-            if (calls++ == 0) throw IllegalStateException("401") else mockQueryResult()
+            if (calls++ == 0) throw IllegalStateException("401") else mockQueryResult(listOf(movies))
         }
         val api = mockk<ApiClient> { every { this@mockk.userViewsApi } returns userViewsApi }
         val serverRepository =
@@ -75,7 +84,7 @@ class NavDrawerServiceTest {
         // e.g. signing in again: the user is re-emitted and this time the server answers
         currentUserDto.value = userDto
         awaitTrue("the drawer stayed empty after a later successful fetch") {
-            service.state.value.items == listOf(NavDrawerItem.Favorites)
+            service.state.value.items.map { it.id } == listOf(ServerNavDrawerItem.getId(movies.id))
         }
     }
 

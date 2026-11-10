@@ -16,11 +16,9 @@
     <string name="collections">Collezioni</string>
     <string name="add_user">Aggiungi Utente</string>
     <string name="add_server">Aggiungi Server</string>
-    <string name="add_favorite">Preferito</string>
     <string name="active_recordings">Registrazioni attive</string>
     <string name="about">Informazioni</string>
     <string name="genres">Generi</string>
-    <string name="favorites">Preferiti</string>
     <string name="confirm">Conferma</string>
     <string name="choose_stream">Scegli %1$s</string>
     <string name="clear_image_cache">Pulisci cache immagini</string>
@@ -55,7 +53,6 @@
     <string name="recommended">Consigliati</string>
     <string name="record_program">Registra programma</string>
     <string name="record_series">Registra serie</string>
-    <string name="remove_favorite">Rimuovi dai preferiti</string>
     <string name="restart">Riavvia</string>
     <string name="resume">Riprendi</string>
     <string name="save">Salva</string>
@@ -367,7 +364,6 @@
     <string name="ref_frames">Frame di riferimento</string>
     <string name="layout">Disposizione</string>
     <string name="live_tv_repeat">Ripeti</string>
-    <string name="favorite_channels_at_beginning">Mostra prima i canali preferiti</string>
     <string name="sort_channels_recently_watched">Ordina canali per ultimo guardato</string>
     <string name="color_code_programs">Codifica colori per i programmi</string>
     <string name="subtitle_delay">Ritardo sottotitoli</string>
@@ -477,7 +473,6 @@
     <string name="load_from_web_client">Carica dal client web</string>
     <string name="use_series">Usa immagine delle serie</string>
     <string name="customize_home_summary">Scegli righe e immagini nella home page</string>
-    <string name="favorite_items">Preferito %s</string>
     <string name="content_scale_fit">Adatta</string>
     <string name="content_scale_crop">Ritaglia</string>
     <string name="content_scale_fill">Riempi</string>

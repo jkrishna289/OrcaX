@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="add_favorite">Añadir a Favoritos</string>
     <string name="add_server">Añadir servidor</string>
     <string name="add_user">Añadir usuario</string>
     <string name="audio">Audio</string>
@@ -21,7 +20,6 @@
     <string name="enabled">Activado</string>
     <string name="episodes">Episodios</string>
     <string name="external_track">Externo</string>
-    <string name="favorites">Favoritos</string>
     <string name="file_size">Tamaño</string>
     <string name="genres">Géneros</string>
     <string name="home">Inicio</string>
@@ -99,7 +97,6 @@
     <string name="recap">Resumen</string>
     <string name="record_program">Grabar Programa</string>
     <string name="record_series">Grabar serie</string>
-    <string name="remove_favorite">Quitar de favoritos</string>
     <string name="show_debug_info">Mostrar información de depuración</string>
     <string name="show">Mostrar</string>
     <string name="shuffle">Aleatorio</string>
@@ -370,7 +367,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Mostrar títulos</string>
     <string name="live_tv_repeat">Repetir</string>
-    <string name="favorite_channels_at_beginning">Mostrar primero los canales favoritos</string>
     <string name="sort_channels_recently_watched">Ordenar los canales por vistos recientemente</string>
     <string name="color_code_programs">Programas codificados por colores</string>
     <string name="subtitle_delay">Retardo de subtítulos</string>
@@ -477,7 +473,6 @@
     <string name="display_presets_description">Preajustes integrados para estilizar todas las filas</string>
     <string name="customize_home_summary">Elegir filas e imágenes en la página de inicio</string>
     <string name="recently_released_in">Lanzado recientemente en %1$s</string>
-    <string name="favorite_items">Favoritos%s</string>
     <string name="content_scale_fit">Ajustar</string>
     <string name="content_scale_crop">Recortar</string>
     <string name="content_scale_fill">Rellenar</string>

@@ -86,7 +86,6 @@ fun EngineHomePage(
 ) {
     val viewModel: EngineHomeViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val heroFavorite by viewModel.heroFavorite.collectAsStateWithLifecycle()
 
     LifecycleResumeEffect(viewModel) {
         viewModel.onHomeResumed()
@@ -212,14 +211,13 @@ fun EngineHomePage(
             val billboardHeight = screenHeight * billboardHeightFraction
 
             // Rotating billboard: the active hero advances on a fixed artwork-only timer while the
-            // billboard is on screen. The VM resolves each active item's watchlist state and ambient
-            // color. The billboard no longer plays trailers, so nothing can hold the rotation.
+            // billboard is on screen. The VM resolves each active item's ambient color. The billboard no longer plays trailers, so nothing can hold the rotation.
             val heroes = s.heroes
             PreloadBillboardArt(heroes)
             // Keyed on the heroes themselves, not the whole state: progressive loading emits a new
             // state for every row that lands, and keying on `s` would restart the rotation each time.
             var activeHero by remember(heroes) { mutableStateOf(0) }
-            // Drive favorite/ambient for the active item — but only while the billboard is the
+            // Drive the ambient colour for the active item — but only while the billboard is the
             // focused zone. A focused row card owns the ambient wash (via onCardFocused); without the
             // `focusedRowId == null` guard the billboard's rotation keeps overwriting the focused card's
             // colors with the hero's, because focusing the first row leaves isAtTop == true (the
@@ -293,13 +291,11 @@ fun EngineHomePage(
                             CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
                                 Billboard(
                                     item = hero,
-                                    isFavorite = heroFavorite,
                                     heroCount = heroes.size,
                                     activeIndex = activeHero,
                                     upNext = upNext,
                                     onPlay = { viewModel.onPlay(hero) },
                                     onInfo = { viewModel.onInfo(hero) },
-                                    onWatchlist = { viewModel.onWatchlist(hero) },
                                     onRequest = { viewModel.onRequest(hero) },
                                     onTrailer = { viewModel.onInfo(hero) },
                                     playFocusRequester = billboardPlayFocus,
@@ -487,8 +483,6 @@ fun EngineHomePage(
                                 },
                                 // Long-press a card to open the thumbs up/down feedback menu (F7 signal).
                                 onLongClickItem = { feedbackItem = it },
-                                // Only the Spotlight showcase surfaces a Watchlist button inline.
-                                onWatchlistItem = { viewModel.onWatchlist(it) },
                                 // 16:9 cards enlarge + play their trailer in place (replaces the pop-up).
                                 trailerUrlFor = { viewModel.trailerUrlFor(it) },
                                 backdropUrlFor = { viewModel.backdropUrlFor(it) },

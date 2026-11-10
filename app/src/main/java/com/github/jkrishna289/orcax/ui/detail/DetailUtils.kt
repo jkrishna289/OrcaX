@@ -27,7 +27,6 @@ import kotlin.time.Duration.Companion.seconds
 data class MoreDialogActions(
     val navigateTo: (Destination) -> Unit,
     val onClickWatch: (UUID, Boolean) -> Unit,
-    val onClickFavorite: (UUID, Boolean) -> Unit,
     val onClickAddPlaylist: (UUID) -> Unit,
     val onSendMediaInfo: (UUID) -> Unit,
     val onClickDelete: (BaseItem) -> Unit,
@@ -64,7 +63,6 @@ fun buildMoreDialogItems(
     seriesId: UUID?,
     sourceId: UUID?,
     watched: Boolean,
-    favorite: Boolean,
     canClearChosenStreams: Boolean,
     canDelete: Boolean,
     actions: MoreDialogActions,
@@ -161,15 +159,6 @@ fun buildMoreDialogItems(
                 iconStringRes = if (watched) R.string.fa_eye else R.string.fa_eye_slash,
             ) {
                 actions.onClickWatch.invoke(item.id, !watched)
-            },
-        )
-        add(
-            DialogItem(
-                text = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-            ) {
-                actions.onClickFavorite.invoke(item.id, !favorite)
             },
         )
         item.data.albumId?.let { albumId ->
@@ -270,7 +259,6 @@ fun buildMoreDialogItemsForHome(
     seriesId: UUID?,
     playbackPosition: Duration,
     watched: Boolean,
-    favorite: Boolean,
     canDelete: Boolean,
     actions: MoreDialogActions,
     canRemoveContinueWatching: Boolean = false,
@@ -390,15 +378,6 @@ fun buildMoreDialogItemsForHome(
                 actions.onClickWatch.invoke(itemId, !watched)
             },
         )
-        add(
-            DialogItem(
-                text = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-            ) {
-                actions.onClickFavorite.invoke(itemId, !favorite)
-            },
-        )
         seriesId?.let {
             add(
                 DialogItem(
@@ -438,15 +417,6 @@ fun buildMoreDialogItemsForPerson(
                 Icons.Default.ArrowForward,
             ) {
                 actions.navigateTo(Destination.MediaItem(itemId, BaseItemKind.PERSON, null))
-            },
-        )
-        add(
-            DialogItem(
-                text = if (person.favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                iconColor = if (person.favorite) Color.Red else Color.Unspecified,
-            ) {
-                actions.onClickFavorite.invoke(itemId, !person.favorite)
             },
         )
     }

@@ -10,7 +10,6 @@ import kotlinx.serialization.UseSerializers
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.VideoType
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
-import org.jellyfin.sdk.model.api.request.GetPersonsRequest
 import org.jellyfin.sdk.model.serializer.UUIDSerializer
 import java.util.UUID
 
@@ -28,11 +27,10 @@ data class CollectionFolderFilter(
 )
 
 /**
- * A sort of simplified filter which can be [applyTo] a [GetItemsRequest] or [GetPersonsRequest] to add or remove filters
+ * A sort of simplified filter which can be [applyTo] a [GetItemsRequest] to add or remove filters
  */
 @Serializable
 data class GetItemsFilter(
-    val favorite: Boolean? = null,
     val genres: List<UUID>? = null,
     val minCommunityRating: Double? = null,
     val officialRatings: List<String>? = null,
@@ -44,7 +42,6 @@ data class GetItemsFilter(
     val videoTypes: List<FilterVideoType>? = null,
     val years: List<Int>? = null,
     val decades: List<Int>? = null,
-    val override: GetItemsFilterOverride = GetItemsFilterOverride.NONE,
 ) {
     /**
      * Returns how many of filters are actually being used in this [GetItemsFilter]
@@ -80,7 +77,6 @@ data class GetItemsFilter(
         overwriteIncludeTypes: Boolean = true,
     ) = req.copy(
         includeItemTypes = if (overwriteIncludeTypes) includeItemTypes else req.includeItemTypes,
-        isFavorite = favorite,
         genreIds = genres,
         minCommunityRating = minCommunityRating,
         personIds = persons,
@@ -129,17 +125,11 @@ data class GetItemsFilter(
             },
     )
 
-    fun applyTo(req: GetPersonsRequest) =
-        req.copy(
-            isFavorite = favorite,
-        )
-
     /**
      * Merge another [GetItemsFilter] onto this one, replacing only unset values
      */
     fun merge(filter: GetItemsFilter): GetItemsFilter =
         this.copy(
-            favorite = favorite ?: filter.favorite,
             genres = genres ?: filter.genres,
             minCommunityRating = minCommunityRating ?: filter.minCommunityRating,
             officialRatings = officialRatings ?: filter.officialRatings,
@@ -151,11 +141,5 @@ data class GetItemsFilter(
             videoTypes = videoTypes ?: filter.videoTypes,
             years = years ?: filter.years,
             decades = decades ?: filter.decades,
-            override = override,
         )
-}
-
-enum class GetItemsFilterOverride {
-    NONE,
-    PERSON,
 }

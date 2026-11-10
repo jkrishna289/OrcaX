@@ -36,8 +36,6 @@
     <string name="genres">Είδη</string>
     <string name="collection">Συλλογή</string>
     <string name="collections">Συλλογές</string>
-    <string name="add_favorite">Αγαπημένο</string>
-    <string name="favorites">Αγαπημένα</string>
     <string name="suggestions">Προτάσεις</string>
     <string name="director">Σκηνοθέτης</string>
     <string name="studios">Στούντιο</string>
@@ -124,7 +122,6 @@
     <string name="recommended">Προτεινόμενο</string>
     <string name="record_program">Πρόγραμμα καταγραφής</string>
     <string name="record_series">Σειρά καταγραφής</string>
-    <string name="remove_favorite">Κατάργηση από τα αγαπημένα</string>
     <string name="restart">Επανεκκίνηση</string>
     <string name="resume">Περίληψη</string>
     <string name="save">Αποθήκευση</string>

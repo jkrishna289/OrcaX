@@ -96,7 +96,6 @@ fun EpisodeCard(
                     item = item,
                     name = item?.name,
                     showOverlay = showImageOverlay,
-                    favorite = dto?.userData?.isFavorite ?: false,
                     watched = dto?.userData?.played ?: false,
                     unwatchedCount = dto?.userData?.unplayedItemCount ?: -1,
                     watchedPercent = dto?.userData?.playedPercentage,

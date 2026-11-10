@@ -239,7 +239,6 @@ class HomeSettingsViewModel
                             )
                         }
 
-                        MetaRowType.FAVORITES,
                         MetaRowType.COLLECTION,
                         MetaRowType.PLAYLIST,
                         -> {
@@ -371,29 +370,6 @@ class HomeSettingsViewModel
                             throw IllegalArgumentException("Use different addRow")
                         }
                     }
-                updateState {
-                    it.copy(
-                        loading = LoadingState.Loading,
-                        rows = it.rows.toMutableList().apply { add(newRow) },
-                    )
-                }
-                fetchRowData()
-            }
-
-        fun addFavoriteRow(type: BaseItemKind): Job =
-            viewModelScope.launchIO {
-                Timber.v("Adding favorite row for $type")
-                val id = idCounter++
-                val newRow =
-                    HomeRowConfigDisplay(
-                        id = id,
-                        title =
-                            context.getString(
-                                R.string.favorite_items,
-                                context.getString(favoriteOptions[type]!!),
-                            ),
-                        config = HomeRowConfig.Favorite(type),
-                    )
                 updateState {
                     it.copy(
                         loading = LoadingState.Loading,
@@ -680,21 +656,6 @@ class HomeSettingsViewModel
                                 is HomeRowConfig.ByParent -> {
                                     val collectionType = getCollectionType(it.config.parentId)
                                     val viewOptions = preset.getByCollectionType(collectionType)
-                                    it.config.updateViewOptions(viewOptions)
-                                }
-
-                                is HomeRowConfig.Favorite -> {
-                                    val viewOptions =
-                                        when (it.config.kind) {
-                                            BaseItemKind.MOVIE -> preset.movieLibrary
-                                            BaseItemKind.SERIES -> preset.tvLibrary
-                                            BaseItemKind.EPISODE -> preset.continueWatching
-                                            BaseItemKind.VIDEO -> preset.videoLibrary
-                                            BaseItemKind.PLAYLIST -> preset.playlist
-                                            BaseItemKind.PERSON -> preset.movieLibrary
-                                            BaseItemKind.MUSIC_ARTIST, BaseItemKind.MUSIC_ALBUM -> preset.musicLibrary
-                                            else -> preset.movieLibrary
-                                        }
                                     it.config.updateViewOptions(viewOptions)
                                 }
 

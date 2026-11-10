@@ -23,7 +23,7 @@ import com.github.jkrishna289.orcax.data.model.HomeRowViewOptions
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.MusicService
@@ -61,7 +61,7 @@ abstract class RecommendedViewModel(
     @param:ApplicationContext val context: Context,
     val api: ApiClient,
     val navigationManager: NavigationManager,
-    val favoriteWatchManager: FavoriteWatchManager,
+    val watchManager: WatchManager,
     val mediaReportService: MediaReportService,
     private val musicService: MusicService,
     private val backdropService: BackdropService,
@@ -91,18 +91,7 @@ abstract class RecommendedViewModel(
         watched: Boolean,
     ) {
         viewModelScope.launchIO {
-            favoriteWatchManager.setWatched(itemId, watched)
-            refreshItem(position, itemId)
-        }
-    }
-
-    fun setFavorite(
-        position: RowColumn,
-        itemId: UUID,
-        watched: Boolean,
-    ) {
-        viewModelScope.launchIO {
-            favoriteWatchManager.setFavorite(itemId, watched)
+            watchManager.setWatched(itemId, watched)
             refreshItem(position, itemId)
         }
     }
@@ -237,16 +226,12 @@ fun RecommendedContent(
                     seriesId = null,
                     playbackPosition = item.playbackPosition,
                     watched = item.played,
-                    favorite = item.favorite,
                     canDelete = viewModel.canDelete(item, preferences.appPreferences),
                     actions =
                         MoreDialogActions(
                             navigateTo = { viewModel.navigationManager.navigateTo(it) },
                             onClickWatch = { itemId, watched ->
                                 viewModel.setWatched(position, itemId, watched)
-                            },
-                            onClickFavorite = { itemId, watched ->
-                                viewModel.setFavorite(position, itemId, watched)
                             },
                             onClickAddPlaylist = {
                                 playlistViewModel.loadPlaylists(MediaType.VIDEO)

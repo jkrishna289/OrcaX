@@ -44,7 +44,7 @@ class LatestNextUpService
         private val api: ApiClient,
         private val datePlayedService: DatePlayedService,
         private val displayPreferencesService: DisplayPreferencesService,
-        private val favoriteWatchManager: FavoriteWatchManager,
+        private val watchManager: WatchManager,
     ) {
         /**
          * Get resume (continue watching) items for a user
@@ -177,7 +177,7 @@ class LatestNextUpService
             userId: UUID,
             episode: BaseItem,
         ) {
-            favoriteWatchManager.setWatched(episode.id, false)
+            watchManager.setWatched(episode.id, false)
             episode.data.seriesId?.let { seriesId ->
                 displayPreferencesService.updateDisplayPreferences(userId) {
                     val removedIds =

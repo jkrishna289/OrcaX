@@ -72,7 +72,6 @@ class TestHomeRowSamples {
                         ),
                     viewOptions = HomeRowViewOptions(),
                 ),
-                HomeRowConfig.Favorite(kind = BaseItemKind.SERIES),
                 HomeRowConfig.Recordings(),
                 HomeRowConfig.TvPrograms(),
                 HomeRowConfig.TvChannels(),
@@ -94,7 +93,6 @@ class TestHomeRowSamples {
                 is HomeRowConfig.RecentlyReleased -> foundTypes.add(it::class)
                 is HomeRowConfig.ByParent -> foundTypes.add(it::class)
                 is HomeRowConfig.GetItems -> foundTypes.add(it::class)
-                is HomeRowConfig.Favorite -> foundTypes.add(it::class)
                 is HomeRowConfig.Recordings -> foundTypes.add(it::class)
                 is HomeRowConfig.TvPrograms -> foundTypes.add(it::class)
                 is HomeRowConfig.Suggestions -> foundTypes.add(it::class)

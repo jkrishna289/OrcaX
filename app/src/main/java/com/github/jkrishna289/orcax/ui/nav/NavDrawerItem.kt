@@ -7,23 +7,16 @@ import org.jellyfin.sdk.model.api.CollectionType
 import java.util.UUID
 
 /**
- * A navigable top-level item (Favorites or a server library).
+ * A navigable top-level item (a server library, or More).
  *
  * Historically these fed the retired left nav drawer (hence the name); today they are the model
  * behind the Categories page, the engine home's local bundle builder, and library pinning in
- * settings. Some are built-in such as Favorites; others are created dynamically for libraries.
+ * settings. Libraries are created dynamically from the server.
  */
 sealed interface NavDrawerItem {
     val id: String
 
     fun name(context: Context): String
-
-    object Favorites : NavDrawerItem {
-        override val id: String
-            get() = "a_favorites"
-
-        override fun name(context: Context): String = context.getString(R.string.favorites)
-    }
 
     object More : NavDrawerItem {
         override val id: String

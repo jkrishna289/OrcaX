@@ -39,7 +39,6 @@ import androidx.tv.material3.surfaceColorAtElevation
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.filter.CommunityRatingFilter
 import com.github.jkrishna289.orcax.data.filter.DecadeFilter
-import com.github.jkrishna289.orcax.data.filter.FavoriteFilter
 import com.github.jkrishna289.orcax.data.filter.FilterValueOption
 import com.github.jkrishna289.orcax.data.filter.FilterVideoType
 import com.github.jkrishna289.orcax.data.filter.GenreFilter
@@ -215,7 +214,6 @@ fun FilterByButton(
                                             .contains(value.value)
                                     }
 
-                                    FavoriteFilter,
                                     PlayedFilter,
                                     -> {
                                         (currentValue as? Boolean) == value.name.toBoolean()
@@ -291,7 +289,6 @@ fun FilterByButton(
                                             filterOption.set(newValue, current)
                                         }
 
-                                        FavoriteFilter,
                                         PlayedFilter,
                                         -> {
                                             val played = value.name.toBoolean()

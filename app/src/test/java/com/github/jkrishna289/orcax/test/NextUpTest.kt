@@ -6,7 +6,7 @@ import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.updateHomePagePreferences
 import com.github.jkrishna289.orcax.services.DatePlayedService
 import com.github.jkrishna289.orcax.services.DisplayPreferencesService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.LatestNextUpService
 import com.github.jkrishna289.orcax.services.mockQueryResult
 import com.github.jkrishna289.orcax.services.testDisplayPreferencesDto
@@ -37,14 +37,14 @@ class NextUpTest {
     private val mockApi = mockk<ApiClient>(relaxed = true)
     private val mockDatePlayedService = mockk<DatePlayedService>()
     private val mockDisplayPreferencesService = mockk<DisplayPreferencesService>()
-    private val mockFavoriteWatchManager = mockk<FavoriteWatchManager>(relaxed = true)
+    private val mockWatchManager = mockk<WatchManager>(relaxed = true)
 
     private val latestNextUpService =
         LatestNextUpService(
             mockApi,
             mockDatePlayedService,
             mockDisplayPreferencesService,
-            mockFavoriteWatchManager,
+            mockWatchManager,
         )
 
     @Before

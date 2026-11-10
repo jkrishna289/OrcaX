@@ -151,10 +151,6 @@ fun HomeSettingsPage(
                                                 addRow { viewModel.addRow(it) }
                                             }
 
-                                            MetaRowType.FAVORITES -> {
-                                                backStack.add(HomeSettingsDestination.ChooseFavorite)
-                                            }
-
                                             MetaRowType.COLLECTION -> {
                                                 searchForDialog = BaseItemKind.BOX_SET
                                             }
@@ -223,15 +219,6 @@ fun HomeSettingsPage(
                                     },
                                     onApplyApplyAll = {
                                         viewModel.updateViewOptionsForAll(row.config.viewOptions)
-                                    },
-                                    modifier = destModifier,
-                                )
-                            }
-
-                            HomeSettingsDestination.ChooseFavorite -> {
-                                HomeSettingsFavoriteList(
-                                    onClick = { type ->
-                                        addRow { viewModel.addFavoriteRow(type) }
                                     },
                                     modifier = destModifier,
                                 )

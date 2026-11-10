@@ -2,7 +2,6 @@
 <resources>
     <string name="about">حول</string>
     <string name="active_recordings">التسجيلات النشطة</string>
-    <string name="add_favorite">إضافة للمفضلة</string>
     <string name="add_server">إضافة خادم</string>
     <string name="add_user">إضافة مستخدم</string>
     <string name="audio">الصوت</string>
@@ -40,7 +39,6 @@
     <string name="episodes">الحلقات</string>
     <string name="error_loading_collection">خطأ في تحميل المجموعة %1$s</string>
     <string name="external_track">خارجي</string>
-    <string name="favorites">المفضلة</string>
     <string name="file_size">الحجم</string>
     <string name="forced_track">إجبارية</string>
     <string name="genres">الأنواع</string>
@@ -110,7 +108,6 @@
     <string name="recommended">مقترح</string>
     <string name="record_program">تسجيل البرنامج</string>
     <string name="record_series">تسجيل المسلسل</string>
-    <string name="remove_favorite">إزالة من المفضلة</string>
     <string name="restart">إعادة تشغيل</string>
     <string name="resume">استئناف</string>
     <string name="save">حفظ</string>

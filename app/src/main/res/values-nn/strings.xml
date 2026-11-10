@@ -2,7 +2,6 @@
 <resources>
     <string name="about">Om</string>
     <string name="active_recordings">Aktive opptak</string>
-    <string name="add_favorite">Favoritt</string>
     <string name="add_server">Legg til server</string>
     <string name="add_user">Legg til brukar</string>
     <string name="audio">Lyd</string>
@@ -40,7 +39,6 @@
     <string name="episodes">Episodar</string>
     <string name="error_loading_collection">Feil ved lasting av samling %1$s</string>
     <string name="external_track">Ekstern</string>
-    <string name="favorites">Favorittar</string>
     <string name="file_size">Storleik</string>
     <string name="forced_track">Tvungen</string>
     <string name="genres">Sjangrar</string>
@@ -94,7 +92,6 @@
     <string name="recommended">Tilrådd</string>
     <string name="record_program">Ta opp program</string>
     <string name="record_series">Ta opp serie</string>
-    <string name="remove_favorite">Fjern favoritt</string>
     <string name="restart">Start på nytt</string>
     <string name="resume">Hald fram</string>
     <string name="save">Lagre</string>
@@ -334,7 +331,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Vis titlar</string>
     <string name="live_tv_repeat">Repeter</string>
-    <string name="favorite_channels_at_beginning">Vis favorittkanalar først</string>
     <string name="sort_channels_recently_watched">Sorter kanalar etter sist sett</string>
     <string name="color_code_programs">Fargekod program</string>
     <string name="subtitle_delay">Undertekstforseinking</string>
@@ -378,7 +374,6 @@
     <string name="voice_error_start_failed">Klarte ikkje starta talegjenkjenning</string>
     <string name="voice_error_timeout">Tidsavbrot for talegjenkjenning</string>
     <string name="retry">Prøv på nytt</string>
-    <string name="favorite_items">Favoritt %s</string>
     <string name="resolution_switching">Oppløysingsbyte</string>
     <string name="local">Lokal</string>
     <string name="play_trailer">Spel trailer</string>

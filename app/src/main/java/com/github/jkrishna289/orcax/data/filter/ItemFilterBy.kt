@@ -8,7 +8,6 @@ import java.util.UUID
 val DefaultFilterOptions =
     listOf(
         PlayedFilter,
-        FavoriteFilter,
         GenreFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
@@ -20,20 +19,8 @@ val DefaultFilterOptions =
 val DefaultTvFilterOptions =
     listOf(
         PlayedFilter,
-        FavoriteFilter,
         GenreFilter,
         StudioFilter,
-        CommunityRatingFilter,
-        OfficialRatingFilter,
-        VideoTypeFilter,
-        YearFilter,
-        DecadeFilter,
-    )
-
-val DefaultForFavoritesFilterOptions =
-    listOf(
-        PlayedFilter,
-        GenreFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
         VideoTypeFilter,
@@ -44,7 +31,6 @@ val DefaultForFavoritesFilterOptions =
 val DefaultForGenresFilterOptions =
     listOf(
         PlayedFilter,
-        FavoriteFilter,
         StudioFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
@@ -56,7 +42,6 @@ val DefaultForGenresFilterOptions =
 val DefaultForStudiosFilterOptions =
     listOf(
         PlayedFilter,
-        FavoriteFilter,
         GenreFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
@@ -68,7 +53,6 @@ val DefaultForStudiosFilterOptions =
 val DefaultPlaylistItemsOptions =
     listOf(
         PlayedFilter,
-        FavoriteFilter,
         CommunityRatingFilter,
         OfficialRatingFilter,
         VideoTypeFilter,
@@ -119,19 +103,6 @@ data object PlayedFilter : ItemFilterBy<Boolean> {
         value: Boolean?,
         filter: GetItemsFilter,
     ): GetItemsFilter = filter.copy(played = value)
-}
-
-data object FavoriteFilter : ItemFilterBy<Boolean> {
-    override val stringRes: Int = R.string.favorites
-
-    override val supportMultiple: Boolean = false
-
-    override fun get(filter: GetItemsFilter): Boolean? = filter.favorite
-
-    override fun set(
-        value: Boolean?,
-        filter: GetItemsFilter,
-    ): GetItemsFilter = filter.copy(favorite = value)
 }
 
 data object OfficialRatingFilter : ItemFilterBy<List<String>> {

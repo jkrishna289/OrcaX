@@ -63,7 +63,7 @@ import com.github.jkrishna289.orcax.data.model.GetItemsFilter
 import com.github.jkrishna289.orcax.data.model.LibraryDisplayInfo
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.MusicService
@@ -141,7 +141,7 @@ class PlaylistViewModel
         private val backdropService: BackdropService,
         private val serverRepository: ServerRepository,
         private val libraryDisplayInfoDao: LibraryDisplayInfoDao,
-        private val favoriteWatchManager: FavoriteWatchManager,
+        private val watchManager: WatchManager,
         private val mediaReportService: MediaReportService,
         @Assisted itemId: UUID,
     ) : MusicViewModel(itemId, context, api, musicService, navigationManager, mediaManagementService) {
@@ -319,14 +319,7 @@ class PlaylistViewModel
             itemId: UUID,
             played: Boolean,
         ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setWatched(itemId, played)
-        }
-
-        fun setFavorite(
-            itemId: UUID,
-            favorite: Boolean,
-        ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setFavorite(itemId, favorite)
+            watchManager.setWatched(itemId, played)
         }
 
         fun sendMediaReport(itemId: UUID) {
@@ -411,7 +404,6 @@ fun PlaylistDetails(
             onClickPlay = { index, item -> play(index, item, false, MediaType.AUDIO) },
             onClickPlayNext = { index, item -> viewModel.playNext(item) },
             onClickAddToQueue = { index, item -> viewModel.addToQueue(item, Int.MAX_VALUE) },
-            onClickFavorite = { id, favorite -> viewModel.setFavorite(id, favorite) },
             onClickAddPlaylist = { itemId ->
                 addToPlaylistViewModel.loadPlaylists(MediaType.AUDIO)
                 showPlaylistDialog.makePresent(itemId)
@@ -423,7 +415,6 @@ fun PlaylistDetails(
         MoreDialogActions(
             navigateTo = { viewModel.navigationManager.navigateTo(it) },
             onClickWatch = { id, watched -> viewModel.setWatched(id, watched) },
-            onClickFavorite = { id, favorite -> viewModel.setFavorite(id, favorite) },
             onClickAddPlaylist = { itemId ->
                 addToPlaylistViewModel.loadPlaylists(MediaType.VIDEO)
                 showPlaylistDialog.makePresent(itemId)
@@ -469,7 +460,6 @@ fun PlaylistDetails(
                                 seriesId = item.data.seriesId,
                                 playbackPosition = item.playbackPosition,
                                 watched = item.played,
-                                favorite = item.favorite,
                                 canDelete = viewModel.canDelete(item, preferences.appPreferences),
                                 actions = moreActions,
                             )
@@ -845,7 +835,6 @@ fun PlaylistItem(
                         item = item,
                         name = item?.name,
                         showOverlay = true,
-                        favorite = item?.data?.userData?.isFavorite ?: false,
                         watched = item?.data?.userData?.played ?: false,
                         unwatchedCount = item?.data?.userData?.unplayedItemCount ?: -1,
                         watchedPercent = 0.0,

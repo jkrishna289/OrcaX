@@ -208,8 +208,6 @@ class AppUpgradeHandler
                 appPreferences.updateData {
                     it.updateLiveTvPreferences {
                         showHeader = AppPreference.LiveTvShowHeader.defaultValue
-                        favoriteChannelsAtBeginning =
-                            AppPreference.LiveTvFavoriteChannelsBeginning.defaultValue
                         sortByRecentlyWatched =
                             AppPreference.LiveTvChannelSortByWatched.defaultValue
                         colorCodePrograms =

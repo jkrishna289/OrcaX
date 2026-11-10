@@ -28,7 +28,6 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.github.jkrishna289.orcax.services.NavDrawerService
 import com.github.jkrishna289.orcax.services.NavigationManager
-import com.github.jkrishna289.orcax.ui.nav.Destination
 import com.github.jkrishna289.orcax.ui.nav.NavDrawerItem
 import com.github.jkrishna289.orcax.ui.nav.ServerNavDrawerItem
 import com.github.jkrishna289.orcax.ui.theme.OrcaTheme
@@ -46,7 +45,6 @@ class CategoriesViewModel
 
         fun onClick(item: NavDrawerItem) {
             when (item) {
-                NavDrawerItem.Favorites -> navigationManager.navigateTo(Destination.Favorites)
                 is ServerNavDrawerItem -> navigationManager.navigateTo(item.destination)
                 else -> Unit
             }
@@ -54,8 +52,8 @@ class CategoriesViewModel
     }
 
 /**
- * The screen behind the top-nav "Categories" (grid) icon: lists the user's libraries plus
- * Favorites (the content the old left rail used to hold), sourced from [NavDrawerService]. The
+ * The screen behind the top-nav "Categories" (grid) icon: lists the user's libraries (the
+ * content the old left rail used to hold), sourced from [NavDrawerService]. The
  * separate "Discover" entry is intentionally dropped — discover/requestable items are blended into
  * the engine home and searchable from the Search page.
  */
@@ -69,7 +67,7 @@ fun CategoriesPage(
     val categories =
         remember(state) {
             (state.items + state.moreItems)
-                .filter { it is ServerNavDrawerItem || it is NavDrawerItem.Favorites }
+                .filterIsInstance<ServerNavDrawerItem>()
         }
 
     Column(

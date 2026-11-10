@@ -2,7 +2,6 @@
 <resources>
     <string name="about">O aplikácii</string>
     <string name="active_recordings">Aktívne nahrávky</string>
-    <string name="add_favorite">Obľúbené</string>
     <string name="add_server">Pridať server</string>
     <string name="add_user">Pridať používateľa</string>
     <string name="audio">Zvuk</string>
@@ -37,7 +36,6 @@
     <string name="episodes">Epizódy</string>
     <string name="error_loading_collection">Chyba pri načítaní kolekcie %1$s</string>
     <string name="external_track">Externé</string>
-    <string name="favorites">Obľúbené</string>
     <string name="file_size">Veľkosť</string>
     <string name="forced_track">Vynútené</string>
     <string name="genres">Žánre</string>
@@ -91,7 +89,6 @@
     <string name="recommended">Odporúčané</string>
     <string name="record_program">Nahrávať program</string>
     <string name="record_series">Nahrávať seriál</string>
-    <string name="remove_favorite">Neobľúbené</string>
     <string name="restart">Reštartovať</string>
     <string name="resume">Pokračovať</string>
     <string name="save">Uložiť</string>
@@ -250,7 +247,6 @@
         <item quantity="many"/>
         <item quantity="other"/>
     </plurals>
-    <string name="favorite_items">Obľúbené %s</string>
     <plurals name="downloads">
         <item quantity="one">%s stiahnutý</item>
         <item quantity="few">%s stiahnuté</item>
@@ -423,7 +419,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Zobraziť názvy</string>
     <string name="live_tv_repeat">Opakovať</string>
-    <string name="favorite_channels_at_beginning">Zobraziť obľúbené kanály ako prvé</string>
     <string name="sort_channels_recently_watched">Zoradiť kanály podľa nedávno pozretých</string>
     <string name="color_code_programs">Farebné rozlíšenie programov</string>
     <string name="subtitle_delay">Oneskorenie titulkov</string>

@@ -28,7 +28,6 @@ data class MusicMoreDialogActions(
     val onClickPlay: (Int, BaseItem) -> Unit,
     val onClickPlayNext: (Int, BaseItem) -> Unit,
     val onClickAddToQueue: (Int, BaseItem) -> Unit,
-    val onClickFavorite: (UUID, Boolean) -> Unit,
     val onClickAddPlaylist: (UUID) -> Unit,
     val onClickGoToAlbum: (UUID) -> Unit = {
         onNavigate.invoke(Destination.MediaItem(itemId = it, type = BaseItemKind.MUSIC_ALBUM))
@@ -104,15 +103,6 @@ fun buildMoreDialogForMusic(
                 },
             )
         }
-        add(
-            DialogItem(
-                text = if (item.favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                iconColor = if (item.favorite) Color.Red else Color.Unspecified,
-            ) {
-                actions.onClickFavorite.invoke(item.id, !item.favorite)
-            },
-        )
         if (item.type == BaseItemKind.AUDIO && item.data.albumId != null) {
             add(
                 DialogItem(

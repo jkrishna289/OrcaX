@@ -74,7 +74,6 @@
     <string name="recently_added_in">Ostatnio dodane w %1$s</string>
     <string name="resume">Wznów</string>
     <string name="sort_by_date_played">Data odtworzenia</string>
-    <string name="add_favorite">Ulubione</string>
     <string name="cancel">Anuluj</string>
     <string name="chapters">Rozdziały</string>
     <string name="choose_stream">Wybierz %1$s</string>
@@ -89,7 +88,6 @@
     <string name="hide_debug_info">Ukryj informacje o debugowaniu</string>
     <string name="hide">Ukryj</string>
     <string name="home">Strona główna</string>
-    <string name="favorites">Ulubione</string>
     <string name="delete">Usuń</string>
     <string name="default_track">Domyślna ścieżka</string>
     <string name="discovered_servers">Odnalezione serwery</string>
@@ -98,7 +96,6 @@
     <string name="forced_track">Wymuszona ścieżka</string>
     <string name="intro">Wstęp</string>
     <string name="name">Nazwa</string>
-    <string name="remove_favorite">Usuń z ulubionych</string>
     <string name="restart">Uruchom ponownie</string>
     <string name="select_server">Wybierz serwer</string>
     <string name="select_user">Wybierz użytkownika</string>
@@ -370,7 +367,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Pokaż tytuły</string>
     <string name="live_tv_repeat">Powtarzaj</string>
-    <string name="favorite_channels_at_beginning">Pokaż ulubione kanały na początku</string>
     <string name="sort_channels_recently_watched">Sortuj kanały według ostatnio oglądanych</string>
     <string name="avc">AVC</string>
     <string name="language">Język</string>
@@ -430,7 +426,6 @@
     <string name="backdrop_style_dynamic">Zdjęcie z dynamicznym kolorem</string>
     <string name="backdrop_style_image">Tylko zdjęcie</string>
     <string name="api_key">Klucz API</string>
-    <string name="favorite_items">Ulubione %s</string>
     <plurals name="days">
         <item quantity="one">%s dzień</item>
         <item quantity="few">%s dni</item>

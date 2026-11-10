@@ -2,7 +2,6 @@
 <resources>
     <string name="about">O aplikaci</string>
     <string name="active_recordings">Aktivní nahrávání</string>
-    <string name="add_favorite">Oblíbené</string>
     <string name="add_server">Přidat server</string>
     <string name="add_user">Přidat uživatele</string>
     <string name="audio">Zvuk</string>
@@ -38,7 +37,6 @@
     <string name="episodes">Epizody</string>
     <string name="error_loading_collection">Chyba při načítání kolekce %1$s</string>
     <string name="external_track">Externí</string>
-    <string name="favorites">Oblíbený</string>
     <string name="file_size">Velikost</string>
     <string name="forced_track">Nucené</string>
     <string name="genres">Žánry</string>
@@ -103,7 +101,6 @@
     <string name="recommended">Doporučeno</string>
     <string name="record_program">Nahrát Program</string>
     <string name="record_series">Nahrát Seriál</string>
-    <string name="remove_favorite">Odebrat z oblíbených</string>
     <string name="restart">Restart</string>
     <string name="resume">Pokračovat</string>
     <string name="save">Uložit</string>
@@ -390,7 +387,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Zobrazit názvy</string>
     <string name="live_tv_repeat">Opakovat</string>
-    <string name="favorite_channels_at_beginning">Zobrazit oblíbené kanály jako první</string>
     <string name="sort_channels_recently_watched">Řadit kanály podle naposledy sledovaných</string>
     <string name="subtitle_delay">Zpoždění titulků</string>
     <string name="backdrop_display">Styl prospektu</string>
@@ -509,7 +505,6 @@
     <string name="display_presets">Zobrazit předvolby</string>
     <string name="display_presets_description">Vestavěné předvolby pro rychlou úpravu všech řádků</string>
     <string name="customize_home_summary">Vyberte řádky a obrázky na domovské stránce</string>
-    <string name="favorite_items">Oblíbené %s</string>
     <string name="content_scale_fit">Přizpůsobit</string>
     <string name="content_scale_crop">Oříznout</string>
     <string name="content_scale_fill">Vyplnit</string>

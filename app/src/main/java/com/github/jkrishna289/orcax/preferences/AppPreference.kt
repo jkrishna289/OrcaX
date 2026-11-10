@@ -1003,17 +1003,6 @@ sealed interface AppPreference<Pref, T> {
                 summaryOn = R.string.enabled,
                 summaryOff = R.string.disabled,
             )
-        val LiveTvFavoriteChannelsBeginning =
-            AppSwitchPreference<AppPreferences>(
-                title = R.string.favorite_channels_at_beginning,
-                defaultValue = true,
-                getter = { it.interfacePreferences.liveTvPreferences.favoriteChannelsAtBeginning },
-                setter = { prefs, value ->
-                    prefs.updateLiveTvPreferences { favoriteChannelsAtBeginning = value }
-                },
-                summaryOn = R.string.enabled,
-                summaryOff = R.string.disabled,
-            )
         val LiveTvChannelSortByWatched =
             AppSwitchPreference<AppPreferences>(
                 title = R.string.sort_channels_recently_watched,
@@ -1300,7 +1289,6 @@ val advancedPreferences =
 val liveTvPreferences =
     listOf(
         AppPreference.LiveTvShowHeader,
-        AppPreference.LiveTvFavoriteChannelsBeginning,
         AppPreference.LiveTvChannelSortByWatched,
         AppPreference.LiveTvColorCodePrograms,
     )

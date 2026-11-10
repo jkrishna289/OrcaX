@@ -13,7 +13,7 @@ import com.github.jkrishna289.orcax.preferences.AppPreference
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.MusicService
@@ -63,7 +63,7 @@ class RecommendedMovieViewModel
         private val suggestionService: SuggestionService,
         @Assisted val parentId: UUID,
         navigationManager: NavigationManager,
-        favoriteWatchManager: FavoriteWatchManager,
+        watchManager: WatchManager,
         mediaReportService: MediaReportService,
         backdropService: BackdropService,
         mediaManagementService: MediaManagementService,
@@ -71,7 +71,7 @@ class RecommendedMovieViewModel
             context,
             api,
             navigationManager,
-            favoriteWatchManager,
+            watchManager,
             mediaReportService,
             musicService,
             backdropService,

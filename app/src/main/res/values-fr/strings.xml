@@ -31,7 +31,6 @@
     <string name="enabled">Activé</string>
     <string name="enter_server_url">Saisir l’IP ou l’URL du serveur</string>
     <string name="external_track">Externe</string>
-    <string name="favorites">Favoris</string>
     <string name="file_size">Taille</string>
     <string name="forced_track">Forcé</string>
     <string name="genres">Genres</string>
@@ -76,7 +75,6 @@
     <string name="recommended">Recommandé</string>
     <string name="record_program">Enregistrer le programme</string>
     <string name="record_series">Enregistrer la série</string>
-    <string name="remove_favorite">Retirer des favoris</string>
     <string name="restart">Redémarrer</string>
     <string name="resume">Reprendre</string>
     <string name="save">Enregistrer</string>
@@ -115,7 +113,6 @@
     <string name="watch_live">Regarder en direct</string>
     <string name="play_with_transcoding">Lire avec transcodage</string>
     <string name="show_clock">Afficher l’horloge</string>
-    <string name="add_favorite">Ajouter aux favoris</string>
     <string name="choose_stream">Choisir %1$s</string>
     <string name="intro">Générique d’introduction</string>
     <string name="create_playlist">Créer une nouvelle liste de lecture</string>
@@ -362,7 +359,6 @@
     <string name="bit_unit">bit</string>
     <string name="sample_rate_unit">Hz</string>
     <string name="live_tv_repeat">Répéter</string>
-    <string name="favorite_channels_at_beginning">Afficher les chaînes favorites en premier</string>
     <string name="nal">NAL</string>
     <string name="hlg">HLG</string>
     <string name="color_primaries">Couleurs primaires</string>
@@ -476,7 +472,6 @@
     <string name="display_presets">Afficher les préréglages</string>
     <string name="display_presets_description">Préréglages intégrés pour styliser rapidement toutes les lignes</string>
     <string name="customize_home_summary">Choisissez des lignes et des images sur la page d\'accueil</string>
-    <string name="favorite_items">Favori %s</string>
     <plurals name="minutes">
         <item quantity="one">%s minute</item>
         <item quantity="many">%s minutes</item>

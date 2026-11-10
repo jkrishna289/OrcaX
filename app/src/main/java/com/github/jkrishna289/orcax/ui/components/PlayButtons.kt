@@ -71,12 +71,10 @@ import kotlin.time.Duration.Companion.seconds
 fun ExpandablePlayButtons(
     resumePosition: Duration,
     watched: Boolean,
-    favorite: Boolean,
     canDelete: Boolean,
     trailers: List<Trailer>?,
     playOnClick: (position: Duration) -> Unit,
     watchOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
     moreOnClick: () -> Unit,
     trailerOnClick: (Trailer) -> Unit,
     deleteOnClick: () -> Unit,
@@ -148,17 +146,6 @@ fun ExpandablePlayButtons(
                     Modifier
                         .onFocusChanged(buttonOnFocusChanged)
                         .then(if (showPlay) Modifier else Modifier.focusRequester(firstFocus)),
-            )
-        }
-
-        // Favorite button
-        item("favorite") {
-            ExpandableFaButton(
-                title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                onClick = favoriteOnClick,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-                modifier = Modifier.onFocusChanged(buttonOnFocusChanged),
             )
         }
 
@@ -443,10 +430,8 @@ private fun ExpandablePlayButtonsPreview() {
         ExpandablePlayButtons(
             resumePosition = 10.seconds,
             watched = false,
-            favorite = false,
             playOnClick = {},
             watchOnClick = {},
-            favoriteOnClick = {},
             moreOnClick = {},
             buttonOnFocusChanged = {},
             trailers = listOf(),

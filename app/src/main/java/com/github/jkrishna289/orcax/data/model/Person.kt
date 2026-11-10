@@ -22,7 +22,6 @@ data class Person(
     val role: String?,
     val type: PersonKind,
     val imageUrl: String?,
-    val favorite: Boolean,
 ) {
     companion object {
         fun fromDto(
@@ -36,22 +35,6 @@ data class Person(
                 role = personRole(context, dto.role, dto.type),
                 type = dto.type,
                 imageUrl = api.imageApi.getItemImageUrl(dto.id, ImageType.PRIMARY),
-                favorite = false,
-            )
-
-        fun fromDto(
-            context: Context,
-            dto: BaseItemPerson,
-            favorite: Boolean,
-            api: ApiClient,
-        ): Person =
-            Person(
-                id = dto.id,
-                name = dto.name,
-                role = personRole(context, dto.role, dto.type),
-                type = dto.type,
-                imageUrl = api.imageApi.getItemImageUrl(dto.id, ImageType.PRIMARY),
-                favorite = favorite,
             )
     }
 }

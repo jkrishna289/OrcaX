@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about">Despre</string>
-    <string name="add_favorite">Favorit</string>
     <string name="add_server">Adaugă server</string>
     <string name="add_user">Adaugă utilizator</string>
     <string name="audio">Audio</string>
@@ -18,7 +17,6 @@
     <string name="clear_image_cache">Golește memoria cache a imaginilor</string>
     <string name="confirm">Confirmă</string>
     <string name="director">Regizor</string>
-    <string name="favorites">Favorite</string>
     <string name="ends_at">Se încheie la %1$s</string>
     <string name="enter_server_url">Introdu adresa IP sau URL-ul</string>
     <string name="enter_server_address">Introdu adresa serverului</string>
@@ -101,7 +99,6 @@
     <string name="hlg">HLG</string>
     <string name="show_titles">Arată titlurile</string>
     <string name="live_tv_repeat">Repetă</string>
-    <string name="favorite_channels_at_beginning">Afișează mai întâi canalele favorite</string>
     <string name="sort_channels_recently_watched">Sortează canalele după vizionarea recentă</string>
     <string name="subtitle_delay">Decalare subitrare</string>
     <string name="discover">Descoperă</string>
@@ -358,7 +355,6 @@
         <item quantity="few"></item>
         <item quantity="other"></item>
     </plurals>
-    <string name="favorite_items">%s favorit</string>
     <string name="app_theme">Temă aplicație</string>
     <string name="auto_check_for_updates">Verifică automat dacă există actualizări</string>
     <string name="ac3_supported">Dispozitivul acceptă formatele AC3/Dolby Digital</string>

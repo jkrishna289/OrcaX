@@ -89,7 +89,6 @@ data class BaseItem(
 
     val played get() = data.userData?.played ?: false
 
-    val favorite get() = data.userData?.isFavorite ?: false
 
     val timeRemainingOrRuntime: Duration? get() = data.timeRemaining ?: data.runTimeTicks?.ticks
 

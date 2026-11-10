@@ -25,7 +25,6 @@
     <string name="live_tv">Direktsänd TV</string>
     <string name="genres">Genrer</string>
     <string name="episodes">Episoder</string>
-    <string name="favorites">Favoriter</string>
     <string name="library">Bibliotek</string>
     <string name="more">Mer</string>
     <string name="no_results">Inga resultat</string>
@@ -45,7 +44,6 @@
     <string name="recommended">Rekommenderat</string>
     <string name="record_program">Spela in program</string>
     <string name="record_series">Spela in serie</string>
-    <string name="remove_favorite">Ta bort favorit</string>
     <string name="restart">Starta om</string>
     <string name="resume">Fortsätt</string>
     <string name="save">Spara</string>
@@ -166,7 +164,6 @@
         <item quantity="one">%d sekund</item>
         <item quantity="other">%d sekunder</item>
     </plurals>
-    <string name="add_favorite">Favorit</string>
     <string name="compose_error_message_title">Ett fel uppstod! Tryck på knappen för att skicka loggar till din server.</string>
     <string name="confirm">Bekräfta</string>
     <string name="continue_watching">Fortsätt titta</string>

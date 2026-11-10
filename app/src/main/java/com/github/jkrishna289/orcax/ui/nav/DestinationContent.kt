@@ -21,7 +21,6 @@ import com.github.jkrishna289.orcax.ui.detail.CollectionFolderPlaylist
 import com.github.jkrishna289.orcax.ui.detail.CollectionFolderRecordings
 import com.github.jkrishna289.orcax.ui.detail.CollectionFolderTv
 import com.github.jkrishna289.orcax.ui.detail.DebugPage
-import com.github.jkrishna289.orcax.ui.detail.FavoritesPage
 import com.github.jkrishna289.orcax.ui.detail.PersonPage
 import com.github.jkrishna289.orcax.ui.detail.PlaylistDetails
 import com.github.jkrishna289.orcax.ui.detail.collection.CollectionDetails
@@ -295,14 +294,6 @@ fun DestinationContent(
         is Destination.Slideshow -> {
             SlideshowPage(
                 slideshow = destination,
-            )
-        }
-
-        Destination.Favorites -> {
-            LaunchedEffect(Unit) { onClearBackdrop.invoke() }
-            FavoritesPage(
-                preferences = preferences,
-                modifier = modifier,
             )
         }
 

@@ -88,7 +88,6 @@ fun GridCard(
                 name = item?.name,
 //                        showOverlay = !focusedAfterDelay,
                 showOverlay = true,
-                favorite = dto?.userData?.isFavorite ?: false,
                 watched = dto?.userData?.played ?: false,
                 unwatchedCount = dto?.userData?.unplayedItemCount ?: -1,
                 watchedPercent = dto?.userData?.playedPercentage,

@@ -180,7 +180,6 @@ class NavDrawerService
             user: JellyfinUser,
             userDto: UserDto,
         ) {
-            val builtins = listOf(NavDrawerItem.Favorites)
             val allLibraries = getAllUserLibraries(user.id, userDto.tvAccess)
             val libraries =
                 allLibraries
@@ -202,7 +201,7 @@ class NavDrawerService
                             type = it.collectionType,
                         )
                     }
-            val allItems = builtins + libraries
+            val allItems: List<NavDrawerItem> = libraries
 
             val navDrawerPins =
                 withContext(Dispatchers.IO) {

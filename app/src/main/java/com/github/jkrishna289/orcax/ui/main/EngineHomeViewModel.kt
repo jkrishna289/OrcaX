@@ -16,7 +16,6 @@ import com.github.jkrishna289.orcax.engine.RenderRow
 import com.github.jkrishna289.orcax.engine.TelemetryEvent
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
 import com.github.jkrishna289.orcax.services.HomeBundleCache
 import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.services.LocalHomeBundleBuilder
@@ -79,7 +78,6 @@ class EngineHomeViewModel
         private val backdropService: BackdropService,
         private val imageUrlService: ImageUrlService,
         private val api: ApiClient,
-        private val favoriteWatchManager: FavoriteWatchManager,
         navDrawerService: NavDrawerService,
         streamWatchTracker: StreamWatchTracker,
         // Shared, reusable inline-trailer players (Phase 10) — provided to the UI via LocalTrailerPlayerPool.
@@ -87,11 +85,6 @@ class EngineHomeViewModel
     ) : ViewModel() {
         private val _state = MutableStateFlow<EngineHomeState>(EngineHomeState.Loading)
         val state: StateFlow<EngineHomeState> = _state.asStateFlow()
-
-        // Optimistic favorite/watchlist state for the spotlight's "+ Watchlist" button. Reflects
-        // whichever spotlight item is currently showing as the billboard rotates.
-        private val _heroFavorite = MutableStateFlow(false)
-        val heroFavorite: StateFlow<Boolean> = _heroFavorite.asStateFlow()
 
         // Single source of truth for inline-trailer preview volume (Phase 13): the user's
         // preference mapped to a 0f..1f level. The billboard and 16:9 card players both read this
@@ -117,11 +110,6 @@ class EngineHomeViewModel
         // row under the billboard. Built here rather than by the engine, so it never moves.
         private var libraryRow: RenderRow? = null
         private var libraryDestinations: Map<RenderItem, Destination> = emptyMap()
-
-        // Favorite state for every hero, fetched in one call when the heroes change, so the
-        // billboard's rotation reads it locally instead of hitting the server every few seconds.
-        private val heroFavorites = mutableMapOf<UUID, Boolean>()
-        private var activeHeroId: UUID? = null
 
         // True once the engine's own bundle has landed. The local library home is only a stand-in
         // while the engine builds, so a late local row must never paint over the real thing.
@@ -289,8 +277,6 @@ class EngineHomeViewModel
                 return
             }
             refreshContinueWatching()
-            // The watchlist may have changed on the page the viewer is returning from.
-            loadHeroFavorites()
         }
 
         fun refreshContinueWatching() {
@@ -347,12 +333,10 @@ class EngineHomeViewModel
 
             // Progressive loading re-applies the bundle as each row lands, so only re-seed the
             // billboard when the spotlight itself actually changed — otherwise every arriving row
-            // would restart the rotation and re-fetch the hero's favorite state.
+            // would restart the rotation.
             val heroesChanged = nextHeroes != heroes
             heroes = nextHeroes
             if (heroesChanged) {
-                _heroFavorite.value = false
-                loadHeroFavorites()
                 // Warm the ambient colors (and their 1080p art) for every hero up front.
                 heroes.forEach { hero ->
                     ambientUrl(hero)?.let { url ->
@@ -375,7 +359,7 @@ class EngineHomeViewModel
                 )
             }
 
-            // Resolve favorite / ambient for the first hero item.
+            // Resolve the ambient colour for the first hero item.
             if (heroesChanged && heroes.isNotEmpty()) onHeroActive(0)
         }
 
@@ -438,18 +422,15 @@ class EngineHomeViewModel
         }
 
         /**
-         * Called by the billboard when a hero item becomes active (rotation or first load). Seeds
-         * the watchlist toggle and drives the focus-following ambient backdrop. The billboard is a
+         * Called by the billboard when a hero item becomes active (rotation or first load). Drives
+         * the focus-following ambient backdrop. The billboard is a
          * static promotional banner, so no trailer is resolved here — trailer playback belongs to
          * the dedicated Spotlight row, which resolves its own URL via [trailerUrlFor].
          */
         fun onHeroActive(index: Int) {
             val hero = heroes.getOrNull(index) ?: return
-            val heroId = hero.media.jellyfinId?.toUUIDOrNull()
             // Deliberately not onCardFocused: billboard rotation is automatic, not the viewer browsing.
             trackAndIlluminate(hero)
-            activeHeroId = heroId
-            _heroFavorite.value = heroId?.let { heroFavorites[it] } ?: false
         }
 
         /**
@@ -631,25 +612,6 @@ class EngineHomeViewModel
             }
         }
 
-        /** Optimistically toggles the spotlight item's Jellyfin favorite (the "watchlist"). */
-        fun onWatchlist(item: RenderItem) {
-            // Outside the library there is no favorite to set. This used to open the title page,
-            // where Request has focus, so pressing twice sent a request.
-            val id = item.media.jellyfinId?.toUUIDOrNull() ?: return
-            // The Spotlight row's button lands here too: flip this item's state, not the hero's.
-            val target = heroFavorites[id] != true
-            heroFavorites[id] = target // optimistic; revert below on failure
-            if (activeHeroId == id) _heroFavorite.value = target
-            viewModelScope.launch {
-                val ok = runCatching { favoriteWatchManager.setFavorite(id, target) }.isSuccess
-                if (!ok) {
-                    heroFavorites[id] = !target
-                    if (activeHeroId == id) _heroFavorite.value = !target
-                    Timber.w("Orca Engine: watchlist toggle failed for %s", id)
-                }
-            }
-        }
-
         /**
          * Submits an engine-proxied (Jellyseerr) request for a requestable item, then surfaces the
          * result as a toast. Falls back to the details page when the item can't be requested.
@@ -747,20 +709,6 @@ class EngineHomeViewModel
                 }
             if (batch.isEmpty()) return
             runCatching { client.recordEvents(uid, batch) }
-        }
-
-        /** One request for every hero's favorite state; the rotation then reads [heroFavorites]. */
-        private fun loadHeroFavorites() {
-            val ids = heroes.mapNotNull { it.media.jellyfinId?.toUUIDOrNull() }
-            if (ids.isEmpty()) return
-            viewModelScope.launch {
-                val items =
-                    runCatching {
-                        api.itemsApi.getItems(userId = currentUserId, ids = ids, enableUserData = true).content.items
-                    }.getOrNull() ?: return@launch
-                items.forEach { heroFavorites[it.id] = it.userData?.isFavorite == true }
-                activeHeroId?.let { _heroFavorite.value = heroFavorites[it] ?: false }
-            }
         }
 
         private fun navigateToDetail(item: RenderItem) {

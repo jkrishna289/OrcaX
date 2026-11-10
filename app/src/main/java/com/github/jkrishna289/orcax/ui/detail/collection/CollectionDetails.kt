@@ -107,16 +107,12 @@ fun CollectionDetails(
                         seriesId = item.data.seriesId,
                         playbackPosition = item.playbackPosition,
                         watched = item.played,
-                        favorite = item.favorite,
                         canDelete = viewModel.canDelete(item, preferences.appPreferences),
                         actions =
                             MoreDialogActions(
                                 navigateTo = viewModel::navigate,
                                 onClickWatch = { itemId, watched ->
                                     viewModel.setWatched(itemId, watched, position)
-                                },
-                                onClickFavorite = { itemId, favorite ->
-                                    viewModel.setFavorite(itemId, favorite, position)
                                 },
                                 onClickAddPlaylist = { itemId ->
                                     playlistViewModel.loadPlaylists(MediaType.VIDEO)
@@ -193,14 +189,6 @@ fun CollectionDetails(
                     val collection = state.collection!!
                     overviewDialog = ItemDetailsDialogInfo(collection)
                 },
-                favoriteOnClick =
-                    remember {
-                        {
-                            state.collection?.let {
-                                viewModel.setFavorite(it.id, !it.favorite, null)
-                            }
-                        }
-                    },
                 deleteOnClick =
                     remember {
                         {
@@ -221,7 +209,6 @@ fun CollectionDetails(
                         buildMoreDialogItemsForCollection(
                             context = context,
                             item = collection,
-                            favorite = collection.favorite,
                             canDelete = viewModel.canDelete(collection, preferences.appPreferences),
                             onClickPlayAll = onClickPlayAll,
                             actions =
@@ -229,9 +216,6 @@ fun CollectionDetails(
                                     navigateTo = viewModel::navigate,
                                     onClickWatch = { itemId, watched ->
                                         viewModel.setWatched(itemId, watched, null)
-                                    },
-                                    onClickFavorite = { itemId, favorite ->
-                                        viewModel.setFavorite(itemId, favorite, null)
                                     },
                                     onClickAddPlaylist = { itemId ->
                                         playlistViewModel.loadPlaylists(MediaType.VIDEO)
@@ -323,7 +307,6 @@ fun CollectionDetailsContent(
     letterPosition: suspend (Char) -> Int,
     onClickViewOptions: () -> Unit,
     overviewOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
     deleteOnClick: () -> Unit,
     canDelete: Boolean,
     moreOnClick: () -> Unit,
@@ -428,7 +411,6 @@ fun CollectionDetailsContent(
                             onFilterChange = onFilterChange,
                             getPossibleFilterValues = getPossibleFilterValues,
                             onClickViewOptions = onClickViewOptions,
-                            favoriteOnClick = favoriteOnClick,
                             deleteOnClick = deleteOnClick,
                             canDelete = canDelete,
                             moreOnClick = moreOnClick,
@@ -495,7 +477,6 @@ fun CollectionDetailsContent(
 fun buildMoreDialogItemsForCollection(
     context: Context,
     item: BaseItem,
-    favorite: Boolean,
     canDelete: Boolean,
     onClickPlayAll: (shuffle: Boolean) -> Unit,
     actions: MoreDialogActions,
@@ -538,13 +519,4 @@ fun buildMoreDialogItemsForCollection(
                 },
             )
         }
-        add(
-            DialogItem(
-                text = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-            ) {
-                actions.onClickFavorite.invoke(item.id, !favorite)
-            },
-        )
     }

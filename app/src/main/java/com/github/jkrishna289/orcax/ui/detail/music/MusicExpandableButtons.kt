@@ -15,7 +15,6 @@ import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.ui.components.ExpandableFaButton
@@ -25,7 +24,6 @@ import kotlin.time.Duration
 @Composable
 fun MusicExpandableButtons(
     actions: MusicButtonActions,
-    favorite: Boolean,
     buttonOnFocusChanged: (FocusState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -66,15 +64,6 @@ fun MusicExpandableButtons(
                 modifier = Modifier.onFocusChanged(buttonOnFocusChanged),
             )
         }
-        item("favorite") {
-            ExpandableFaButton(
-                title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                onClick = actions.onClickFavorite,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-                modifier = Modifier.onFocusChanged(buttonOnFocusChanged),
-            )
-        }
         item("more") {
             ExpandablePlayButton(
                 title = R.string.more,
@@ -90,6 +79,5 @@ fun MusicExpandableButtons(
 data class MusicButtonActions(
     val onClickPlay: (shuffle: Boolean) -> Unit,
     val onClickInstantMix: () -> Unit,
-    val onClickFavorite: () -> Unit,
     val onClickMore: () -> Unit,
 )

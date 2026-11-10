@@ -76,7 +76,7 @@ import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 /**
  * The static promotional banner at the top of the engine home — a **floating, rounded key-art card**
  * (inset from the screen edges, with a drop shadow and hairline border) carrying a backdrop +
- * logo (or styled title) + metadata + tagline + Play / Trailer / Watchlist / Info, a content-rating
+ * logo (or styled title) + metadata + tagline + Play / Trailer / Info, a content-rating
  * chip in the corner, an "UP NEXT" strip, and pagination dots. When an item has no real backdrop
  * (the sample/demo bundle) the art is a procedural gradient built from the item's accent hint.
  *
@@ -92,9 +92,7 @@ fun Billboard(
     item: RenderItem,
     onPlay: () -> Unit,
     onInfo: () -> Unit,
-    onWatchlist: () -> Unit,
     modifier: Modifier = Modifier,
-    isFavorite: Boolean = false,
     onRequest: () -> Unit = onInfo,
     onTrailer: () -> Unit = onInfo,
     playFocusRequester: FocusRequester? = null,
@@ -220,12 +218,9 @@ fun Billboard(
 
             BillboardActions(
                 actions = card.actions,
-                isFavorite = isFavorite,
-                canWatchlist = media.jellyfinId != null,
                 onPlay = onPlay,
                 onRequest = onRequest,
                 onTrailer = onTrailer,
-                onWatchlist = onWatchlist,
                 onInfo = onInfo,
                 playFocusRequester = playFocusRequester,
                 navFocusRequester = navFocusRequester,
@@ -553,13 +548,9 @@ private fun GenreBreadcrumb(item: RenderItem) {
 @Composable
 private fun BillboardActions(
     actions: List<CardAction>,
-    isFavorite: Boolean,
-    // The watchlist is a Jellyfin favorite, so a title outside the library has none to add to.
-    canWatchlist: Boolean,
     onPlay: () -> Unit,
     onRequest: () -> Unit,
     onTrailer: () -> Unit,
-    onWatchlist: () -> Unit,
     onInfo: () -> Unit,
     playFocusRequester: FocusRequester? = null,
     navFocusRequester: FocusRequester? = null,
@@ -598,18 +589,6 @@ private fun BillboardActions(
                     ),
         )
         BillboardButton(label = stringResource(R.string.trailer), primary = false, onClick = onTrailer)
-        if (canWatchlist) {
-            BillboardButton(
-                label =
-                    if (isFavorite) {
-                        stringResource(R.string.billboard_watchlisted)
-                    } else {
-                        stringResource(R.string.billboard_watchlist)
-                    },
-                primary = false,
-                onClick = onWatchlist,
-            )
-        }
         BillboardButton(label = stringResource(R.string.info), primary = false, onClick = onInfo)
     }
 }

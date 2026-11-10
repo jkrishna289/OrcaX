@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about">Névjegy</string>
-    <string name="add_favorite">Hozzáadás kedvencekhez</string>
     <string name="add_server">Szerver hozzáadása</string>
     <string name="add_user">Felhasználó hozzáadása</string>
     <string name="audio">Hang</string>
@@ -32,7 +31,6 @@
     <string name="episodes">Epizódok</string>
     <string name="error_loading_collection">Hiba a következő gyűjtemény betöltése során: %1$s</string>
     <string name="external_track">Külső</string>
-    <string name="favorites">Kedvencek</string>
     <string name="active_recordings">Aktív felvételek</string>
     <string name="cancel_recording">Felvétel leállítása</string>
     <string name="cancel_series_recording">Sorozatfelvétel leállítása</string>
@@ -91,7 +89,6 @@
     <string name="recommended">Ajánlott</string>
     <string name="record_program">Műsor felvétele</string>
     <string name="record_series">Sorozat felvétele</string>
-    <string name="remove_favorite">Törlés a kedvencekből</string>
     <string name="restart">Újraindítás</string>
     <string name="resume">Folytatás</string>
     <string name="save">Mentés</string>
@@ -347,7 +344,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Címek mutatása</string>
     <string name="live_tv_repeat">Ismétlés</string>
-    <string name="favorite_channels_at_beginning">A kedvenc csatornákat mutassa először</string>
     <string name="sort_channels_recently_watched">Legutóbb nézett csatornák előre sorolása</string>
     <string name="color_code_programs">Műsorok kategória szerinti színezése</string>
     <string name="subtitle_delay">Felirat késleltetése</string>

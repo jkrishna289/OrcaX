@@ -2,7 +2,6 @@
 <resources>
     <string name="about">Über diese App</string>
     <string name="active_recordings">Aktive Aufnahmen</string>
-    <string name="add_favorite">Zu Favoriten hinzufügen</string>
     <string name="add_server">Server hinzufügen</string>
     <string name="add_user">Benutzer hinzufügen</string>
     <string name="audio">Ton</string>
@@ -94,7 +93,6 @@
     <string name="episodes">Episoden</string>
     <string name="error_loading_collection">Fehler beim Laden der Sammlung %1$s</string>
     <string name="external_track">Extern</string>
-    <string name="favorites">Favoriten</string>
     <string name="file_size">Größe</string>
     <string name="forced_track">Erzwungen</string>
     <string name="genres">Genre</string>
@@ -128,7 +126,6 @@
     <string name="recently_released">Zuletzt veröffentlicht</string>
     <string name="record_program">Programm aufnehmen</string>
     <string name="record_series">Serie aufnehmen</string>
-    <string name="remove_favorite">Nicht favorisieren</string>
     <string name="search_and_download"><![CDATA[Suchen & Herunterladen]]></string>
     <string name="show_debug_info">Debug Infos anzeigen</string>
     <string name="download_and_update"><![CDATA[Herunterladen & Aktualisieren]]></string>
@@ -379,7 +376,6 @@
     <string name="force_dovi_profile_7">Direktes abspielen von Dolby Vision Profil 7</string>
     <string name="subtitle_delay">Untertitelverzögerung</string>
     <string name="sort_channels_recently_watched">Sortiere Kanäle nach zuletzt geschaut</string>
-    <string name="favorite_channels_at_beginning">Favoriten als erstes anzeigen</string>
     <string name="backdrop_display">Hintergrundstil</string>
     <string name="refresh_rate_switching">Bildwiederholraten-Anpassung</string>
     <string name="voice_error_speech_timeout">Keine Spracheingabe erkannt</string>
@@ -525,7 +521,6 @@
     <string name="conductor">Dirigent</string>
     <string name="lyricist">Liedtext-Schreiber</string>
     <string name="artist">Künstler</string>
-    <string name="favorite_items">Favorisierte %s</string>
     <string name="home_rows">Startseite - Reihen</string>
     <string name="load_from_server">Vom Server Benutzerprofil laden</string>
     <string name="save_to_server">Im Server Benutzerprofil speichern</string>

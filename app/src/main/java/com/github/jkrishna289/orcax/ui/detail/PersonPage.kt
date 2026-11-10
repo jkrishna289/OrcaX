@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,7 +41,6 @@ import coil3.compose.AsyncImage
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.preferences.UserPreferences
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.ui.Cards
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
@@ -51,7 +49,6 @@ import com.github.jkrishna289.orcax.ui.PreviewTvSpec
 import com.github.jkrishna289.orcax.ui.SlimItemFields
 import com.github.jkrishna289.orcax.ui.cards.SeasonCard
 import com.github.jkrishna289.orcax.ui.components.ErrorMessage
-import com.github.jkrishna289.orcax.ui.components.ExpandableFaButton
 import com.github.jkrishna289.orcax.ui.components.LoadingPage
 import com.github.jkrishna289.orcax.ui.components.LoadingRow
 import com.github.jkrishna289.orcax.ui.components.OverviewText
@@ -93,7 +90,6 @@ class PersonViewModel
     constructor(
         api: ApiClient,
         val navigationManager: NavigationManager,
-        private val favoriteWatchManager: FavoriteWatchManager,
     ) : LoadingItemViewModel(api) {
         val movies = MutableLiveData<RowLoadingState>(RowLoadingState.Pending)
         val series = MutableLiveData<RowLoadingState>(RowLoadingState.Pending)
@@ -160,15 +156,6 @@ class PersonViewModel
                 }
             }
         }
-
-        fun setFavorite(favorite: Boolean) {
-            viewModelScope.launchIO {
-                itemUuid?.let {
-                    favoriteWatchManager.setFavorite(it, favorite)
-                    fetchAndSetItem(it)
-                }
-            }
-        }
     }
 
 @Composable
@@ -212,7 +199,6 @@ fun PersonPage(
                     birthdate = person.data.premiereDate?.toLocalDate(),
                     deathdate = person.data.endDate?.toLocalDate(),
                     birthPlace = person.data.productionLocations?.firstOrNull(),
-                    favorite = person.favorite,
                     movies = movies,
                     series = series,
                     episodes = episodes,
@@ -220,9 +206,6 @@ fun PersonPage(
                         viewModel.navigationManager.navigateTo(item.destination())
                     },
                     overviewOnClick = { showOverviewDialog = true },
-                    favoriteOnClick = {
-                        viewModel.setFavorite(!person.favorite)
-                    },
                     modifier = modifier,
                 )
                 AnimatedVisibility(showOverviewDialog) {
@@ -257,13 +240,11 @@ fun PersonPageContent(
     birthdate: LocalDate?,
     deathdate: LocalDate?,
     birthPlace: String?,
-    favorite: Boolean,
     movies: RowLoadingState,
     series: RowLoadingState,
     episodes: RowLoadingState,
     onClickItem: (Int, BaseItem) -> Unit,
     overviewOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -290,9 +271,7 @@ fun PersonPageContent(
                 birthdate = birthdate,
                 birthPlace = birthPlace,
                 deathdate = deathdate,
-                favorite = favorite,
                 overviewOnClick = overviewOnClick,
-                favoriteOnClick = favoriteOnClick,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -382,9 +361,7 @@ fun PersonHeader(
     birthdate: LocalDate?,
     deathdate: LocalDate?,
     birthPlace: String?,
-    favorite: Boolean,
     overviewOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -474,10 +451,7 @@ fun PersonHeader(
                 )
             }
             val interactionSource = remember { MutableInteractionSource() }
-            val buttonInteractionSource = remember { MutableInteractionSource() }
-            val focused =
-                interactionSource.collectIsFocusedAsState().value ||
-                    buttonInteractionSource.collectIsFocusedAsState().value
+            val focused = interactionSource.collectIsFocusedAsState().value
             LaunchedEffect(focused) {
                 if (focused) {
                     bringIntoViewRequester.bringIntoView()
@@ -489,14 +463,6 @@ fun PersonHeader(
                 onClick = overviewOnClick,
                 interactionSource = interactionSource,
                 modifier = Modifier.padding(top = 8.dp),
-            )
-            ExpandableFaButton(
-                title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                iconStringRes = R.string.fa_heart,
-                onClick = favoriteOnClick,
-                iconColor = if (favorite) Color.Red else Color.Unspecified,
-                interactionSource = buttonInteractionSource,
-                modifier = Modifier,
             )
         }
     }
@@ -514,8 +480,6 @@ private fun PersonPreview() {
             birthPlace = "Phoenix, Arizona, USA",
             deathdate = LocalDate.of(2025, 2, 1),
             overviewOnClick = {},
-            favorite = true,
-            favoriteOnClick = {},
             modifier = Modifier.fillMaxWidth(),
         )
     }

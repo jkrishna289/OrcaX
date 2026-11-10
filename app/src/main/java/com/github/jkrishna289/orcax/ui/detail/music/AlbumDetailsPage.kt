@@ -49,7 +49,6 @@ import com.github.jkrishna289.orcax.data.ServerRepository
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
 import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
@@ -90,7 +89,6 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -118,7 +116,6 @@ class AlbumViewModel
         mediaManagementService: MediaManagementService,
         val serverRepository: ServerRepository,
         val mediaReportService: MediaReportService,
-        private val favoriteWatchManager: FavoriteWatchManager,
         private val userPreferencesService: UserPreferencesService,
         private val backdropService: BackdropService,
         private val imageUrlService: ImageUrlService,
@@ -223,19 +220,6 @@ class AlbumViewModel
             }
         }
 
-        fun setFavorite(
-            itemId: UUID,
-            favorite: Boolean,
-        ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setFavorite(itemId, favorite)
-            val album =
-                api.userLibraryApi
-                    .getItem(itemId = itemId)
-                    .content
-                    .let { BaseItem(it, false) }
-            _state.update { it.copy(album = album) }
-        }
-
         fun play(
             shuffled: Boolean,
             startIndex: Int = 0,
@@ -317,7 +301,6 @@ fun AlbumDetailsPage(
                 onClickPlay = { index, _ -> viewModel.play(false, index) },
                 onClickPlayNext = { _, song -> viewModel.playNext(song) },
                 onClickAddToQueue = { index, item -> viewModel.addToQueue(item, index) },
-                onClickFavorite = { itemId, favorite -> viewModel.setFavorite(itemId, favorite) },
                 onClickAddPlaylist = { itemId ->
                     playlistViewModel.loadPlaylists(MediaType.AUDIO)
                     showPlaylistDialog.makePresent(itemId)
@@ -395,12 +378,6 @@ fun AlbumDetailsPage(
                                         MusicButtonActions(
                                             onClickPlay = { viewModel.play(it, 0) },
                                             onClickInstantMix = { viewModel.startInstantMix(album.id) },
-                                            onClickFavorite = {
-                                                viewModel.setFavorite(
-                                                    album.id,
-                                                    !album.favorite,
-                                                )
-                                            },
                                             onClickMore = {
                                                 moreDialog =
                                                     DialogParams(
@@ -423,7 +400,6 @@ fun AlbumDetailsPage(
                                             },
                                         )
                                     },
-                                favorite = album.favorite,
                                 buttonOnFocusChanged = {
                                     if (it.isFocused) {
                                         position = RowColumn(HEADER_ROW, 0)
@@ -541,7 +517,6 @@ fun AlbumDetailsPage(
                                         aspectRatio = AspectRatios.WIDE,
                                         played = item?.played ?: false,
                                         playPercent = item?.data?.userData?.playedPercentage ?: 0.0,
-                                        favorite = item?.favorite ?: false,
                                         modifier = mod,
                                     )
                                 },

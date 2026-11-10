@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about">Sobre</string>
-    <string name="add_favorite">Favorito</string>
     <string name="add_server">Adicionar Servidor</string>
     <string name="add_user">Adicionar Utilizador</string>
     <string name="audio">Áudio</string>
@@ -23,7 +22,6 @@
     <string name="enabled">Activado</string>
     <string name="episodes">Episódios</string>
     <string name="external_track">Externo</string>
-    <string name="favorites">Favoritos</string>
     <string name="file_size">Tamanho</string>
     <string name="forced_track">Forçado</string>
     <string name="go_to">Ir para</string>
@@ -90,7 +88,6 @@
     <string name="recommended">Recomendado</string>
     <string name="record_program">Gravar Programa</string>
     <string name="record_series">Gravar Série</string>
-    <string name="remove_favorite">Desmarcar como favorito</string>
     <string name="restart">Reiniciar</string>
     <string name="resume">Resumir</string>
     <string name="save">Guardar</string>
@@ -367,7 +364,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="container">Formato</string>
     <string name="live_tv_repeat">Repetir</string>
-    <string name="favorite_channels_at_beginning">Mostrar primeiro os canais favoritos</string>
     <string name="sort_channels_recently_watched">Ordenar canais por visualizações recentes</string>
     <string name="color_code_programs">Codificação de cores para os programas</string>
     <string name="subtitle_delay">Atraso da legenda</string>
@@ -477,7 +473,6 @@
     <string name="display_presets_description">Predefinições embarcadas para definir todas as linhas rapidamente</string>
     <string name="customize_home_summary">Escolha as linhas e imagens na página inicial</string>
     <string name="decrease_all_cards_size">Diminuir o tamanho de todos os cartões</string>
-    <string name="favorite_items">Favoritos %s</string>
     <plurals name="minutes">
         <item quantity="one">%s minuto</item>
         <item quantity="many">%s minutos</item>

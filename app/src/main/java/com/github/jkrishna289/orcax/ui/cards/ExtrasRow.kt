@@ -64,7 +64,6 @@ fun ExtrasRow(
                 imageHeight = Cards.height2x3 * .75f,
                 imageWidth = Dp.Unspecified,
                 imageUrl = imageUrl,
-                isFavorite = false,
                 isPlayed = false,
                 unplayedItemCount = -1,
                 playedPercentage = -1.0,

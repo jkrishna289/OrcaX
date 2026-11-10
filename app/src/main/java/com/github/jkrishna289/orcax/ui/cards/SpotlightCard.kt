@@ -82,7 +82,6 @@ internal fun SpotlightCard(
     item: RenderItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onWatchlist: () -> Unit = onClick,
     trailerUrlFor: (RenderItem) -> String? = { null },
     trailerStatusProvider: (suspend (RenderItem) -> TrailerStatus?)? = null,
     // Row-focus restoration lands here (EngineHomePage re-focuses the last row on return).
@@ -268,7 +267,6 @@ internal fun SpotlightCard(
             SpotlightActions(
                 item = item,
                 onClick = onClick,
-                onWatchlist = onWatchlist,
                 focusRequester = focusRequester,
             )
         }
@@ -436,12 +434,11 @@ private fun SpotlightMetadataLine(item: RenderItem) {
     }
 }
 
-/** Play (or Request, when the title isn't in the library yet), Details and Watchlist. */
+/** Play (or Request, when the title isn't in the library yet) and Details. */
 @Composable
 private fun SpotlightActions(
     item: RenderItem,
     onClick: () -> Unit,
-    onWatchlist: () -> Unit,
     focusRequester: FocusRequester?,
 ) {
     val requestable = item.media.availability == AvailabilityState.REQUEST
@@ -454,10 +451,6 @@ private fun SpotlightActions(
             modifier = if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
         )
         BillboardButton(label = stringResource(R.string.info), primary = false, onClick = onClick)
-        // A Jellyfin favorite: nothing to add for a title outside the library.
-        if (item.media.jellyfinId != null) {
-            BillboardButton(label = stringResource(R.string.billboard_watchlist), primary = false, onClick = onWatchlist)
-        }
     }
 }
 

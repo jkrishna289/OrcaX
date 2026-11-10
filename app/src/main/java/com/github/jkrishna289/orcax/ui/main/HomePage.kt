@@ -153,7 +153,6 @@ fun HomePage(
                                 seriesId = item.data.seriesId,
                                 playbackPosition = item.playbackPosition,
                                 watched = item.played,
-                                favorite = item.favorite,
                                 canDelete = viewModel.canDelete(item, preferences.appPreferences),
                                 canRemoveNextUp = canRemoveNextUp,
                                 canRemoveContinueWatching = canRemoveContinueWatching,
@@ -162,9 +161,6 @@ fun HomePage(
                                         navigateTo = viewModel.navigationManager::navigateTo,
                                         onClickWatch = { itemId, played ->
                                             viewModel.setWatched(itemId, played)
-                                        },
-                                        onClickFavorite = { itemId, favorite ->
-                                            viewModel.setFavorite(itemId, favorite)
                                         },
                                         onClickAddPlaylist = { itemId ->
                                             playlistViewModel.loadPlaylists(MediaType.VIDEO)
@@ -617,7 +613,6 @@ fun HomePageCardContent(
                     imageContentScale = scale,
                     cornerText = item?.ui?.episodeUnplayedCornerText,
                     played = item?.data?.userData?.played ?: false,
-                    favorite = item?.favorite ?: false,
                     playPercent =
                         item?.data?.userData?.playedPercentage
                             ?: 0.0,
@@ -636,7 +631,6 @@ fun HomePageCardContent(
                     imageContentScale = scale,
                     cornerText = item?.ui?.episodeUnplayedCornerText,
                     played = item?.data?.userData?.played ?: false,
-                    favorite = item?.favorite ?: false,
                     playPercent =
                         item?.data?.userData?.playedPercentage
                             ?: 0.0,

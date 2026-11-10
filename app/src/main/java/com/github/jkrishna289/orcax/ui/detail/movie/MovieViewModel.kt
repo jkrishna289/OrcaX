@@ -17,12 +17,12 @@ import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.preferences.ThemeSongVolume
 import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.ExtrasService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
-import com.github.jkrishna289.orcax.services.PeopleFavorites
+import com.github.jkrishna289.orcax.services.PeopleService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.ThemeSongPlayer
 import com.github.jkrishna289.orcax.services.TrailerService
@@ -72,8 +72,8 @@ class MovieViewModel
         val streamChoiceService: StreamChoiceService,
         val mediaReportService: MediaReportService,
         private val themeSongPlayer: ThemeSongPlayer,
-        private val favoriteWatchManager: FavoriteWatchManager,
-        private val peopleFavorites: PeopleFavorites,
+        private val watchManager: WatchManager,
+        private val peopleService: PeopleService,
         private val trailerService: TrailerService,
         private val extrasService: ExtrasService,
         private val userPreferencesService: UserPreferencesService,
@@ -202,7 +202,7 @@ class MovieViewModel
                     _state.update { it.copy(availability = status?.availability) }
                 }
                 viewModelScope.launchIO {
-                    val people = peopleFavorites.getPeopleFor(movie)
+                    val people = peopleService.getPeopleFor(movie)
                     _state.update {
                         it.copy(
                             people = people,
@@ -240,7 +240,7 @@ class MovieViewModel
             played: Boolean,
         ) = viewModelScope.launchDefault {
             try {
-                favoriteWatchManager.setWatched(itemId, played)
+                watchManager.setWatched(itemId, played)
                 getMovie().let { movie ->
                     _state.update {
                         it.copy(loading = DataLoadingState.Success(movie))
@@ -248,28 +248,6 @@ class MovieViewModel
                 }
             } catch (ex: Exception) {
                 Timber.e(ex, "Error updating watch status for movie %s", itemId)
-                showToast(context, "Something went wrong...")
-            }
-        }
-
-        fun setFavorite(
-            itemId: UUID,
-            favorite: Boolean,
-        ) = viewModelScope.launchDefault {
-            try {
-                favoriteWatchManager.setFavorite(itemId, favorite)
-                val movie = getMovie()
-                _state.update {
-                    it.copy(loading = DataLoadingState.Success(movie))
-                }
-                if (itemId != movie.id) {
-                    viewModelScope.launchIO {
-                        val people = peopleFavorites.getPeopleFor(movie)
-                        _state.update { it.copy(people = people) }
-                    }
-                }
-            } catch (ex: Exception) {
-                Timber.e(ex, "Error updating favorite  %s", itemId)
                 showToast(context, "Something went wrong...")
             }
         }

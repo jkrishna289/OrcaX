@@ -2,7 +2,6 @@ package com.github.jkrishna289.orcax.ui.util
 
 import com.github.jkrishna289.orcax.data.filter.CommunityRatingFilter
 import com.github.jkrishna289.orcax.data.filter.DecadeFilter
-import com.github.jkrishna289.orcax.data.filter.FavoriteFilter
 import com.github.jkrishna289.orcax.data.filter.FilterValueOption
 import com.github.jkrishna289.orcax.data.filter.FilterVideoType
 import com.github.jkrishna289.orcax.data.filter.GenreFilter
@@ -60,7 +59,6 @@ object FilterUtils {
                             .map { FilterValueOption(it.name ?: "", it.id) }
                     }
 
-                    FavoriteFilter,
                     PlayedFilter,
                     -> {
                         listOf(

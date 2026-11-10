@@ -12,7 +12,7 @@ import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.data.model.ItemPlayback
 import com.github.jkrishna289.orcax.preferences.ThemeSongVolume
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.NavigationManager
@@ -61,7 +61,7 @@ class EpisodeViewModel
         val streamChoiceService: StreamChoiceService,
         val mediaReportService: MediaReportService,
         private val themeSongPlayer: ThemeSongPlayer,
-        private val favoriteWatchManager: FavoriteWatchManager,
+        private val watchManager: WatchManager,
         private val userPreferencesService: UserPreferencesService,
         private val backdropService: BackdropService,
         private val mediaManagementService: MediaManagementService,
@@ -132,15 +132,7 @@ class EpisodeViewModel
             itemId: UUID,
             played: Boolean,
         ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setWatched(itemId, played)
-            fetchAndSetItem()
-        }
-
-        fun setFavorite(
-            itemId: UUID,
-            favorite: Boolean,
-        ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setFavorite(itemId, favorite)
+            watchManager.setWatched(itemId, played)
             fetchAndSetItem()
         }
 

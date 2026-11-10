@@ -12,7 +12,7 @@ class TestOneCardPerPerson {
         id: UUID,
         name: String,
         role: String?,
-    ) = Person(id, name, role, PersonKind.ACTOR, null, false)
+    ) = Person(id, name, role, PersonKind.ACTOR, null)
 
     @Test
     fun `merges a person listed once per role, keeping first-appearance order`() {

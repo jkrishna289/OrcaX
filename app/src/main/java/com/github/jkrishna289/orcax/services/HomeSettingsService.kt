@@ -15,13 +15,11 @@ import com.github.jkrishna289.orcax.ui.DefaultItemFields
 import com.github.jkrishna289.orcax.ui.SlimItemFields
 import com.github.jkrishna289.orcax.ui.components.getGenreImageMap
 import com.github.jkrishna289.orcax.ui.main.settings.Library
-import com.github.jkrishna289.orcax.ui.main.settings.favoriteOptions
 import com.github.jkrishna289.orcax.ui.playback.getTypeFor
 import com.github.jkrishna289.orcax.ui.toBaseItems
 import com.github.jkrishna289.orcax.ui.toServerString
 import com.github.jkrishna289.orcax.util.GetGenresRequestHandler
 import com.github.jkrishna289.orcax.util.GetItemsRequestHandler
-import com.github.jkrishna289.orcax.util.GetPersonsHandler
 import com.github.jkrishna289.orcax.util.GetStudiosRequestHandler
 import com.github.jkrishna289.orcax.util.HomeRowLoadingState
 import com.github.jkrishna289.orcax.util.HomeRowLoadingState.Error
@@ -56,7 +54,6 @@ import org.jellyfin.sdk.model.api.UserDto
 import org.jellyfin.sdk.model.api.request.GetGenresRequest
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import org.jellyfin.sdk.model.api.request.GetLatestMediaRequest
-import org.jellyfin.sdk.model.api.request.GetPersonsRequest
 import org.jellyfin.sdk.model.api.request.GetRecommendedProgramsRequest
 import org.jellyfin.sdk.model.api.request.GetRecordingsRequest
 import org.jellyfin.sdk.model.api.request.GetStudiosRequest
@@ -508,15 +505,6 @@ class HomeSettingsService
                     )
                 }
 
-                is HomeRowConfig.Favorite -> {
-                    val name =
-                        context.getString(
-                            R.string.favorite_items,
-                            context.getString(favoriteOptions[config.kind]!!),
-                        )
-                    HomeRowConfigDisplay(id, name, config)
-                }
-
                 is HomeRowConfig.Recordings -> {
                     HomeRowConfigDisplay(
                         id = id,
@@ -868,58 +856,6 @@ class HomeSettingsService
                                 rowType = row,
                             )
                         }
-                }
-
-                is HomeRowConfig.Favorite -> {
-                    val title =
-                        context.getString(
-                            R.string.favorite_items,
-                            context.getString(favoriteOptions[row.kind]!!),
-                        )
-                    if (row.kind == BaseItemKind.PERSON) {
-                        val request =
-                            GetPersonsRequest(
-                                userId = userDto.id,
-                                limit = limit,
-                                fields = DefaultItemFields,
-                                isFavorite = true,
-                                enableImages = true,
-                                enableImageTypes = listOf(ImageType.PRIMARY),
-                            )
-                        GetPersonsHandler
-                            .execute(api, request)
-                            .content.items
-                            .map { BaseItem(it, true) }
-                            .let {
-                                Success(
-                                    title,
-                                    it,
-                                    row.viewOptions,
-                                )
-                            }
-                    } else {
-                        val request =
-                            GetItemsRequest(
-                                userId = userDto.id,
-                                recursive = true,
-                                limit = limit,
-                                fields = DefaultItemFields,
-                                includeItemTypes = listOf(row.kind),
-                                isFavorite = true,
-                            )
-                        GetItemsRequestHandler
-                            .execute(api, request)
-                            .content.items
-                            .map { BaseItem(it, row.viewOptions.useSeries) }
-                            .let {
-                                Success(
-                                    title,
-                                    it,
-                                    row.viewOptions,
-                                    rowType = row,
-                                )
-                            }
-                    }
                 }
 
                 is HomeRowConfig.Recordings -> {

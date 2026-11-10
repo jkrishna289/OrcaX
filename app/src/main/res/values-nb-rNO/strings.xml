@@ -2,7 +2,6 @@
 <resources>
     <string name="about">Om</string>
     <string name="active_recordings">Aktive opptak</string>
-    <string name="add_favorite">Legg til favoritt</string>
     <string name="add_server">Legg til server</string>
     <string name="add_user">Legg til bruker</string>
     <string name="audio">Lyd</string>
@@ -35,7 +34,6 @@
     <string name="episodes">Episoder</string>
     <string name="error_loading_collection">Feil ved lasting av samling %1$s</string>
     <string name="external_track">Ekstern</string>
-    <string name="favorites">Favoritter</string>
     <string name="file_size">Størrelse</string>
     <string name="forced_track">Tvungen</string>
     <string name="genres">Sjangere</string>
@@ -90,7 +88,6 @@
     <string name="recommended">Anbefalt</string>
     <string name="record_program">Ta opp program</string>
     <string name="record_series">Ta opp serie</string>
-    <string name="remove_favorite">Fjern favoritt</string>
     <string name="restart">Start på nytt</string>
     <string name="resume">Fortsett</string>
     <string name="save">Lagre</string>
@@ -348,7 +345,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Vis titler</string>
     <string name="live_tv_repeat">Repeter</string>
-    <string name="favorite_channels_at_beginning">Vis favorittkanaler først</string>
     <string name="sort_channels_recently_watched">Sorter kanaler etter sist sett</string>
     <string name="color_code_programs">Fargekod programmer</string>
     <string name="subtitle_delay">Undertekstforsinkelse</string>

@@ -2,7 +2,6 @@
 <resources>
     <string name="about">O aplikaciji</string>
     <string name="active_recordings">Aktivni posnetki</string>
-    <string name="add_favorite">Dodaj med priljubljene</string>
     <string name="add_server">Dodaj strežnik</string>
     <string name="add_user">Dodaj uporabnika</string>
     <string name="audio">Zvok</string>
@@ -40,7 +39,6 @@
     <string name="episodes">Epizode</string>
     <string name="error_loading_collection">Napaka nalaganja kolekcij %1$s</string>
     <string name="external_track">Zunanji</string>
-    <string name="favorites">Priljubleni</string>
     <string name="file_size">Velikost</string>
     <string name="forced_track">Prisiljeno</string>
     <string name="genres">Žanre</string>
@@ -100,7 +98,6 @@
     <string name="recommended">Priporočeno</string>
     <string name="record_program">Posnemi program</string>
     <string name="record_series">Posnemi serijo</string>
-    <string name="remove_favorite">Odstrani iz priljubljenih</string>
     <string name="restart">Zaženi znova</string>
     <string name="resume">Nadaljuj</string>
     <string name="save">Shrani</string>
@@ -214,7 +211,6 @@
     <plurals name="shorts">
         <item quantity="one">Kratki filmi</item>
     </plurals>
-    <string name="favorite_items">Dodaj %s med priljubljene</string>
     <plurals name="downloads">
         <item quantity="one">%s prenos</item>
         <item quantity="two">%s prenosa</item>
@@ -386,7 +382,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Pokaži naslove</string>
     <string name="live_tv_repeat">Ponovi</string>
-    <string name="favorite_channels_at_beginning">Najprej prikaži priljubljene kanale</string>
     <string name="sort_channels_recently_watched">Razvrsti kanale po zadnjih ogledih</string>
     <string name="color_code_programs">Barvno označi programe</string>
     <string name="subtitle_delay">Zakasnitev podnapisov</string>

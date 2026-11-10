@@ -138,7 +138,7 @@ class EngineSeriesViewModel
         private fun person(
             name: String,
             kind: PersonKind,
-        ) = Person(UUID.nameUUIDFromBytes(name.toByteArray()), name, null, kind, null, false)
+        ) = Person(UUID.nameUUIDFromBytes(name.toByteArray()), name, null, kind, null)
 
         private suspend fun load(
             seasonIndex: Int,

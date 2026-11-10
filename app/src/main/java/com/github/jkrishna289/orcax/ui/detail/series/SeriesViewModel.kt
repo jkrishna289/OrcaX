@@ -15,7 +15,7 @@ import com.github.jkrishna289.orcax.data.model.Trailer
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.ExtrasService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.EpisodeProgress
@@ -24,7 +24,7 @@ import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.ui.detail.discover.SourceStreamingController
 import com.github.jkrishna289.orcax.ui.seasonEpisode
-import com.github.jkrishna289.orcax.services.PeopleFavorites
+import com.github.jkrishna289.orcax.services.PeopleService
 import com.github.jkrishna289.orcax.services.StreamChoiceService
 import com.github.jkrishna289.orcax.services.ThemeSongPlayer
 import com.github.jkrishna289.orcax.services.TrailerService
@@ -92,8 +92,8 @@ class SeriesViewModel
         private val navigationManager: NavigationManager,
         private val itemPlaybackRepository: ItemPlaybackRepository,
         private val themeSongPlayer: ThemeSongPlayer,
-        private val favoriteWatchManager: FavoriteWatchManager,
-        private val peopleFavorites: PeopleFavorites,
+        private val watchManager: WatchManager,
+        private val peopleService: PeopleService,
         private val trailerService: TrailerService,
         private val extrasService: ExtrasService,
         val streamChoiceService: StreamChoiceService,
@@ -244,7 +244,7 @@ class SeriesViewModel
                 }
                 // The overview shows the show's own cast now too, not just the focused episode's
                 viewModelScope.launchIO {
-                    val people = peopleFavorites.getPeopleFor(item)
+                    val people = peopleService.getPeopleFor(item)
                     this@SeriesViewModel.people.setValueOnMain(people)
                 }
                 if (seriesPageType == SeriesPageType.DETAILS) {
@@ -504,28 +504,11 @@ class SeriesViewModel
             played: Boolean,
             listIndex: Int?,
         ) = viewModelScope.launch(Dispatchers.IO + ExceptionHandler()) {
-            favoriteWatchManager.setWatched(itemId, played)
+            watchManager.setWatched(itemId, played)
             listIndex?.let {
                 refreshEpisode(itemId, listIndex)
             }
             if (seriesPageType == SeriesPageType.OVERVIEW) refreshPlayTarget()
-        }
-
-        fun setFavorite(
-            itemId: UUID,
-            favorite: Boolean,
-            listIndex: Int?,
-        ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setFavorite(itemId, favorite)
-            if (listIndex != null) {
-                refreshEpisode(itemId, listIndex)
-            } else {
-                val item = fetchItem(seriesId)
-                viewModelScope.launchIO {
-                    val people = peopleFavorites.getPeopleFor(item)
-                    this@SeriesViewModel.people.setValueOnMain(people)
-                }
-            }
         }
 
         fun setSeasonWatched(
@@ -540,7 +523,7 @@ class SeriesViewModel
 
         fun setWatchedSeries(played: Boolean) =
             viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-                favoriteWatchManager.setWatched(seriesId, played)
+                watchManager.setWatched(seriesId, played)
                 val series = fetchItem(seriesId)
                 val seasons = getSeasons(series, null).await()
                 this@SeriesViewModel.seasons.setValueOnMain(seasons)

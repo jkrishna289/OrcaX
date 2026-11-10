@@ -2,7 +2,6 @@
 <resources>
     <string name="about">אודות</string>
     <string name="active_recordings">הקלטות פעילות</string>
-    <string name="add_favorite">הוספה למועדפים</string>
     <string name="add_server">הוסף שרת</string>
     <string name="add_user">הוסף משתמש</string>
     <string name="audio">שמע</string>
@@ -38,7 +37,6 @@
     <string name="switch_servers">החלף שרתים</string>
     <string name="search">חיפוש</string>
     <string name="home">דף הבית</string>
-    <string name="favorites">מועדפים</string>
     <plurals name="movies">
         <item quantity="one">סרט</item>
         <item quantity="two">סרטים</item>
@@ -168,7 +166,6 @@
     <string name="recommended">מומלץ</string>
     <string name="record_program">הקלט תוכנית</string>
     <string name="record_series">הקלט סדרה</string>
-    <string name="remove_favorite">הסרה ממועדפים</string>
     <string name="restart">התחל מחדש</string>
     <string name="resume">המשך ניגון</string>
     <string name="save">שמור</string>
@@ -265,7 +262,6 @@
     <plurals name="shorts">
         <item quantity="one">קטעים קצרים</item>
     </plurals>
-    <string name="favorite_items">מועדפים: %s</string>
     <string name="ac3_supported">המכשיר תומך ב־AC3/Dolby Digital</string>
     <string name="advanced_settings">הגדרות מתקדמות</string>
     <string name="advanced_ui">ממשק מתקדם</string>
@@ -392,7 +388,6 @@
     <string name="bit_unit">ביט</string>
     <string name="sample_rate_unit">הרץ</string>
     <string name="show_titles">הצג כותרות</string>
-    <string name="favorite_channels_at_beginning">הצג ערוצים מועדפים ראשונים</string>
     <string name="sort_channels_recently_watched">מיין ערוצים לפי \"נצפו לאחרונה\"</string>
     <string name="subtitle_delay">היסט כתוביות</string>
     <string name="backdrop_display">סגנון תמונת־רקע</string>

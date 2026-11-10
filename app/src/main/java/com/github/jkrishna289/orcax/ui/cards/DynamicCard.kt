@@ -132,7 +132,6 @@ fun DynamicCard(
                 name = card.title,
                 role = card.subtitle,
                 imageUrl = resolvedImageUrl,
-                favorite = false,
                 onClick = onClick,
                 onLongClick = onLongClick,
                 modifier = modifier.width(EngineCardHeight),
@@ -748,7 +747,6 @@ private fun EngineCardArt(
             imageUrl = imageUrl,
             name = name,
             showOverlay = false,
-            favorite = false,
             watched = false,
             unwatchedCount = 0,
             watchedPercent = null,
@@ -1473,7 +1471,6 @@ fun DynamicCardRow(
     modifier: Modifier = Modifier,
     onLongClickItem: (RenderItem) -> Unit = {},
     onFocusItem: (RenderItem) -> Unit = {},
-    onWatchlistItem: (RenderItem) -> Unit = {},
     focusRequester: FocusRequester? = null,
     // Resolve a 16:9 card's inline trailer + backdrop URLs (engine-cached). Default = no trailer.
     trailerUrlFor: (RenderItem) -> String? = { null },
@@ -1494,7 +1491,6 @@ fun DynamicCardRow(
             SpotlightCard(
                 item = feature,
                 onClick = { onClickItem(feature) },
-                onWatchlist = { onWatchlistItem(feature) },
                 trailerUrlFor = trailerUrlFor,
                 trailerStatusProvider = trailerStatusProvider,
                 focusRequester = focusRequester,

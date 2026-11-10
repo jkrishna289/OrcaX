@@ -26,9 +26,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,7 +39,6 @@ import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.Cards
-import com.github.jkrishna289.orcax.ui.FontAwesome
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.isNotNullOrBlank
 import com.github.jkrishna289.orcax.ui.logCoilError
@@ -60,7 +57,6 @@ fun ItemCardImage(
     item: BaseItem?,
     name: String?,
     showOverlay: Boolean,
-    favorite: Boolean,
     watched: Boolean,
     unwatchedCount: Int,
     watchedPercent: Double?,
@@ -89,7 +85,6 @@ fun ItemCardImage(
         imageUrl = imageUrl,
         name = name,
         showOverlay = showOverlay,
-        favorite = favorite,
         watched = watched,
         unwatchedCount = unwatchedCount,
         watchedPercent = watchedPercent,
@@ -111,7 +106,6 @@ fun ItemCardImage(
     imageUrl: String?,
     name: String?,
     showOverlay: Boolean,
-    favorite: Boolean,
     watched: Boolean,
     unwatchedCount: Int,
     watchedPercent: Double?,
@@ -163,7 +157,6 @@ fun ItemCardImage(
         }
         if (showOverlay) {
             ItemCardImageOverlay(
-                favorite = favorite,
                 watched = watched,
                 unwatchedCount = unwatchedCount,
                 watchedPercent = watchedPercent,
@@ -219,7 +212,6 @@ fun BoxScope.ItemCardImageFallback(
 
 @Composable
 fun ItemCardImageOverlay(
-    favorite: Boolean,
     watched: Boolean,
     unwatchedCount: Int,
     watchedPercent: Double?,
@@ -252,15 +244,6 @@ fun ItemCardImageOverlay(
                         modifier = Modifier.padding(4.dp),
                     )
                 }
-            }
-            if (favorite) {
-                Text(
-                    color = colorResource(android.R.color.holo_red_light),
-                    text = stringResource(R.string.fa_heart),
-                    fontSize = 20.sp,
-                    fontFamily = FontAwesome,
-                    modifier = Modifier,
-                )
             }
         }
         Row(

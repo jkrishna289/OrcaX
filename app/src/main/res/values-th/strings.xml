@@ -2,7 +2,6 @@
 <resources>
     <string name="about">เกี่ยวกับแอปนี้</string>
     <string name="active_recordings">การบันทึกที่ใช้งานอยู่</string>
-    <string name="add_favorite">ชื่นชอบ</string>
     <string name="add_server">เพิ่มเซิร์ฟเวอร์</string>
     <string name="add_user">เพิ่มผู้ใช้</string>
     <string name="audio">เสียง</string>
@@ -40,7 +39,6 @@
     <string name="episodes">ตอน</string>
     <string name="error_loading_collection">เกิดข้อผิดพลาดในการโหลดคอลเล็กชัน %1$s</string>
     <string name="external_track">ภายนอก</string>
-    <string name="favorites">ชื่นชอบ</string>
     <string name="file_size">ขนาด</string>
     <string name="forced_track">บังคับ</string>
     <string name="genres">แนวเนื้อหา</string>
@@ -100,7 +98,6 @@
     <string name="recommended">แนะนำ</string>
     <string name="record_program">โปรแกรมบันทึก</string>
     <string name="record_series">บันทึกซีรีส์</string>
-    <string name="remove_favorite">ไม่เป็นที่ชื่นชอบ</string>
     <string name="restart">เริ่มใหม่</string>
     <string name="resume">เล่นต่อ</string>
     <string name="save">บันทึก</string>
@@ -215,7 +212,6 @@
     <plurals name="shorts">
         <item quantity="other">หนังสั้น</item>
     </plurals>
-    <string name="favorite_items">ชื่นชอบ %s</string>
     <string name="ac3_supported">อุปกรณ์รองรับระบบเสียง AC3/Dolby Digital</string>
     <string name="advanced_settings">การตั้งค่าขั้นสูง</string>
     <string name="advanced_ui">UI ขั้นสูง</string>
@@ -349,7 +345,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">แสดงชื่อเรื่อง</string>
     <string name="live_tv_repeat">ทำซ้ำ</string>
-    <string name="favorite_channels_at_beginning">แสดงช่องโปรดก่อน</string>
     <string name="sort_channels_recently_watched">เรียงลำดับช่องตามลำดับการรับชมล่าสุด</string>
     <string name="color_code_programs">โปรแกรมรหัสสี</string>
     <string name="subtitle_delay">คำบรรยายล่าช้า</string>

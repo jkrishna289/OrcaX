@@ -14,7 +14,7 @@ import com.github.jkrishna289.orcax.data.model.GetItemsFilter
 import com.github.jkrishna289.orcax.data.model.LibraryDisplayInfo
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.services.KeyValueService
 import com.github.jkrishna289.orcax.services.MediaManagementService
@@ -83,7 +83,7 @@ class CollectionViewModel
         private val preferencesService: UserPreferencesService,
         private val themeSongPlayer: ThemeSongPlayer,
         private val mediaManagementService: MediaManagementService,
-        private val favoriteWatchManager: FavoriteWatchManager,
+        private val watchManager: WatchManager,
         private val backdropService: BackdropService,
         private val keyValueService: KeyValueService,
         private val libraryDisplayInfoDao: LibraryDisplayInfoDao,
@@ -392,18 +392,7 @@ class CollectionViewModel
             played: Boolean,
             position: RowColumn?,
         ) = viewModelScope.launch(Dispatchers.IO + ExceptionHandler()) {
-            favoriteWatchManager.setWatched(itemId, played)
-            if (position != null) {
-                refreshItem(itemId, position, false)
-            }
-        }
-
-        fun setFavorite(
-            itemId: UUID,
-            favorite: Boolean,
-            position: RowColumn?,
-        ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setFavorite(itemId, favorite)
+            watchManager.setWatched(itemId, played)
             if (position != null) {
                 refreshItem(itemId, position, false)
             }

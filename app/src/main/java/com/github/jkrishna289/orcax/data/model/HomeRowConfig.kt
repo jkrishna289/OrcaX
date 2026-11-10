@@ -10,7 +10,6 @@ import com.github.jkrishna289.orcax.ui.data.SortAndDirection
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import org.jellyfin.sdk.model.serializer.UUIDSerializer
 import java.util.UUID
@@ -102,25 +101,6 @@ sealed interface HomeRowConfig {
         override fun updateViewOptions(viewOptions: HomeRowViewOptions): Studios = this.copy(viewOptions = viewOptions)
     }
 
-    /**
-     * Favorites for a specific type
-     */
-    @Serializable
-    @SerialName("Favorite")
-    data class Favorite(
-        val kind: BaseItemKind,
-        override val viewOptions: HomeRowViewOptions =
-            if (kind == BaseItemKind.EPISODE) {
-                HomeRowViewOptions(
-                    heightDp = Cards.HEIGHT_EPISODE,
-                    aspectRatio = AspectRatio.WIDE,
-                )
-            } else {
-                HomeRowViewOptions()
-            },
-    ) : HomeRowConfig {
-        override fun updateViewOptions(viewOptions: HomeRowViewOptions): Favorite = this.copy(viewOptions = viewOptions)
-    }
 
     /**
      * Currently recording

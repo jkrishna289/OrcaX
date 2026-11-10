@@ -214,7 +214,6 @@ fun SeriesOverview(
                                 context = context,
                                 item = ep,
                                 watched = ep.data.userData?.played ?: false,
-                                favorite = ep.data.userData?.isFavorite ?: false,
                                 seriesId = series.id,
                                 sourceId = chosenStreams?.source?.id?.toUUIDOrNull(),
                                 canClearChosenStreams = chosenStreams?.itemPlayback != null || chosenStreams?.plc != null,
@@ -226,13 +225,6 @@ fun SeriesOverview(
                                             viewModel.setWatched(
                                                 itemId,
                                                 watched,
-                                                position.episodeRowIndex,
-                                            )
-                                        },
-                                        onClickFavorite = { itemId, favorite ->
-                                            viewModel.setFavorite(
-                                                itemId,
-                                                favorite,
                                                 position.episodeRowIndex,
                                             )
                                         },
@@ -357,12 +349,10 @@ fun SeriesOverview(
                         ExpandablePlayButtons(
                             resumePosition = Duration.ZERO,
                             watched = series.played,
-                            favorite = series.favorite,
                             canDelete = false,
                             trailers = trailers,
                             playOnClick = {},
                             watchOnClick = { showWatchConfirmation = true },
-                            favoriteOnClick = { viewModel.setFavorite(series.id, !series.favorite, null) },
                             moreOnClick = {
                                 moreDialog =
                                     DialogParams(

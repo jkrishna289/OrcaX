@@ -124,9 +124,6 @@ sealed class Destination(
     ) : Destination(true)
 
     @Serializable
-    data object Favorites : Destination(false)
-
-    @Serializable
     data object Categories : Destination(false)
 
     /**

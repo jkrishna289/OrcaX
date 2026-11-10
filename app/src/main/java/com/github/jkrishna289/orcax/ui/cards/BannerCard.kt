@@ -27,25 +27,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.ui.AppColors
 import com.github.jkrishna289.orcax.ui.AspectRatios
 import com.github.jkrishna289.orcax.ui.Cards
-import com.github.jkrishna289.orcax.ui.FontAwesome
 import com.github.jkrishna289.orcax.ui.LocalImageUrlService
 import com.github.jkrishna289.orcax.ui.enableMarquee
 import org.jellyfin.sdk.model.api.ImageType
@@ -62,7 +57,6 @@ fun BannerCard(
     modifier: Modifier = Modifier,
     cornerText: String? = null,
     played: Boolean = false,
-    favorite: Boolean = false,
     playPercent: Double = 0.0,
     cardHeight: Dp = 120.dp,
     aspectRatio: Float = AspectRatios.WIDE,
@@ -171,18 +165,6 @@ fun BannerCard(
                     }
                 }
             }
-            if (favorite) {
-                Text(
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopStart)
-                            .padding(8.dp),
-                    color = colorResource(android.R.color.holo_red_light),
-                    text = stringResource(R.string.fa_heart),
-                    fontSize = 16.sp,
-                    fontFamily = FontAwesome,
-                )
-            }
             if (playPercent > 0 && playPercent < 100) {
                 Box(
                     modifier =
@@ -209,7 +191,6 @@ fun BannerCardWithTitle(
     modifier: Modifier = Modifier,
     cornerText: String? = null,
     played: Boolean = false,
-    favorite: Boolean = false,
     playPercent: Double = 0.0,
     cardHeight: Dp = 120.dp,
     aspectRatio: Float = AspectRatios.WIDE,
@@ -236,7 +217,6 @@ fun BannerCardWithTitle(
             modifier = Modifier,
             cornerText = cornerText,
             played = played,
-            favorite = favorite,
             playPercent = playPercent,
             cardHeight = cardHeight,
             aspectRatio = aspectRatio,

@@ -2,7 +2,6 @@
 <resources>
     <string name="about">Rakenduse teave</string>
     <string name="active_recordings">Aktiivsed salvestused</string>
-    <string name="add_favorite">Lemmik</string>
     <string name="add_server">Lisa server</string>
     <string name="add_user">Lisa kasutaja</string>
     <string name="audio">Heli</string>
@@ -38,7 +37,6 @@
     <string name="episodes">Osad</string>
     <string name="error_loading_collection">Viga kogumiku laadimisel: %1$s</string>
     <string name="external_track">Väline</string>
-    <string name="favorites">Lemmikud</string>
     <string name="file_size">Suurus</string>
     <string name="forced_track">Jõustatud</string>
     <string name="genres">Žanrid</string>
@@ -90,7 +88,6 @@
     <string name="recently_recorded">Hiljuti salvestatud</string>
     <string name="recently_released">Hiljuti avaldatud</string>
     <string name="recommended">Soovitatud</string>
-    <string name="remove_favorite">Eemalda lemmikute seast</string>
     <string name="restart">Käivita uuesti</string>
     <string name="resume">Jätka</string>
     <string name="save">Salvesta</string>
@@ -351,7 +348,6 @@
     <string name="ref_frames">Aluskaadreid</string>
     <string name="nal">NAL</string>
     <string name="live_tv_repeat">Kordus</string>
-    <string name="favorite_channels_at_beginning">Näita esmalt lemmikkanaleid</string>
     <string name="sort_channels_recently_watched">Järjesta kanalid viimase vaatamise alusel</string>
     <string name="color_code_programs">Märgi programmid värvidega</string>
     <string name="subtitle_delay">Subtiitrite viivitus</string>
@@ -460,7 +456,6 @@
     <string name="display_presets">Kuvamise eelseadistused</string>
     <string name="display_presets_description">Rakenduses kaasasolevad eelseadistused kõikide ridade kiireks muutmiseks</string>
     <string name="customize_home_summary">Vali kodulehe/avalehe read ja pildid</string>
-    <string name="favorite_items">Märgi %s lemmikuks</string>
     <plurals name="minutes">
         <item quantity="one">%s minut</item>
         <item quantity="other">%s minutit</item>

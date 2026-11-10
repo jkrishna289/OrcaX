@@ -2,7 +2,6 @@
 <resources>
     <string name="about">Hakkında</string>
     <string name="active_recordings">Etkin kayıtlar</string>
-    <string name="add_favorite">Favori</string>
     <string name="add_server">Sunucu Ekle</string>
     <string name="add_user">Kullanıcı Ekle</string>
     <string name="audio">Ses</string>
@@ -40,7 +39,6 @@
     <string name="episodes">Bölümler</string>
     <string name="error_loading_collection">%1$s koleksiyonu yüklenirken bir hata oluştu</string>
     <string name="external_track">Harici</string>
-    <string name="favorites">Favoriler</string>
     <string name="file_size">Boyut</string>
     <string name="forced_track">Zorunlu</string>
     <string name="genres">Türler</string>
@@ -102,7 +100,6 @@
     <string name="recommended">Önerilenler</string>
     <string name="record_program">Programı Kaydet</string>
     <string name="record_series">Diziyi Kaydet</string>
-    <string name="remove_favorite">Favorilerden kaldır</string>
     <string name="restart">Yeniden Başlat</string>
     <string name="resume">Sürdür</string>
     <string name="save">Kaydet</string>
@@ -382,7 +379,6 @@
     <string name="sample_rate_unit">Hz</string>
     <string name="show_titles">Başlıkları göster</string>
     <string name="live_tv_repeat">Tekrarla</string>
-    <string name="favorite_channels_at_beginning">Favori kanalları en başta göster</string>
     <string name="sort_channels_recently_watched">Kanalları son izlenene göre sırala</string>
     <string name="color_code_programs">Programları türüne göre renklendir</string>
     <string name="subtitle_delay">Altyazı gecikmesi</string>
@@ -468,7 +464,6 @@
     <string name="settings_saved">Ayarlar kaydedildi</string>
     <string name="display_presets">Görüntü ön ayarları</string>
     <string name="display_presets_description">Tüm satırları hızlıca stilize etmek için hazır ayarlar</string>
-    <string name="favorite_items">Favori %s</string>
     <string name="customize_home_summary">Ana sayfadaki satırları ve görselleri seçin</string>
     <string name="content_scale_fit">Sığdır</string>
     <string name="content_scale_crop">Kırp</string>

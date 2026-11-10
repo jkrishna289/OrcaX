@@ -97,11 +97,8 @@ class LiveTvViewModel
         init {
             viewModelScope.launchIO {
                 preferences.data
-                    .map {
-                        it.interfacePreferences.liveTvPreferences.let {
-                            Pair(it.sortByRecentlyWatched, it.favoriteChannelsAtBeginning)
-                        }
-                    }.distinctUntilChanged()
+                    .map { it.interfacePreferences.liveTvPreferences.sortByRecentlyWatched }
+                    .distinctUntilChanged()
                     .debounce { 500.milliseconds }
                     .collectLatest {
                         Timber.v("Init due to pref change")
@@ -127,7 +124,6 @@ class LiveTvViewModel
                     GetLiveTvChannelsRequest(
                         startIndex = 0,
                         userId = serverRepository.currentUser.value?.id,
-                        enableFavoriteSorting = prefs.favoriteChannelsAtBeginning,
                         sortBy =
                             if (prefs.sortByRecentlyWatched) {
                                 listOf(ItemSortBy.DATE_PLAYED)

@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.data.filter.DefaultFilterOptions
@@ -39,7 +38,6 @@ fun CollectionButtons(
     onFilterChange: (GetItemsFilter) -> Unit,
     getPossibleFilterValues: suspend (ItemFilterBy<*>) -> List<FilterValueOption>,
     onClickViewOptions: () -> Unit,
-    favoriteOnClick: () -> Unit,
     deleteOnClick: () -> Unit,
     canDelete: Boolean,
     moreOnClick: () -> Unit,
@@ -78,16 +76,6 @@ fun CollectionButtons(
                 )
             }
 
-            item("favorite") {
-                val favorite = remember(state.collection) { state.collection?.favorite == true }
-                ExpandableFaButton(
-                    title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                    iconStringRes = R.string.fa_heart,
-                    onClick = favoriteOnClick,
-                    iconColor = if (favorite) Color.Red else Color.Unspecified,
-                    modifier = Modifier,
-                )
-            }
             if (canDelete) {
                 item("delete") {
                     DeleteButton(

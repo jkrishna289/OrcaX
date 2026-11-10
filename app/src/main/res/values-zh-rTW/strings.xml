@@ -139,7 +139,6 @@
     <string name="remove">移除</string>
     <string name="about">關於</string>
     <string name="active_recordings">正在錄製</string>
-    <string name="add_favorite">加入我的最愛</string>
     <string name="add_server">新增伺服器</string>
     <string name="add_user">新增使用者</string>
     <string name="audio">音訊</string>
@@ -173,7 +172,6 @@
     <string name="enabled">已啟用</string>
     <string name="enter_server_url">輸入伺服器 IP 位址或 URL</string>
     <string name="episodes">單集</string>
-    <string name="favorites">我的最愛</string>
     <string name="go_to_series">前往劇集</string>
     <string name="go_to">前往</string>
     <string name="hide_controller_timeout">隱藏播放控制列</string>
@@ -196,7 +194,6 @@
     <string name="recap">前情提要</string>
     <string name="recently_added_in">最近新增於 %1$s</string>
     <string name="record_series">錄製劇集</string>
-    <string name="remove_favorite">移出我的最愛</string>
     <string name="resume">繼續播放</string>
     <string name="search_and_download"><![CDATA[搜尋並下載]]></string>
     <string name="studios">製作公司</string>
@@ -304,7 +301,6 @@
     <string name="no_servers_found">未找到伺服器</string>
     <string name="backdrop_display">背景圖樣式</string>
     <string name="color_code_programs">節目顏色標記</string>
-    <string name="favorite_channels_at_beginning">優先顯示最愛頻道</string>
     <string name="sort_channels_recently_watched">按最近觀看的頻道排序</string>
     <string name="ends_at">結束於 %1$s</string>
     <string name="general">一般</string>
@@ -477,7 +473,6 @@
     <string name="background_style_boxed">長方底框</string>
     <string name="prefer_mpv">優先使用 MPV</string>
     <string name="player_backend_options_subtitles_prefer_mpv">僅 HDR 使用 ExoPlayer 播放</string>
-    <string name="favorite_items">我的最愛的 %s</string>
     <string name="display_preset_default">Orca X 預設樣式</string>
     <string name="display_preset_compact">Orca X 緊湊樣式</string>
     <string name="display_preset_series_thumb">劇集縮圖樣式</string>

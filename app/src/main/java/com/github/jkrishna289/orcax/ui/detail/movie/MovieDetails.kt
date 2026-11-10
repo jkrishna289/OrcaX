@@ -123,9 +123,6 @@ fun MovieDetails(
             onClickWatch = { itemId, watched ->
                 viewModel.setWatched(itemId, watched)
             },
-            onClickFavorite = { itemId, favorite ->
-                viewModel.setFavorite(itemId, favorite)
-            },
             onClickAddPlaylist = { itemId ->
                 playlistViewModel.loadPlaylists(MediaType.VIDEO)
                 showPlaylistDialog.makePresent(itemId)
@@ -195,7 +192,6 @@ fun MovieDetails(
                                     context = context,
                                     item = movie,
                                     watched = movie.data.userData?.played ?: false,
-                                    favorite = movie.data.userData?.isFavorite ?: false,
                                     seriesId = null,
                                     sourceId = chosenStreams?.source?.id?.toUUIDOrNull(),
                                     canClearChosenStreams = chosenStreams.let { it?.itemPlayback != null || it?.plc != null },
@@ -257,9 +253,6 @@ fun MovieDetails(
                 watchOnClick = {
                     viewModel.setWatched(movie.id, !movie.played)
                 },
-                favoriteOnClick = {
-                    viewModel.setFavorite(movie.id, !movie.favorite)
-                },
                 onLongClickPerson = { index, person ->
                     val items =
                         buildMoreDialogItemsForPerson(
@@ -282,7 +275,6 @@ fun MovieDetails(
                             seriesId = null,
                             playbackPosition = similar.playbackPosition,
                             watched = similar.played,
-                            favorite = similar.favorite,
                             canDelete = false,
                             actions = moreActions,
                         )
@@ -407,7 +399,6 @@ fun MovieDetailsContent(
     trailerOnClick: (Trailer) -> Unit,
     overviewOnClick: () -> Unit,
     watchOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
     moreOnClick: () -> Unit,
     onClickItem: (Int, BaseItem) -> Unit,
     onClickPerson: (Person) -> Unit,
@@ -486,14 +477,12 @@ fun MovieDetailsContent(
                         ExpandablePlayButtons(
                             resumePosition = resumePosition,
                             watched = dto.userData?.played ?: false,
-                            favorite = dto.userData?.isFavorite ?: false,
                             playOnClick = {
                                 position = HEADER_ROW
                                 playOnClick.invoke(it)
                             },
                             moreOnClick = moreOnClick,
                             watchOnClick = watchOnClick,
-                            favoriteOnClick = favoriteOnClick,
                             buttonOnFocusChanged = {
                                 if (it.isFocused) {
                                     position = HEADER_ROW

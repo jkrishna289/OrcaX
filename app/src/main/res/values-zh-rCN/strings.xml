@@ -2,7 +2,6 @@
 <resources>
     <string name="about">关于</string>
     <string name="active_recordings">正在录制</string>
-    <string name="add_favorite">收藏</string>
     <string name="add_server">添加服务器</string>
     <string name="add_user">添加用户</string>
     <string name="audio">音频</string>
@@ -38,7 +37,6 @@
     <string name="episodes">剧集</string>
     <string name="error_loading_collection">加载合集 %1$s 时出错</string>
     <string name="external_track">外部</string>
-    <string name="favorites">收藏</string>
     <string name="file_size">大小</string>
     <string name="forced_track">强制</string>
     <string name="genres">类型</string>
@@ -92,7 +90,6 @@
     <string name="recommended">推荐</string>
     <string name="record_program">录制节目</string>
     <string name="record_series">录制剧集</string>
-    <string name="remove_favorite">取消收藏</string>
     <string name="restart">从头播放</string>
     <string name="resume">继续播放</string>
     <string name="save">保存</string>
@@ -335,7 +332,6 @@
     <string name="bit_unit">位</string>
     <string name="sample_rate_unit">Hz</string>
     <string name="live_tv_repeat">重复</string>
-    <string name="favorite_channels_at_beginning">优先显示收藏频道</string>
     <string name="sort_channels_recently_watched">按最近观看的频道排序</string>
     <string name="color_code_programs">节目颜色标记</string>
     <string name="subtitle_delay">字幕延迟</string>
@@ -443,7 +439,6 @@
     <string name="display_presets">显示预设</string>
     <string name="display_presets_description">可快速设置所有行样式的内置预设</string>
     <string name="customize_home_summary">选择首页上的行和图片</string>
-    <string name="favorite_items">收藏的 %s</string>
     <string name="content_scale_fit">适应</string>
     <string name="content_scale_crop">裁剪</string>
     <string name="content_scale_fill">填充</string>

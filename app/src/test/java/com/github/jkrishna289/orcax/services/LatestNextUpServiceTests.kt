@@ -48,10 +48,10 @@ class LatestNextUpServiceTests {
     private val mockTvShowsApi = mockk<TvShowsApi>()
     private val mockDatePlayedService = mockk<DatePlayedService>()
     private val mockDisplayPreferencesService = mockk<DisplayPreferencesService>()
-    private val mockFavoriteWatchManager = mockk<FavoriteWatchManager>(relaxed = true)
+    private val mockWatchManager = mockk<WatchManager>(relaxed = true)
 
     private val latestNextUpService =
-        LatestNextUpService(mockApi, mockDatePlayedService, mockDisplayPreferencesService, mockFavoriteWatchManager)
+        LatestNextUpService(mockApi, mockDatePlayedService, mockDisplayPreferencesService, mockWatchManager)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Before

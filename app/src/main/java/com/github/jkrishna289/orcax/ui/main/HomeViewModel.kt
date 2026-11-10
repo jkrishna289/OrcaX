@@ -9,7 +9,7 @@ import com.github.jkrishna289.orcax.data.model.HomeRowConfig
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
 import com.github.jkrishna289.orcax.services.DatePlayedService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.HomePageResolvedSettings
 import com.github.jkrishna289.orcax.services.HomeSettingsService
 import com.github.jkrishna289.orcax.services.LatestNextUpService
@@ -57,7 +57,7 @@ class HomeViewModel
         val mediaReportService: MediaReportService,
         private val navDrawerService: NavDrawerService,
         private val homeSettingsService: HomeSettingsService,
-        private val favoriteWatchManager: FavoriteWatchManager,
+        private val watchManager: WatchManager,
         private val datePlayedService: DatePlayedService,
         private val backdropService: BackdropService,
         private val userPreferencesService: UserPreferencesService,
@@ -189,17 +189,7 @@ class HomeViewModel
             itemId: UUID,
             played: Boolean,
         ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setWatched(itemId, played)
-            withContext(Dispatchers.Main) {
-                init()
-            }
-        }
-
-        fun setFavorite(
-            itemId: UUID,
-            favorite: Boolean,
-        ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setFavorite(itemId, favorite)
+            watchManager.setWatched(itemId, played)
             withContext(Dispatchers.Main) {
                 init()
             }

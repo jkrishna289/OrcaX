@@ -56,12 +56,11 @@ import com.github.jkrishna289.orcax.data.filter.ItemFilterBy
 import com.github.jkrishna289.orcax.data.model.BaseItem
 import com.github.jkrishna289.orcax.data.model.CollectionFolderFilter
 import com.github.jkrishna289.orcax.data.model.GetItemsFilter
-import com.github.jkrishna289.orcax.data.model.GetItemsFilterOverride
 import com.github.jkrishna289.orcax.data.model.LibraryDisplayInfo
 import com.github.jkrishna289.orcax.preferences.AppPreferences
 import com.github.jkrishna289.orcax.preferences.UserPreferences
 import com.github.jkrishna289.orcax.services.BackdropService
-import com.github.jkrishna289.orcax.services.FavoriteWatchManager
+import com.github.jkrishna289.orcax.services.WatchManager
 import com.github.jkrishna289.orcax.services.MediaManagementService
 import com.github.jkrishna289.orcax.services.MediaReportService
 import com.github.jkrishna289.orcax.services.MusicService
@@ -99,7 +98,6 @@ import com.github.jkrishna289.orcax.util.ApiRequestPager
 import com.github.jkrishna289.orcax.util.DataLoadingState
 import com.github.jkrishna289.orcax.util.ExceptionHandler
 import com.github.jkrishna289.orcax.util.GetItemsRequestHandler
-import com.github.jkrishna289.orcax.util.GetPersonsHandler
 import com.github.jkrishna289.orcax.util.LoadingState
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -120,7 +118,6 @@ import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.MediaType
 import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
-import org.jellyfin.sdk.model.api.request.GetPersonsRequest
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import timber.log.Timber
 import java.util.UUID
@@ -135,7 +132,7 @@ class CollectionFolderViewModel
         @param:ApplicationContext private val context: Context,
         private val serverRepository: ServerRepository,
         private val libraryDisplayInfoDao: LibraryDisplayInfoDao,
-        private val favoriteWatchManager: FavoriteWatchManager,
+        private val watchManager: WatchManager,
         private val backdropService: BackdropService,
         private val navigationManager: NavigationManager,
         private val themeSongPlayer: ThemeSongPlayer,
@@ -343,43 +340,17 @@ class CollectionFolderViewModel
             filter: GetItemsFilter,
             useSeriesForPrimary: Boolean,
         ): ApiRequestPager<out Any> =
-            when (filter.override) {
-                GetItemsFilterOverride.NONE -> {
-                    val request =
-                        createGetItemsRequest(
-                            sortAndDirection = sortAndDirection,
-                            recursive = recursive,
-                            filter = filter,
-                        )
-                    val newPager =
-                        ApiRequestPager(
-                            api,
-                            request,
-                            GetItemsRequestHandler,
-                            viewModelScope,
-                            useSeriesForPrimary = useSeriesForPrimary,
-                        )
-                    newPager
-                }
-
-                GetItemsFilterOverride.PERSON -> {
-                    val request =
-                        filter.applyTo(
-                            GetPersonsRequest(
-                                enableImageTypes = listOf(ImageType.PRIMARY, ImageType.THUMB),
-                            ),
-                        )
-                    val newPager =
-                        ApiRequestPager(
-                            api,
-                            request,
-                            GetPersonsHandler,
-                            viewModelScope,
-                            useSeriesForPrimary = useSeriesForPrimary,
-                        )
-                    newPager
-                }
-            }
+            ApiRequestPager(
+                api,
+                createGetItemsRequest(
+                    sortAndDirection = sortAndDirection,
+                    recursive = recursive,
+                    filter = filter,
+                ),
+                GetItemsRequestHandler,
+                viewModelScope,
+                useSeriesForPrimary = useSeriesForPrimary,
+            )
 
         private fun createGetItemsRequest(
             sortAndDirection: SortAndDirection,
@@ -473,18 +444,7 @@ class CollectionFolderViewModel
             itemId: UUID,
             played: Boolean,
         ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setWatched(itemId, played)
-            (loading.value as? DataLoadingState.Success)?.let {
-                (it.data as? ApiRequestPager<*>)?.refreshItem(position, itemId)
-            }
-        }
-
-        fun setFavorite(
-            position: Int,
-            itemId: UUID,
-            favorite: Boolean,
-        ) = viewModelScope.launch(ExceptionHandler() + Dispatchers.IO) {
-            favoriteWatchManager.setFavorite(itemId, favorite)
+            watchManager.setWatched(itemId, played)
             (loading.value as? DataLoadingState.Success)?.let {
                 (it.data as? ApiRequestPager<*>)?.refreshItem(position, itemId)
             }
@@ -762,16 +722,12 @@ fun CollectionFolderGrid(
                     seriesId = null,
                     playbackPosition = item.playbackPosition,
                     watched = item.played,
-                    favorite = item.favorite,
                     canDelete = viewModel.canDelete(item, preferences.appPreferences),
                     actions =
                         MoreDialogActions(
                             navigateTo = { viewModel.navigateTo(it) },
                             onClickWatch = { itemId, watched ->
                                 viewModel.setWatched(position, itemId, watched)
-                            },
-                            onClickFavorite = { itemId, watched ->
-                                viewModel.setFavorite(position, itemId, watched)
                             },
                             onClickAddPlaylist = {
                                 playlistViewModel.loadPlaylists(MediaType.VIDEO)

@@ -164,7 +164,6 @@ fun SeriesDetails(
                     people = people,
                     similar = similar,
                     played = played,
-                    favorite = item.data.userData?.isFavorite ?: false,
                     canDelete = canDelete,
                     modifier = modifier,
                     onClickItem = { index, item ->
@@ -219,10 +218,6 @@ fun SeriesDetails(
                         }
                     },
                     watchOnClick = { showWatchConfirmation = true },
-                    favoriteOnClick = {
-                        val favorite = item.data.userData?.isFavorite ?: false
-                        viewModel.setFavorite(item.id, !favorite, null)
-                    },
                     trailerOnClick = {
                         TrailerService.onClick(context, it, viewModel::navigateTo)
                     },
@@ -234,9 +229,6 @@ fun SeriesDetails(
                             navigateTo = { viewModel.navigateTo(it) },
                             onClickWatch = { itemId, played ->
                                 viewModel.setWatched(itemId, played, null)
-                            },
-                            onClickFavorite = { itemId, played ->
-                                viewModel.setFavorite(itemId, played, null)
                             },
                             onClickAddPlaylist = { itemId ->
                                 playlistViewModel.loadPlaylists(MediaType.VIDEO)
@@ -330,7 +322,6 @@ fun SeriesDetailsContent(
     extras: List<ExtrasItem>,
     people: List<Person>,
     played: Boolean,
-    favorite: Boolean,
     canDelete: Boolean,
     onClickItem: (Int, BaseItem) -> Unit,
     onClickPerson: (Person) -> Unit,
@@ -338,7 +329,6 @@ fun SeriesDetailsContent(
     overviewOnClick: () -> Unit,
     playOnClick: (Boolean) -> Unit,
     watchOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
     trailerOnClick: (Trailer) -> Unit,
     onClickExtra: (Int, ExtrasItem) -> Unit,
     moreActions: MoreDialogActions,
@@ -428,20 +418,6 @@ fun SeriesDetailsContent(
                             title = if (played) R.string.mark_unwatched else R.string.mark_watched,
                             iconStringRes = if (played) R.string.fa_eye else R.string.fa_eye_slash,
                             onClick = watchOnClick,
-                            modifier =
-                                Modifier.onFocusChanged {
-                                    if (it.isFocused) {
-                                        scope.launch(ExceptionHandler()) {
-                                            bringIntoViewRequester.bringIntoView()
-                                        }
-                                    }
-                                },
-                        )
-                        ExpandableFaButton(
-                            title = if (favorite) R.string.remove_favorite else R.string.add_favorite,
-                            iconStringRes = R.string.fa_heart,
-                            onClick = favoriteOnClick,
-                            iconColor = if (favorite) Color.Red else Color.Unspecified,
                             modifier =
                                 Modifier.onFocusChanged {
                                     if (it.isFocused) {
@@ -575,7 +551,6 @@ fun SeriesDetailsContent(
                                         seriesId = null,
                                         playbackPosition = item.playbackPosition,
                                         watched = item.played,
-                                        favorite = item.favorite,
                                         actions = moreActions,
                                         canDelete = false,
                                     )

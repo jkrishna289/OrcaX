@@ -102,9 +102,6 @@ fun EpisodeDetails(
             onClickWatch = { itemId, watched ->
                 viewModel.setWatched(itemId, watched)
             },
-            onClickFavorite = { itemId, favorite ->
-                viewModel.setFavorite(itemId, favorite)
-            },
             onClickAddPlaylist = { itemId ->
                 playlistViewModel.loadPlaylists(MediaType.VIDEO)
                 showPlaylistDialog.makePresent(itemId)
@@ -161,7 +158,6 @@ fun EpisodeDetails(
                                         context = context,
                                         item = ep,
                                         watched = ep.data.userData?.played ?: false,
-                                        favorite = ep.data.userData?.isFavorite ?: false,
                                         seriesId = ep.data.seriesId,
                                         sourceId = chosenStreams?.source?.id?.toUUIDOrNull(),
                                         canClearChosenStreams = chosenStreams?.itemPlayback != null || chosenStreams?.plc != null,
@@ -225,9 +221,6 @@ fun EpisodeDetails(
                     },
                     watchOnClick = {
                         viewModel.setWatched(ep.id, !ep.played)
-                    },
-                    favoriteOnClick = {
-                        viewModel.setFavorite(ep.id, !ep.favorite)
                     },
                     canDelete = canDelete,
                     deleteOnClick = { showDeleteDialog = ep },
@@ -308,7 +301,6 @@ fun EpisodeDetailsContent(
     playOnClick: (Duration) -> Unit,
     overviewOnClick: () -> Unit,
     watchOnClick: () -> Unit,
-    favoriteOnClick: () -> Unit,
     moreOnClick: () -> Unit,
     canDelete: Boolean,
     deleteOnClick: () -> Unit,
@@ -353,14 +345,12 @@ fun EpisodeDetailsContent(
                     ExpandablePlayButtons(
                         resumePosition = resumePosition,
                         watched = dto.userData?.played ?: false,
-                        favorite = dto.userData?.isFavorite ?: false,
                         playOnClick = {
                             position = HEADER_ROW
                             playOnClick.invoke(it)
                         },
                         moreOnClick = moreOnClick,
                         watchOnClick = watchOnClick,
-                        favoriteOnClick = favoriteOnClick,
                         buttonOnFocusChanged = {
                             if (it.isFocused) {
                                 position = HEADER_ROW

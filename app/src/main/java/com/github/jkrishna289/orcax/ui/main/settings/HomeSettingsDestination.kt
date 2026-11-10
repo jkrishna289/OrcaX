@@ -25,9 +25,6 @@ sealed interface HomeSettingsDestination : NavKey {
     ) : HomeSettingsDestination
 
     @Serializable
-    data object ChooseFavorite : HomeSettingsDestination
-
-    @Serializable
     data object GlobalSettings : HomeSettingsDestination
 
     @Serializable
