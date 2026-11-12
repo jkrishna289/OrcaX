@@ -10,6 +10,10 @@ import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.ServerPlaybackProgress
 import com.github.jkrishna289.orcax.engine.TitleDetails
 import com.github.jkrishna289.orcax.preferences.AppPreferences
+import com.github.jkrishna289.orcax.data.model.BaseItem
+import com.github.jkrishna289.orcax.data.model.Person
+import com.github.jkrishna289.orcax.services.BackdropService
+import com.github.jkrishna289.orcax.services.ImageUrlService
 import com.github.jkrishna289.orcax.services.NavigationManager
 import com.github.jkrishna289.orcax.services.OrcaEngineClient
 import com.github.jkrishna289.orcax.services.torrent.StreamWatch
@@ -30,11 +34,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.BaseItemPerson
 import org.jellyfin.sdk.model.api.ItemFields
+import org.jellyfin.sdk.model.api.PersonKind
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import org.jellyfin.sdk.model.extensions.inWholeTicks
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
 import java.util.UUID
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * The details page for a title the engine knows about but the library doesn't hold.
@@ -53,6 +62,8 @@ class EngineDetailsViewModel
         private val navigationManager: NavigationManager,
         private val preferences: DataStore<AppPreferences>,
         private val streamWatchTracker: StreamWatchTracker,
+        private val backdropService: BackdropService,
+        private val imageUrlService: ImageUrlService,
         val sources: SourceStreamingController,
         @Assisted val item: RenderItem,
     ) : ViewModel() {
@@ -80,11 +91,6 @@ class EngineDetailsViewModel
 
         /** True while a request is in flight, so the button can say so instead of looking dead. */
         val requesting = MutableStateFlow(false)
-
-        /** A show streams an episode at a time, from its own series page; offered when the server streams. */
-        val canStreamSeries = MutableStateFlow(false)
-
-        fun openStreamSeries() = navigationManager.navigateTo(Destination.EngineSeries(item))
 
         /** Non-null while the "Keep it?" prompt is up, after returning from a streamed playback. */
         val keepPrompt = MutableStateFlow<StreamWatch?>(null)
@@ -115,9 +121,6 @@ class EngineDetailsViewModel
                 tmdbId = item.media.tmdbId,
             )
             refreshAvailability()
-            if (item.media.mediaType == MediaType.SERIES && (item.media.tmdbId ?: 0) > 0) {
-                viewModelScope.launchIO { canStreamSeries.update { engineClient.getFeatures()?.sourceStreaming == true } }
-            }
             item.media.tmdbId?.takeIf { it > 0 }?.let { tmdbId ->
                 viewModelScope.launchIO {
                     engineClient.getTitleDetails(tmdbId, item.media.mediaType)?.let { found ->
@@ -134,7 +137,27 @@ class EngineDetailsViewModel
         fun refresh() {
             refreshAvailability()
             checkKeepPrompt()
+            // A film's page puts its own art behind it; a show's series page submits its own.
+            if (item.media.mediaType != MediaType.SERIES) {
+                viewModelScope.launchIO {
+                    backdropService.submit(
+                        "tmdb:${item.media.tmdbId}",
+                        imageUrlService.engineImageUrl(item.card.backdropImageUrl ?: item.card.imageUrl),
+                        detail = true,
+                    )
+                }
+            }
         }
+
+        /** The catalog's cast and directors as the movie page's people row. TMDB names only. */
+        fun people(details: TitleDetails?): List<Person> =
+            details?.cast.orEmpty().map { person(it, PersonKind.ACTOR) } +
+                details?.directors.orEmpty().map { person(it, PersonKind.DIRECTOR) }
+
+        private fun person(
+            name: String,
+            kind: PersonKind,
+        ) = Person(UUID.nameUUIDFromBytes(name.toByteArray()), name, null, kind, null)
 
         private fun refreshAvailability() {
             val tmdbId = item.media.tmdbId ?: return
@@ -295,3 +318,29 @@ internal fun RenderItem.yearBadge(): Int? =
         ?.text
         ?.take(4)
         ?.toIntOrNull()
+
+/** A film that isn't in the library, as the item the movie page's header draws. */
+internal fun tmdbMovieItem(
+    tmdbId: Int,
+    item: RenderItem,
+    details: TitleDetails?,
+): BaseItem =
+    BaseItem(
+        data =
+            BaseItemDto(
+                id = UUID.nameUUIDFromBytes("tmdb:movie:$tmdbId".toByteArray()),
+                type = BaseItemKind.MOVIE,
+                name = item.card.title ?: details?.title,
+                overview = details?.overview ?: item.card.synopsis,
+                productionYear = details?.year ?: item.yearBadge(),
+                runTimeTicks = details?.runtimeMinutes?.takeIf { it > 0 }?.minutes?.inWholeTicks,
+                genres = details?.genres,
+                officialRating = details?.officialRating,
+                communityRating = details?.communityRating?.takeIf { it > 0 },
+                people =
+                    details?.directors.orEmpty().map {
+                        BaseItemPerson(id = UUID.nameUUIDFromBytes(it.toByteArray()), name = it, type = PersonKind.DIRECTOR)
+                    },
+                providerIds = mapOf("Tmdb" to tmdbId.toString()),
+            ),
+    )

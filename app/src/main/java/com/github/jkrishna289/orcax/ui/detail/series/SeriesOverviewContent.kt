@@ -116,6 +116,8 @@ fun SeriesOverviewContent(
     modifier: Modifier = Modifier,
     // A show that isn't in the library finds its More Like This by TMDB id
     similarTmdbId: Int? = null,
+    // Shown above the title, e.g. the status chip of a show that isn't in the library
+    headerTop: (@Composable () -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val headerInView = remember { BringIntoViewRequester() }
@@ -194,6 +196,7 @@ fun SeriesOverviewContent(
                         .focusGroup()
                         .bringIntoViewRequester(headerInView),
             ) {
+                headerTop?.invoke()
                 SeriesDetailsHeader(
                     series = series,
                     // A show that isn't in the library has no logo in Jellyfin: its name instead

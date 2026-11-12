@@ -334,13 +334,6 @@ fun DestinationContent(
 
         is Destination.EngineItem -> {
             EngineDetailsPage(
-                destination = destination,
-                modifier = modifier,
-            )
-        }
-
-        is Destination.EngineSeries -> {
-            com.github.jkrishna289.orcax.ui.detail.engine.EngineSeriesPage(
                 preferences = preferences,
                 destination = destination,
                 modifier = modifier,

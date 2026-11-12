@@ -169,6 +169,8 @@ class TestEngineDetailsViewModel {
             navigationManager = navigation,
             preferences = preferences,
             streamWatchTracker = StreamWatchTracker(),
+            backdropService = mockk(relaxed = true),
+            imageUrlService = mockk(relaxed = true),
             sources = mockk(relaxed = true),
             item = forItem,
         ).also { viewModel = it }

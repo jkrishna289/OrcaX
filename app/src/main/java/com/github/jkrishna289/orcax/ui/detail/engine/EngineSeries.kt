@@ -48,7 +48,7 @@ import com.github.jkrishna289.orcax.ui.detail.series.tmdbSeriesItem
 import com.github.jkrishna289.orcax.ui.detail.series.toEpisodeItem
 import com.github.jkrishna289.orcax.ui.detail.series.toSeasonItem
 import com.github.jkrishna289.orcax.ui.launchIO
-import com.github.jkrishna289.orcax.ui.nav.Destination
+import com.github.jkrishna289.orcax.ui.components.HeaderUtils
 import com.github.jkrishna289.orcax.ui.seasonEpisode
 import com.github.jkrishna289.orcax.ui.showToast
 import com.github.jkrishna289.orcax.util.LoadingState
@@ -66,9 +66,8 @@ import java.util.UUID
 
 /**
  * A show that isn't in the library, laid out like a library show's page: its seasons and episodes come
- * from TMDB through the engine, focus starts where you left off streaming it (else S1 E1), and OK on an
- * episode finds a stream for that episode. Reached from Stream now on the show's not-in-your-library
- * page.
+ * from TMDB through the engine, focus starts on Request, the episode row opens where you left off
+ * streaming it (else S1 E1), and OK on an episode finds a stream for that episode.
  */
 @HiltViewModel(assistedFactory = EngineSeriesViewModel.Factory::class)
 class EngineSeriesViewModel
@@ -211,16 +210,16 @@ class EngineSeriesViewModel
 @Composable
 fun EngineSeriesPage(
     preferences: UserPreferences,
-    destination: Destination.EngineSeries,
+    item: RenderItem,
     modifier: Modifier = Modifier,
     viewModel: EngineSeriesViewModel =
         hiltViewModel<EngineSeriesViewModel, EngineSeriesViewModel.Factory>(
-            creationCallback = { it.create(destination.item) },
+            creationCallback = { it.create(item) },
         ),
-    // Requesting the show works exactly as on its not-in-your-library page
+    // Requesting the show works exactly as it does for a film
     requests: EngineDetailsViewModel =
         hiltViewModel<EngineDetailsViewModel, EngineDetailsViewModel.Factory>(
-            creationCallback = { it.create(destination.item) },
+            creationCallback = { it.create(item) },
         ),
 ) {
     val loading by viewModel.loading.collectAsState()
@@ -244,11 +243,12 @@ fun EngineSeriesPage(
         LoadingState.Loading, LoadingState.Pending -> LoadingPage(modifier)
         LoadingState.Success ->
             series?.let { show ->
-                LifecycleResumeEffect(destination) {
+                LifecycleResumeEffect(item) {
+                    requests.refresh()
                     viewModel.onResume()
                     onPauseOrDispose { viewModel.onPause() }
                 }
-                RequestOrRestoreFocus(episodeRowFocusRequester, "engine_series")
+                RequestOrRestoreFocus(headerFocusRequester, "engine_series")
                 SeriesOverviewContent(
                     preferences = preferences,
                     series = show,
@@ -287,6 +287,7 @@ fun EngineSeriesPage(
                         }
                     },
                     similarTmdbId = viewModel.tmdbId,
+                    headerTop = { LibraryStatusChip(availability, Modifier.padding(start = HeaderUtils.startPadding)) },
                     modifier = modifier,
                 )
             }

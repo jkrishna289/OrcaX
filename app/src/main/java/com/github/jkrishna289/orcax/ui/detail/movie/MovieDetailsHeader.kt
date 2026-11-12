@@ -47,6 +47,8 @@ fun MovieDetailsHeader(
     bringIntoViewRequester: BringIntoViewRequester,
     overviewOnClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // A film that isn't in the library has no logo in Jellyfin: the engine's, when it has one
+    logoUrl: String? = null,
 ) {
     val dto = movie.data
     val context = LocalContext.current
@@ -56,14 +58,16 @@ fun MovieDetailsHeader(
         modifier = modifier,
     ) {
         // Title
-        TitleOrLogo(
-            item = movie,
-            showLogo = preferences.appPreferences.interfacePreferences.showLogos,
-            modifier =
-                Modifier
-                    .fillMaxWidth(.75f)
-                    .padding(start = HeaderUtils.startPadding),
-        )
+        val showLogo = preferences.appPreferences.interfacePreferences.showLogos
+        val titleModifier =
+            Modifier
+                .fillMaxWidth(.75f)
+                .padding(start = HeaderUtils.startPadding)
+        if (logoUrl != null) {
+            TitleOrLogo(title = movie.title, logoImageUrl = logoUrl, showLogo = showLogo, modifier = titleModifier)
+        } else {
+            TitleOrLogo(item = movie, showLogo = showLogo, modifier = titleModifier)
+        }
 
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -86,16 +90,19 @@ fun MovieDetailsHeader(
                 )
             }
 
-            VideoStreamDetails(
-                chosenStreams = chosenStreams,
-                numberOfVersions = movie.data.mediaSourceCount ?: 0,
-                modifier =
-                    Modifier.padding(
-                        start = HeaderUtils.startPadding,
-                        top = 4.dp,
-                        bottom = 16.dp,
-                    ),
-            )
+            // Nothing to describe without a file: a film from TMDB showed an audio chip reading None.
+            if (!movie.data.mediaSources.isNullOrEmpty()) {
+                VideoStreamDetails(
+                    chosenStreams = chosenStreams,
+                    numberOfVersions = movie.data.mediaSourceCount ?: 0,
+                    modifier =
+                        Modifier.padding(
+                            start = HeaderUtils.startPadding,
+                            top = 4.dp,
+                            bottom = 16.dp,
+                        ),
+                )
+            }
             availability?.let {
                 RequestAvailabilityBadge(
                     availability = it,

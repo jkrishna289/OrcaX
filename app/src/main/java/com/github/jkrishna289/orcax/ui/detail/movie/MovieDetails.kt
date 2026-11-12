@@ -372,7 +372,7 @@ private const val DETAILS_ROW_PARENT_FRACTION = 0.18f
  * peeks in at the bottom instead of being scrolled fully offscreen.
  */
 @OptIn(ExperimentalFoundationApi::class)
-private val DetailsRowFocusSpec =
+internal val DetailsRowFocusSpec =
     object : BringIntoViewSpec {
         override fun calculateScrollDistance(
             offset: Float,
