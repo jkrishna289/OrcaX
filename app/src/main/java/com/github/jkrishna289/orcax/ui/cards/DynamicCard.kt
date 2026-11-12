@@ -1,7 +1,7 @@
 package com.github.jkrishna289.orcax.ui.cards
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateDpAsState
@@ -11,11 +11,15 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -36,15 +40,16 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
@@ -52,19 +57,25 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -75,8 +86,8 @@ import com.github.jkrishna289.orcax.R
 import com.github.jkrishna289.orcax.engine.AvailabilityState
 import com.github.jkrishna289.orcax.engine.CardAspectRatio
 import com.github.jkrishna289.orcax.engine.CardBadge
-import com.github.jkrishna289.orcax.engine.CardSize
 import com.github.jkrishna289.orcax.engine.CardImageType
+import com.github.jkrishna289.orcax.engine.CardSize
 import com.github.jkrishna289.orcax.engine.CardType
 import com.github.jkrishna289.orcax.engine.RenderItem
 import com.github.jkrishna289.orcax.engine.RenderRow
@@ -95,6 +106,7 @@ import com.github.jkrishna289.orcax.ui.enableMarquee
 import com.github.jkrishna289.orcax.ui.main.EngineHomeArt
 import com.github.jkrishna289.orcax.ui.main.TopNavBarHeight
 import com.github.jkrishna289.orcax.ui.main.engineCardArt
+import com.github.jkrishna289.orcax.ui.util.RowPivotBringIntoViewSpec
 import kotlinx.coroutines.delay
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.serializer.toUUIDOrNull
@@ -221,9 +233,19 @@ private fun DiscoverCardWithPanel(
     var open by remember { mutableStateOf(false) }
     var details by remember(item) { mutableStateOf<TitleDetails?>(null) }
     val bringIntoView = remember { BringIntoViewRequester() }
+    // Moving right past an open panel: the row aims at where the next card will rest once this
+    // panel has closed (RowPivotBringIntoViewSpec.pendingShiftPx), not where the shrink drags it.
+    val rowScroll = LocalBringIntoViewSpec.current as? RowPivotBringIntoViewSpec
+    var panelPx by remember { mutableFloatStateOf(0f) }
+    var givingBack by remember { mutableStateOf(false) }
+    fun giveBack(px: Float) {
+        givingBack = px > 0f
+        rowScroll?.pendingShiftPx = px
+    }
     LaunchedEffect(focused, requested) {
         if (focused && !requested) {
             delay(PANEL_DWELL_MS) // not while the viewer is scrolling past
+            if (givingBack) giveBack(0f)
             open = true
             if (details == null) details = titleDetailsFor(item)
         } else {
@@ -233,7 +255,7 @@ private fun DiscoverCardWithPanel(
     // Once the panel is out the card + panel is wider; pull the whole of it into view in the row.
     LaunchedEffect(open) {
         if (open) {
-            delay(PANEL_SLIDE_MS.toLong())
+            delay(PANEL_REPIVOT_MS)
             runCatching { bringIntoView.bringIntoView() }
         }
     }
@@ -244,23 +266,48 @@ private fun DiscoverCardWithPanel(
         modifier =
             Modifier
                 .bringIntoViewRequester(bringIntoView)
-                .onFocusChanged { focused = it.hasFocus },
+                .onFocusChanged {
+                    focused = it.hasFocus
+                    // Back on this card while its panel is still closing: that width is to the
+                    // right of the focused card now, and moves nothing.
+                    if (it.hasFocus && givingBack) giveBack(0f)
+                }.onPreviewKeyEvent {
+                    if (it.key == Key.DirectionRight) {
+                        // Down: count the panel as gone before focus moves on. Up: focus stayed
+                        // (the row's last card), so nothing is closing after all.
+                        if (it.type == KeyEventType.KeyDown && open) giveBack(panelPx)
+                        if (it.type == KeyEventType.KeyUp && focused && givingBack) giveBack(0f)
+                    }
+                    false
+                },
     ) {
         // The row's own focus/click modifiers stay on the card; it draws over the panel as it slides.
         card(cardModifier.zIndex(1f))
         AnimatedVisibility(
             visible = open,
-            // The expanding width (clipped) moves the neighbours; the slide makes the panel emerge
-            // from behind the card rather than appear beside it.
+            // The prototype's timing: the width (which moves the neighbours) eases over 260 ms both
+            // ways, while the panel slides out from behind the card. Closing used to hand its width
+            // back in one frame, so every card to its right jumped 316 dp.
             enter =
-                expandHorizontally(tween(PANEL_SLIDE_MS), expandFrom = Alignment.Start) +
-                    slideInHorizontally(tween(PANEL_SLIDE_MS)) { -it } +
-                    fadeIn(tween(PANEL_SLIDE_MS / 2)),
-            // Closing gives its width back at once. Focus has already moved on and the row is
-            // scrolling to the next card; a panel still shrinking under that scroll moves the next
-            // card a second time, so the row overshoots and then pulls everything back right.
-            exit = ExitTransition.None,
+                expandHorizontally(tween(PANEL_WIDTH_MS, easing = PanelEasing), expandFrom = Alignment.Start) +
+                    slideInHorizontally(tween(PANEL_SLIDE_MS, easing = PanelEasing)) { -it } +
+                    fadeIn(tween(PANEL_FADE_MS)),
+            exit =
+                shrinkHorizontally(tween(PANEL_WIDTH_MS, easing = PanelEasing), shrinkTowards = Alignment.Start) +
+                    slideOutHorizontally(tween(PANEL_SLIDE_MS, easing = PanelEasing)) { -it } +
+                    fadeOut(tween(PANEL_FADE_MS)),
+            modifier =
+                Modifier.onSizeChanged {
+                    panelPx = it.width.toFloat()
+                    if (givingBack) rowScroll?.pendingShiftPx = panelPx
+                },
         ) {
+            DisposableEffect(Unit) {
+                onDispose {
+                    panelPx = 0f
+                    if (givingBack) giveBack(0f)
+                }
+            }
             DiscoverDetailPanel(
                 item = item,
                 details = details,
@@ -1584,11 +1631,15 @@ val EngineCardHeight = 210.dp
 /** Space between cards in an engine row (and the row's side padding stays [ItemRow]'s 16 dp). */
 private val ENGINE_CARD_SPACING = 28.dp
 
-/** Discover focus panel: width, gap from the card, dwell before it opens, and its slide-out time. */
+/** Discover focus panel: width, gap from the card, dwell before it opens, and the prototype's timings. */
 private val PANEL_WIDTH = 300.dp
 private val PANEL_GAP = 16.dp
 private const val PANEL_DWELL_MS = 450L
+private const val PANEL_WIDTH_MS = 260
 private const val PANEL_SLIDE_MS = 340
+private const val PANEL_FADE_MS = 220
+private const val PANEL_REPIVOT_MS = 280L
+private val PanelEasing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 private val PanelBright = Color(0xFFF5F1FA)
 private val PanelText = Color(0xFFE8DFF0)
 

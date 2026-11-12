@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.github.jkrishna289.orcax.ui.util.CenterFocusBringIntoViewSpec
+import com.github.jkrishna289.orcax.ui.util.RowPivotBringIntoViewSpec
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -420,8 +421,9 @@ fun EngineHomePage(
                                 runCatching { rowBringIntoView.bringIntoView() }
                             }
                         }
-                        // Restore the default spec so the row's own horizontal scroll isn't offset.
-                        CompositionLocalProvider(LocalBringIntoViewSpec provides defaultBringIntoViewSpec) {
+                        // The row's own horizontal scroll: the TV pivot, gliding like the prototype's rows.
+                        val rowScrollSpec = remember { RowPivotBringIntoViewSpec() }
+                        CompositionLocalProvider(LocalBringIntoViewSpec provides rowScrollSpec) {
                             Box(
                                 modifier =
                                     Modifier
