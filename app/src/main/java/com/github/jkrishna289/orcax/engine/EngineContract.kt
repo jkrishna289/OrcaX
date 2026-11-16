@@ -267,6 +267,38 @@ data class SimilarResponse(
 )
 
 /**
+ * Response of `GET /Collections` — the collections a title belongs to, as shelves for its details
+ * page: its TMDB collection first (films you don't have included), then each server collection
+ * (box set) holding it.
+ */
+@Serializable
+data class CollectionsResponse(
+    @SerialName("Shelves") val shelves: List<CollectionShelf> = emptyList(),
+)
+
+@Serializable
+data class CollectionShelf(
+    @SerialName("Id") val id: String = "",
+    @SerialName("Name") val name: String = "",
+    // A TMDB collection, which has a watch order: numbered, with Up next.
+    @SerialName("Franchise") val franchise: Boolean = false,
+    @SerialName("BackdropImageUrl") val backdropImageUrl: String? = null,
+    // In release order.
+    @SerialName("Items") val items: List<CollectionEntry> = emptyList(),
+)
+
+@Serializable
+data class CollectionEntry(
+    // Its media id carries the Jellyfin id when the title is in the library.
+    @SerialName("Item") val item: RenderItem = RenderItem(),
+    @SerialName("Year") val year: Int? = null,
+    @SerialName("PosterImageUrl") val posterImageUrl: String? = null,
+    @SerialName("Played") val played: Boolean = false,
+    // 0-100, only while started and not finished.
+    @SerialName("PlayedPercentage") val playedPercentage: Double? = null,
+)
+
+/**
  * Response of `GET /Metadata/Details` — what the engine's catalog knows about one title. Feeds the
  * details page of a title that isn't in the library, which otherwise has only its card.
  */

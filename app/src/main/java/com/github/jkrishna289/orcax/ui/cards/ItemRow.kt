@@ -32,7 +32,8 @@ import com.github.jkrishna289.orcax.ui.tryRequestFocus
 
 @Composable
 fun <T> ItemRow(
-    title: String,
+    // Null for a row whose caller draws its own heading (a collection shelf).
+    title: String?,
     items: List<T?>,
     onClickItem: (Int, T) -> Unit,
     onLongClickItem: (Int, T) -> Unit,
@@ -52,11 +53,13 @@ fun <T> ItemRow(
     titleExtra: (@Composable () -> Unit)? = null,
     // Gap between cards; the row's edge padding stays [horizontalPadding].
     itemSpacing: Dp = horizontalPadding,
+    // The card focus enters on until one is clicked (a collection shelf starts on the current title).
+    initialPosition: Int = 0,
 ) {
     val state = rememberLazyListState()
     val firstFocus = remember { FocusRequester() }
     val enterFocus = remember { FocusRequester() }
-    var position by rememberInt()
+    var position by rememberInt(initialPosition)
 
     val currentOnClickItem by rememberUpdatedState(onClickItem)
     val currentOnLongClickItem by rememberUpdatedState(onLongClickItem)
@@ -75,15 +78,15 @@ fun <T> ItemRow(
                 }
             },
     ) {
-        if (titleExtra == null) {
+        if (title != null && titleExtra == null) {
             ItemRowTitle(title)
-        } else {
+        } else if (title != null) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ItemRowTitle(title)
-                titleExtra()
+                titleExtra?.invoke()
             }
         }
 

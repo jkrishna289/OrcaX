@@ -200,6 +200,15 @@ class OrcaEngineClient
         }
 
         /**
+         * The collection shelves for a library title (`/Collections`): its TMDB collection, then the
+         * server's collections holding it. Null on an engine without it or when it's unreachable.
+         */
+        suspend fun getCollections(jellyfinId: UUID): com.github.jkrishna289.orcax.engine.CollectionsResponse? =
+            get("/Collections?supported=$SUPPORTED_CARD_TYPES_QUERY&jellyfinId=$jellyfinId") {
+                EngineJson.decodeFromString<com.github.jkrishna289.orcax.engine.CollectionsResponse>(it)
+            }
+
+        /**
          * Movies and series matching [query] that aren't in the library (`/Search`, TMDB-backed), so
          * search can find titles to request. Null on an engine without it or when it's unreachable.
          */

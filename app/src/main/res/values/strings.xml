@@ -986,4 +986,22 @@
     <string name="keep_decline">Not now</string>
     <string name="keep_footnote">This is a request to your server, the same as any other. Nothing is stored on this TV.</string>
     <string name="keep_time_left">%1$dm left · resumes from your server</string>
+    <!-- Collection shelves on a movie or series page (their label is @string/collection) -->
+    <plurals name="collection_films">
+        <item quantity="one">%d film</item>
+        <item quantity="other">%d films</item>
+    </plurals>
+    <plurals name="collection_titles">
+        <item quantity="one">%d title</item>
+        <item quantity="other">%d titles</item>
+    </plurals>
+    <string name="collection_missing">%d not in your library</string>
+    <string name="collection_progress">%1$d of %2$d watched</string>
+    <string name="collection_all_watched">All watched</string>
+    <string name="collection_not_started">Not started</string>
+    <string name="collection_here">You\'re here</string>
+    <string name="collection_start_here">Start here</string>
+    <string name="collection_watched">Watched</string>
+    <string name="collection_percent_watched">%d%% watched</string>
+    <string name="collection_request_hint">Not in your library · OK to request</string>
 </resources>

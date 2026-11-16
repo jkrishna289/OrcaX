@@ -890,7 +890,7 @@ private fun CardBadges(
  * WATCH_NOW deliberately has none: owning a title is the default, so the *absence* of a badge is the
  * signal, and badging every owned card would make the whole feed noisy to say nothing.
  */
-private fun availabilityBadge(availability: AvailabilityState): Pair<Int, Color>? =
+internal fun availabilityBadge(availability: AvailabilityState): Pair<Int, Color>? =
     when (availability) {
         AvailabilityState.WATCH_NOW -> null
         AvailabilityState.REQUEST -> R.string.request to AppColors.GoldenYellow

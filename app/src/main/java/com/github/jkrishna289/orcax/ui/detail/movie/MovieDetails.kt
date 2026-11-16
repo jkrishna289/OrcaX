@@ -63,6 +63,8 @@ import com.github.jkrishna289.orcax.ui.components.chooseVersionParams
 import com.github.jkrishna289.orcax.ui.data.AddPlaylistViewModel
 import com.github.jkrishna289.orcax.ui.data.ItemDetailsDialog
 import com.github.jkrishna289.orcax.ui.data.ItemDetailsDialogInfo
+import com.github.jkrishna289.orcax.ui.detail.CollectionShelves
+import com.github.jkrishna289.orcax.ui.tryRequestFocus
 import com.github.jkrishna289.orcax.ui.detail.EngineSimilarRow
 import com.github.jkrishna289.orcax.ui.detail.MoreDialogActions
 import com.github.jkrishna289.orcax.ui.detail.PlaylistDialog
@@ -363,6 +365,7 @@ private const val TRAILER_ROW = PEOPLE_ROW + 1
 private const val CHAPTER_ROW = TRAILER_ROW + 1
 private const val EXTRAS_ROW = CHAPTER_ROW + 1
 private const val SIMILAR_ROW = EXTRAS_ROW + 1
+private const val COLLECTION_ROW = SIMILAR_ROW + 1
 
 private const val DETAILS_ROW_PARENT_FRACTION = 0.18f
 
@@ -413,7 +416,7 @@ fun MovieDetailsContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var position by rememberInt(0)
-    val focusRequesters = remember { List(SIMILAR_ROW + 1) { FocusRequester() } }
+    val focusRequesters = remember { List(COLLECTION_ROW + 1) { FocusRequester() } }
     val dto = movie.data
     val resumePosition = dto.userData?.playbackPositionTicks?.ticks ?: Duration.ZERO
 
@@ -527,6 +530,16 @@ fun MovieDetailsContent(
                                     .focusRequester(focusRequesters[PEOPLE_ROW]),
                         )
                     }
+                }
+                // The film's collections (its TMDB collection, then the server's), right after the cast.
+                item(key = "collections") {
+                    CollectionShelves(
+                        itemId = movie.id,
+                        onCurrentClick = { focusRequesters[HEADER_ROW].tryRequestFocus() },
+                        onOpen = { position = COLLECTION_ROW },
+                        focusRequester = focusRequesters[COLLECTION_ROW],
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    )
                 }
                 state.chapters.letNotEmpty { chapters ->
                     item {

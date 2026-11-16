@@ -115,30 +115,33 @@ class EngineSimilarViewModel
             }
         }
 
-        fun onClick(item: RenderItem) {
-            val id = item.media.jellyfinId?.toUUIDOrNull()
-            if (id == null) {
-                // Not in the library: its own not-yet-requested page, with its own "More like this".
-                // Back returns here.
-                if ((item.media.tmdbId ?: 0) > 0) navigationManager.navigateTo(Destination.EngineItem(item))
-                return
-            }
-
-            val kind =
-                when (item.media.mediaType) {
-                    MediaType.SERIES -> BaseItemKind.SERIES
-                    MediaType.EPISODE -> BaseItemKind.EPISODE
-                    MediaType.SEASON -> BaseItemKind.SEASON
-                    MediaType.PERSON -> BaseItemKind.PERSON
-                    MediaType.COLLECTION -> BaseItemKind.BOX_SET
-                    else -> BaseItemKind.MOVIE
-                }
-            val destination =
-                if (kind == BaseItemKind.SERIES) {
-                    Destination.SeriesOverview(itemId = id, type = kind)
-                } else {
-                    Destination.MediaItem(itemId = id, type = kind)
-                }
-            navigationManager.navigateTo(destination)
-        }
+        fun onClick(item: RenderItem) = navigationManager.openRenderItem(item)
     }
+
+/** Opens an engine card's title: its library page, else its own page outside the library, to request it. */
+fun NavigationManager.openRenderItem(item: RenderItem) {
+    val id = item.media.jellyfinId?.toUUIDOrNull()
+    if (id == null) {
+        // Not in the library: its own not-yet-requested page, with its own "More like this".
+        // Back returns here.
+        if ((item.media.tmdbId ?: 0) > 0) navigateTo(Destination.EngineItem(item))
+        return
+    }
+
+    val kind =
+        when (item.media.mediaType) {
+            MediaType.SERIES -> BaseItemKind.SERIES
+            MediaType.EPISODE -> BaseItemKind.EPISODE
+            MediaType.SEASON -> BaseItemKind.SEASON
+            MediaType.PERSON -> BaseItemKind.PERSON
+            MediaType.COLLECTION -> BaseItemKind.BOX_SET
+            else -> BaseItemKind.MOVIE
+        }
+    val destination =
+        if (kind == BaseItemKind.SERIES) {
+            Destination.SeriesOverview(itemId = id, type = kind)
+        } else {
+            Destination.MediaItem(itemId = id, type = kind)
+        }
+    navigateTo(destination)
+}

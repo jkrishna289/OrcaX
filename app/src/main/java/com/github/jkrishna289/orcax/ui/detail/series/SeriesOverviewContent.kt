@@ -69,6 +69,7 @@ import com.github.jkrishna289.orcax.ui.components.LoadingPage
 import com.github.jkrishna289.orcax.ui.components.QuickDetails
 import com.github.jkrishna289.orcax.ui.components.TabRow
 import com.github.jkrishna289.orcax.ui.components.VideoStreamDetails
+import com.github.jkrishna289.orcax.ui.detail.CollectionShelves
 import com.github.jkrishna289.orcax.ui.detail.EngineSimilarRow
 import com.github.jkrishna289.orcax.ui.ifElse
 import com.github.jkrishna289.orcax.ui.letNotEmpty
@@ -393,6 +394,16 @@ fun SeriesOverviewContent(
                         Modifier
                             .fillMaxWidth()
                             .focusRequester(castCrewRowFocusRequester),
+                )
+            }
+
+            // The server's collections holding the show (TMDB has no TV collections). A show outside
+            // the library is in none.
+            if (similarTmdbId == null) {
+                CollectionShelves(
+                    itemId = series.id,
+                    onCurrentClick = { headerFocusRequester.tryRequestFocus() },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 )
             }
 
